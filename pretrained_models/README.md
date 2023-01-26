@@ -1,0 +1,1 @@
+Stores pre-trained models that you can use as a starting point for fine-tuning or transfer learning.

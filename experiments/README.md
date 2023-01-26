@@ -1,0 +1,1 @@
+Stores the outputs of different runs of your model, such as trained weights, logs, figures, and predictions.
