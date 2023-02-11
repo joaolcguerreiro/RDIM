@@ -1,0 +1,54 @@
+# Train Configuration
+TRAIN: &TRAIN
+  DATA_DIR_PATH: ../data/train
+  SCALE_FACTOR: 2
+  BATCH_SIZE: 8
+  EPOCHS: 1000
+  AUGMENTATION: True
+  MODEL_CHECKPOINT:
+
+
+# Validation Configuration
+VALIDATION:
+  <<: *TRAIN
+  DATA_DIR_PATH: ../data/validation
+  AUGMENTATION: False
+
+
+# Test Configuration
+TEST:
+  <<: *TRAIN
+  DATA_DIR_PATH: ../data/test
+  AUGMENTATION: False
+
+
+# End-to-end Super-Resolution-Segmentation Model Configuration
+E2E_SRSEG:
+  GENERATOR:
+    IN_CHANNEL: 1
+    OUT_CHANNEL: 1
+    NUM_FEATURES: 64
+    NUM_GROWTH_FEATURES: 32
+    NUM_RRDB_BLOCKS: 23
+    NUM_RDB_BLOCKS: 3
+    NUM_RDB_CONV_BLOCKS: 5
+    LEARNING_RATE:
+    OPTIMIZER:
+
+  DISCRIMINATOR:
+    IN_CHANNEL: 1
+    NUM_FEATURES: 64
+    NUM_CONV_BLOCKS: 8
+    CONV_BLOCKS_OUTPUT_SIZE: 6
+    LEARNING_RATE:
+    OPTIMIZER:
+
+
+# Super-Resolution Model Configuration
+E2E_SR:
+  ...
+
+
+# Segmentation Model Configuration
+E2E_SEG:
+  ...

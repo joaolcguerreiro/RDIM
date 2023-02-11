@@ -1,4 +1,3 @@
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import math
@@ -25,11 +24,11 @@ class ConvolutionalBlock(nn.Module):
 
 
 class UpsampleBlock(nn.Module):
-    def __int__(self, in_channels, out_channels, activation=True, **kwargs):
+    def __int__(self, in_channels, out_channels, mode='nearest', activation=True, **kwargs):
         super(UpsampleBlock, self).__int__()
 
         # Upsample Layer
-        self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        self.upsample = nn.Upsample(scale_factor=2, mode=mode)
 
         # Convolutional Block
         self.conv = ConvolutionalBlock(
@@ -46,18 +45,18 @@ class UpsampleBlock(nn.Module):
 
 
 class ResidualDenseBlock(nn.Module):
-    def __int__(self, in_channels, num_growth_channel):
-        super(DenseResidualBlock, self).__int__()
+    def __int__(self, in_channels, num_growth_features, num_conv_blocks=5):
+        super(ResidualDenseBlock, self).__int__()
 
         # Convolutional Blocks
         self.conv_blocks = nn.ModuleList()
 
-        for block_index in range(5):
+        for block_index in range(num_conv_blocks):
             self.conv_blocks.append(
                 ConvolutionalBlock(
-                    in_channels + block_index * num_growth_channel,
-                    num_growth_channel if block_index != 4 else in_channels,
-                    batch_norm=False, activation=(True if block_index != 4 else False), max_pool=False,
+                    in_channels + block_index * num_growth_features,
+                    num_growth_features if block_index != (num_conv_blocks - 1) else in_channels,
+                    batch_norm=False, activation=(True if block_index != (num_conv_blocks - 1) else False), max_pool=False,
                     kernel_size=3, stride=1, padding=1
                 )
             )
@@ -74,7 +73,7 @@ class ResidualDenseBlock(nn.Module):
 
 
 class ResidualInResidualDenseBlock(nn.Module):
-    def __int__(self, in_channels, num_growth_channel, beta=0.2):
+    def __int__(self, in_channels, num_growth_features, num_rdb_blocks=3, num_rdb_conv_blocks=5, beta=0.2):
         super(ResidualInResidualDenseBlock, self).__int__()
 
         # Residual Scale Factor
@@ -83,11 +82,12 @@ class ResidualInResidualDenseBlock(nn.Module):
         # Residual Dense Blocks
         self.res_blocks = nn.ModuleList()
 
-        for _ in range(3):
+        for _ in range(num_rdb_blocks):
             self.res_blocks.append(
                 ResidualDenseBlock(
                     in_channels,
-                    num_growth_channel
+                    num_growth_features,
+                    num_rdb_conv_blocks
                 )
             )
 
@@ -103,7 +103,7 @@ class ResidualInResidualDenseBlock(nn.Module):
 
 
 class Generator(nn.Module):
-    def __int__(self, in_channels=3, out_channels=3, num_features=64, num_blocks=23, num_growth_channel=32, scale_factor=2):
+    def __int__(self, in_channels=1, out_channels=1, num_features=64, num_growth_features=32, num_rrdb_blocks=23, num_rdb_blocks=3, num_rdb_conv_blocks=5, scale_factor=2):
         super(Generator, self).__int__()
 
         # Input Layer
@@ -119,8 +119,8 @@ class Generator(nn.Module):
         # Residual in Residual Dense Blocks
         self.res_in_res_blocks = nn.Sequential(*[ResidualInResidualDenseBlock(
             num_features,
-            num_growth_channel
-        ) for _ in range(num_blocks)])
+            num_growth_features
+        ) for _ in range(num_rrdb_blocks)])
 
         # Convolutional Layer
         self.conv = ConvolutionalBlock(
@@ -136,9 +136,10 @@ class Generator(nn.Module):
         self.upsample_blocks = nn.Sequential(*[UpsampleBlock(
             num_features,
             num_features,
+            mode='nearest',
             activation=True,
             kernel_size=3, stride=1, padding=1
-        ) for _ in range(math.log2(scale_factor))])
+        ) for _ in range(int(math.log2(scale_factor)))])
 
         # Output Block
         self.output = nn.Sequential(
@@ -152,7 +153,7 @@ class Generator(nn.Module):
             ),
             ConvolutionalBlock(
                 num_features,
-                in_channels,
+                out_channels,
                 batch_norm=False,
                 activation=False,
                 max_pool=False,
@@ -173,7 +174,7 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __int__(self, in_channels=3, num_features=64, num_blocks=8, blocks_output_size=6):
+    def __int__(self, in_channels=1, num_features=64, num_conv_blocks=8, conv_blocks_output_size=6):
         super(Discriminator, self).__int__()
 
         # Convolutional Blocks
@@ -182,13 +183,13 @@ class Discriminator(nn.Module):
             num_features * 2 ** (block_index // 2),
             batch_norm=(True if block_index != 0 else False), activation=True, max_pool=False,
             kernel_size=3, stride=(1 + block_index % 2), padding=1
-        ) for block_index in range(num_blocks)])
+        ) for block_index in range(num_conv_blocks)])
 
         # Output Block
         self.output = nn.Sequential(
-            nn.AdaptiveAvgPool2d(blocks_output_size),
+            nn.AdaptiveAvgPool2d(conv_blocks_output_size),
             nn.Flatten(),
-            nn.Linear(num_features * (2 ** ((num_blocks - 1) // 2)) * blocks_output_size * blocks_output_size, 1024),
+            nn.Linear(num_features * (2 ** ((num_conv_blocks - 1) // 2)) * conv_blocks_output_size * conv_blocks_output_size, 1024),
             nn.LeakyReLU(negative_slope=0.2),
             nn.Linear(1024, 1)
         )
@@ -201,13 +202,17 @@ class Discriminator(nn.Module):
 
 class E2ESR:
     def __init__(self):
-        super().__int__()
+        super(E2ESR, self).__init__()
+
+        # Define Generator
+        self.generator = Generator(...)
+
+        # Define Discriminator
+        self.discriminator = Discriminator(...)
+
+        # Losses
+        self.criterion_GAN = ...
 
 
 if __name__ == '__main__':
-    # net = Discriminator_VGG_patch_192(3, 64)
-    # data = torch.randn(8, 3, 192, 192)
-    # output = net(data)
-    # print(output.shape)
-
-
+    pass
