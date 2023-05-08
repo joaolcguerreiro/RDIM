@@ -1,3 +1,7 @@
+# macOS users need to install Graphviz using Homebrew:
+# brew install graphviz
+
+# Python dependencies:
 --find-links https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
 torch~=2.0.0.dev20230204
 torchvision~=0.15.0.dev20230204
@@ -5,3 +9,11 @@ torchaudio~=2.0.0.dev20230204
 numpy~=1.23.5
 nibabel~=5.0.0
 monai~=1.1.0
+torchinfo~=1.7.3
+scikit-learn~=1.2.2
+torchview~=0.2.6
+pydicom~=2.3.1
+matplotlib~=3.7.1
+tqdm~=4.65.0
+yaml~=0.2.5
+pyyaml~=6.0

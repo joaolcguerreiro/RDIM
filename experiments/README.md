@@ -1,1 +1,1 @@
-Stores the outputs of different runs of your model, such as trained weights, logs, figures, and predictions.
+Contains logs and settings from prior runs, useful to resume training or evaluate checkpoints. Encompasses configuration files, trained weights, logs, figures, and predictions.

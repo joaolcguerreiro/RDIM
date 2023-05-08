@@ -1,0 +1,35 @@
+#=================================================================================================================#
+#                                               Data Configuration                                                #
+#=================================================================================================================#
+
+DATA:
+  TRAIN_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training
+  VAL_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation
+  TEST_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing
+  BATCH_SIZE: 8
+
+
+#=================================================================================================================#
+#                                               Model Configuration                                               #
+#=================================================================================================================#
+
+MODEL:
+  ...
+  PRE_TRAINED_PATH:
+
+
+#=================================================================================================================#
+#                                           Learning Stage Configuration                                          #
+#=================================================================================================================#
+
+TRAINING:
+  EPOCHS: 5000
+  GRADIENT_ACCUMULATION_STEPS: 1
+  AUGMENTATION: True
+  SAVE_INTERVAL: 50
+  OPTIMIZER:
+    NAME:
+    LEARNING_RATE:
+    MOMENTUM:
+    WEIGHT_DECAY:
+    WARMUP_STEPS:

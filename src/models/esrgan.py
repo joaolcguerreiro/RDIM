@@ -11,21 +11,21 @@ class ConvolutionalBlock(nn.Module):
         self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
 
         # Batch Normalization Layer
-        self.bn = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
+        self.bn = nn.BatchNorm2d(out_channels) if batch_norm else (lambda x: x)
 
         # Activation Function
-        self.act = nn.LeakyReLU(negative_slope=0.2) if activation else nn.Identity()
+        self.act = nn.LeakyReLU(negative_slope=0.2) if activation else (lambda x: x)
 
         # Max Polling Layer
-        self.pool = nn.MaxPool2d(kernel_size=2) if max_pool else nn.Identity()
+        self.pool = nn.MaxPool2d(kernel_size=2) if max_pool else (lambda x: x)
 
     def forward(self, x):
         return self.pool(self.act(self.bn(self.conv(x))))
 
 
 class UpsampleBlock(nn.Module):
-    def __int__(self, in_channels, out_channels, mode='nearest', activation=True, **kwargs):
-        super(UpsampleBlock, self).__int__()
+    def __init__(self, in_channels, out_channels, mode='nearest', activation=True, **kwargs):
+        super(UpsampleBlock, self).__init__()
 
         # Upsample Layer
         self.upsample = nn.Upsample(scale_factor=2, mode=mode)
@@ -45,8 +45,8 @@ class UpsampleBlock(nn.Module):
 
 
 class ResidualDenseBlock(nn.Module):
-    def __int__(self, in_channels, num_growth_features, num_conv_blocks=5):
-        super(ResidualDenseBlock, self).__int__()
+    def __init__(self, in_channels, num_growth_features, num_conv_blocks=5):
+        super(ResidualDenseBlock, self).__init__()
 
         # Convolutional Blocks
         self.conv_blocks = nn.ModuleList()
@@ -73,8 +73,8 @@ class ResidualDenseBlock(nn.Module):
 
 
 class ResidualInResidualDenseBlock(nn.Module):
-    def __int__(self, in_channels, num_growth_features, num_rdb_blocks=3, num_rdb_conv_blocks=5, beta=0.2):
-        super(ResidualInResidualDenseBlock, self).__int__()
+    def __init__(self, in_channels, num_growth_features, num_rdb_blocks=3, num_rdb_conv_blocks=5, beta=0.2):
+        super(ResidualInResidualDenseBlock, self).__init__()
 
         # Residual Scale Factor
         self.beta = beta
@@ -103,8 +103,8 @@ class ResidualInResidualDenseBlock(nn.Module):
 
 
 class Generator(nn.Module):
-    def __int__(self, in_channels=1, out_channels=1, num_features=64, num_growth_features=32, num_rrdb_blocks=23, num_rdb_blocks=3, num_rdb_conv_blocks=5, scale_factor=2):
-        super(Generator, self).__int__()
+    def __init__(self, in_channels=1, out_channels=1, num_features=64, num_growth_features=32, num_rrdb_blocks=23, num_rdb_blocks=3, num_rdb_conv_blocks=5, scale_factor=2):
+        super(Generator, self).__init__()
 
         # Input Layer
         self.input = ConvolutionalBlock(
@@ -119,7 +119,9 @@ class Generator(nn.Module):
         # Residual in Residual Dense Blocks
         self.res_in_res_blocks = nn.Sequential(*[ResidualInResidualDenseBlock(
             num_features,
-            num_growth_features
+            num_growth_features,
+            num_rdb_blocks,
+            num_rdb_conv_blocks
         ) for _ in range(num_rrdb_blocks)])
 
         # Convolutional Layer
@@ -174,8 +176,8 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __int__(self, in_channels=1, num_features=64, num_conv_blocks=8, conv_blocks_output_size=6):
-        super(Discriminator, self).__int__()
+    def __init__(self, in_channels=1, num_features=64, num_conv_blocks=8, conv_blocks_output_size=6):
+        super(Discriminator, self).__init__()
 
         # Convolutional Blocks
         self.conv_blocks = nn.Sequential(*[ConvolutionalBlock(
@@ -200,18 +202,20 @@ class Discriminator(nn.Module):
         return self.output(x)
 
 
-class E2ESR:
-    def __init__(self):
-        super(E2ESR, self).__init__()
+class ESRGAN(nn.Module):
+    def __init__(self, generator, discriminator):
+        super(ESRGAN, self).__init__()
 
         # Define Generator
-        self.generator = Generator(...)
+        self.generator = generator
 
         # Define Discriminator
-        self.discriminator = Discriminator(...)
+        self.discriminator = discriminator
 
-        # Losses
-        self.criterion_GAN = ...
+    def forward(self, lr, hr):
+        gen = self.generator(lr)
+
+        return gen, self.discriminator(gen), self.discriminator(hr)
 
 
 if __name__ == '__main__':

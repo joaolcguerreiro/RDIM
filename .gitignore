@@ -1,5 +1,8 @@
 .DS_Store
 .idea/
-data/test/
-data/train/
-data/
+data/*
+experiments/*
+pretrained_models/*
+!data/manifest.tcia
+!experiments/README.md
+!pretrained_models/README.md

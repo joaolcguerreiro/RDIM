@@ -1,0 +1,54 @@
+#=================================================================================================================#
+#                                               Data Configuration                                                #
+#=================================================================================================================#
+
+DATA:
+  TRAIN_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training
+  VAL_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation
+  TEST_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing
+  BATCH_SIZE: 8
+
+
+#=================================================================================================================#
+#                                               Model Configuration                                               #
+#=================================================================================================================#
+
+MODEL:
+  GENERATOR:
+    IN_CHANNEL: 1
+    OUT_CHANNEL: 1
+    NUM_FEATURES: 64
+    NUM_GROWTH_FEATURES: 32
+    NUM_RRDB_BLOCKS: 23
+    NUM_RDB_BLOCKS: 3
+    NUM_RDB_CONV_BLOCKS: 5
+    SCALE_FACTOR: 2
+    PRE_TRAINED_PATH:
+
+  DISCRIMINATOR:
+    IN_CHANNEL: 1
+    NUM_FEATURES: 64
+    NUM_CONV_BLOCKS: 8
+    CONV_BLOCKS_OUTPUT_SIZE: 6
+    PRE_TRAINED_PATH:
+
+
+#=================================================================================================================#
+#                                           Learning Stage Configuration                                          #
+#=================================================================================================================#
+
+TRAINING:
+  EPOCHS: 5000
+  AUGMENTATION: True
+  SAVE_INTERVAL: 50
+  OPTIMIZER:
+    GENERATOR:
+      NAME:
+      LEARNING_RATE:
+      MOMENTUM:
+      WEIGHT_DECAY:
+    DISCRIMINATOR:
+      NAME:
+      LEARNING_RATE:
+      MOMENTUM:
+      WEIGHT_DECAY:
