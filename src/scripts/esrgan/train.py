@@ -1,7 +1,6 @@
 import os
 import sys
 import torch
-import shutil
 import argparse
 import datetime
 import logging
@@ -14,6 +13,8 @@ from glob import glob
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator, ESRGAN
+from src.utils.utils import create_experiment_directory
+from src.utils.logger import setup_logger
 
 
 def main():
@@ -24,12 +25,12 @@ def main():
     torch.manual_seed(20)
 
     # Compute training data statistics
-    mean, std = SuperResolutionDataset.compute_data_statistics(data_dir=config["DATA"]["TRAIN_DATA_DIR_PATH"], batch_size=config["DATA"]["BATCH_SIZE"])
+    mean, std = SuperResolutionDataset.compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"], batch_size=config["DATA"]["BATCH_SIZE"])
 
     # Define datasets and data loaders
-    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DATA_DIR_PATH"], mean=mean, std=std, scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], augmentation=config["TRAINING"]["AUGMENTATION"])
+    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], mean=mean, std=std, scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], augmentation=config["TRAINING"]["AUGMENTATION"])
     train_dataloader = DataLoader(train_dataset, batch_size=config["DATA"]["BATCH_SIZE"], shuffle=True)
-    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DATA_DIR_PATH"], mean=mean, std=std, scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], augmentation=False)
+    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], mean=mean, std=std, scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], augmentation=False)
     val_dataloader = DataLoader(val_dataset, batch_size=config["DATA"]["BATCH_SIZE"], shuffle=True)
 
     # Define model
@@ -54,8 +55,8 @@ def main():
     model = ESRGAN(generator=generator, discriminator=discriminator)
 
     # Log model
-    summary(model, input_size=(1, 1, 200, 200), depth=1)
-    draw_graph(model, input_size=(1, 1, 200, 200), depth=3).visual_graph.view()
+    summary(model, input_size=[(1, 1, 200, 200), (1, 1, 400, 400)], depth=1)
+    draw_graph(model, input_size=[(1, 1, 200, 200), (1, 1, 400, 400)], depth=3, expand_nested=True, filename='architecture', directory=os.path.join(experiment_path, 'figures', 'train')).visual_graph.view()
 
     # Define optimizers
     generator_optimizer = optim.SGD(gan.generator.parameters(), lr=0.01)
@@ -173,37 +174,20 @@ if __name__ == '__main__':
 
     if args.resume:
         experiment_path = args.resume
-        checkpoint_path = max(glob.glob(os.path.join(experiment_path, "checkpoints", "*.pth")), key=os.path.getctime)
+        config_path = os.path.join(args.resume, "config.yaml")
+        checkpoint_path = max(glob.glob(os.path.join(args.resume, "checkpoints", "*.pth")), key=os.path.getctime)
     else:
         experiment_path = os.path.join('..', '..', '..', 'experiments', "esrgan", datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
+        config_path = os.path.join('..', '..', '..', 'configuration', "esrgan", 'config.yaml')
 
         # Create experiment folder
-        os.makedirs(experiment_path)
-
-        # Create checkpoints, figures, logs and results folder
-        os.makedirs(os.path.join(experiment_path, "checkpoints"))
-        os.makedirs(*[os.path.join(experiment_path, path) for path in ["figures", os.path.join("figures", "train"), os.path.join("figures", "test"), os.path.join("figures", "inference")]])
-        os.makedirs(*[os.path.join(experiment_path, path) for path in ["logs", os.path.join("logs", "train"), os.path.join("logs", "test"), os.path.join("logs", "inference")]])
-        os.makedirs(os.path.join(experiment_path, "results"))
-
-        # Clone global config file for reproducibility
-        shutil.copyfile(os.path.join('..', '..', '..', '..', 'configuration', 'esrgan', 'config.yaml'), experiment_path)
+        create_experiment_directory(experiment_path, config_path)
 
     # Load configuration file
-    with open(os.path.join(experiment_path, "config.yaml"), 'r') as f:
+    with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
 
-    # Configure logging
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s %(levelname)s %(message)s',
-        handlers=[
-            logging.StreamHandler(),  # output to console
-            logging.FileHandler(os.path.join(experiment_path, "logs", "train", datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")))  # output to file
-        ])
-
-    # Redirect stdout and stderr to the logging file
-    sys.stdout = logging.getLogger().handlers[0].stream
-    sys.stderr = logging.getLogger().handlers[0].stream
+    # Set up logger
+    setup_logger(os.path.join(experiment_path, "logs", "train", datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")))
 
     main()

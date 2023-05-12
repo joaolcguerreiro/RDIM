@@ -2,6 +2,7 @@ import os
 import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
+import shutil
 
 
 # Save CT Scan Volume
@@ -12,7 +13,7 @@ def save_volume(volume, save_dir, file_name, affine, header):
 
     nib.save(
         nib.Nifti1Image(volume, affine, header=header),
-        os.path.join(save_dir, file_name + ".nii.gz"),
+        os.path.join(save_dir, file_name + '.nii.gz'),
     )
 
 
@@ -33,13 +34,13 @@ def get_volume_header(volume_dir):
 
 # Get CT Scan Volume Slice (2D)
 def get_rgb_volume_slice(slice_index, plane, volume):
-    if plane == "axial":
+    if plane == 'axial':
         # 3D volume (Y, X, Z, C) => Slice along z-axis => 2D image (Y, X, C) => For display purposes interchange axis => 2D image (X, Y, C)
         return volume[:, :, slice_index, :].swapaxes(0, 1)  # We get 2d plane (X, Y, C)
-    elif plane == "sagittal":
+    elif plane == 'sagittal':
         # 3D volume (Y, X, Z, C) => Slice along y-axis => 2D image (X, Z, C) => For display purposes interchange axis => 2D image (Z, X, C)
         return volume[slice_index, :, :, :].swapaxes(0, 1)  # We get 2d plane (Z, X, C)
-    elif plane == "coronal":
+    elif plane == 'coronal':
         # 3D volume (Y, X, Z, C) => Slice along x-axis => 2D image (Y, Z, C) => For display purposes interchange axis => 2D image (Z, Y, C)
         return volume[:, slice_index, :, :].swapaxes(0, 1)  # We get 2d plane (Z, Y, C)
     else:
@@ -48,11 +49,11 @@ def get_rgb_volume_slice(slice_index, plane, volume):
 
 # Get Number of Slices in CT Scan Volume Plane
 def get_slices_number(plane, volume):
-    if plane == "axial":
+    if plane == 'axial':
         return volume.shape[2]
-    elif plane == "sagittal":
+    elif plane == 'sagittal':
         return volume.shape[0]
-    elif plane == "coronal":
+    elif plane == 'coronal':
         return volume.shape[1]
     else:
         return NotImplementedError('Invalid plane')
@@ -103,3 +104,21 @@ def display_batch(batch, plane, dimension, slice_index=-1, volume_index=-1):
     volumes = list(volume_to_grayscale(volume[0, :, :, :]) for volume in list(volume for volume in batch))
 
     display_volumes(slice_index, volume_index, plane, volumes, 2, int(len(volumes) / 2), dimension)
+
+
+def create_experiment_directory(experiment_path, config_path):
+    # Create experiment folder
+    os.makedirs(experiment_path)
+
+    # Create checkpoints, figures, logs and results folder
+    os.makedirs(os.path.join(experiment_path, 'checkpoints'))
+    os.makedirs(os.path.join(experiment_path, 'results'))
+
+    for path in [os.path.join('figures', 'train'), os.path.join('figures', 'test')]:
+        os.makedirs(os.path.join(experiment_path, path))
+
+    for path in [os.path.join('logs', 'train'), os.path.join('logs', 'test')]:
+        os.makedirs(os.path.join(experiment_path, path))
+
+    # Clone global config file for reproducibility
+    shutil.copy(config_path, experiment_path)

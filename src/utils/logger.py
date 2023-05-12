@@ -16,6 +16,12 @@ class PrintLogger(object):
     def flush(self):
         self.original_stdout.flush()
 
+    def close(self):
+        self.original_stdout.close()
+
+    def __del__(self):
+        self.close()
+
 
 def setup_logger(log_file_path):
     # Create a logger object

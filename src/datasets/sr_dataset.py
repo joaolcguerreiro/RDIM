@@ -1,4 +1,5 @@
 import os
+import logging
 import monai.transforms as transforms
 import numpy as np
 from tqdm import tqdm
@@ -96,7 +97,7 @@ class SuperResolutionDataset(Dataset):
 
     @staticmethod
     def compute_data_statistics(data_dir, batch_size):
-        print("=" * 115)
+        print("=" * 115, end='\r\n')
 
         mean = np.zeros(1)
         std = np.zeros(1)
@@ -116,6 +117,8 @@ class SuperResolutionDataset(Dataset):
                 mean = mean.item() / len(dataloader)
                 std = std.item() / len(dataloader)
                 pbar.set_postfix({"Mean": f"{mean:.4f}", "STD": f"{std:.4f}"})
+
+        logging.info(pbar)
 
         return mean, std
 
