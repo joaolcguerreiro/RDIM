@@ -106,6 +106,28 @@ def display_batch(batch, plane, dimension, slice_index=-1, volume_index=-1):
     display_volumes(slice_index, volume_index, plane, volumes, 2, int(len(volumes) / 2), dimension)
 
 
+def plot_losses(loss_dicts, title, save_dir_path, x_label='Epoch', y_label='Loss'):
+    # Create a new figure
+    plt.figure()
+
+    # Iterate over each loss dictionary
+    for name, loss_dict in loss_dicts.items():
+        epochs = list(loss_dict.keys())
+        losses = list(loss_dict.values())
+
+        if len(epochs) and len(losses):
+            plt.plot(epochs, losses, label=name)
+
+    # Chart customization
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
+    plt.legend()
+
+    # Save chart
+    plt.savefig(save_dir_path)
+
+
 def create_experiment_directory(experiment_path, config_path):
     # Create experiment folder
     os.makedirs(experiment_path)

@@ -13,7 +13,7 @@ from glob import glob
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator, ESRGAN
-from src.utils.utils import create_experiment_directory
+from src.utils.utils import create_experiment_directory, plot_losses
 from src.utils.logger import setup_logger
 
 
@@ -93,8 +93,12 @@ def main():
         discriminator_optimizer.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
         train_dataset.update_epoch(start_epoch)
+        train_losses = checkpoint['train_losses']
+        val_losses = checkpoint['val_losses']
     else:
         start_epoch = 0
+        train_losses = dict()
+        val_losses = dict()
 
     end_epoch = config['TRAINING']['EPOCHS']
 
@@ -126,7 +130,11 @@ def main():
             # Compute average training loss for this epoch
             if batch_index + 1 == len(train_pbar):
                 train_loss /= len(train_dataloader)
+                train_losses[epoch + 1] = train_loss
                 train_pbar.set_postfix({"Avg. Train Loss": f"{train_loss:.4f}"})
+
+        # Logging the training progress bar
+        logging.info(train_pbar)
 
         if args.val:
             # Set the model to evaluation mode
@@ -149,7 +157,11 @@ def main():
                     # Compute average validation loss for this epoch
                     if batch_index + 1 == len(val_pbar):
                         val_loss /= len(val_dataloader)
+                        val_losses[epoch + 1] = val_loss
                         val_pbar.set_postfix({"Avg. Val Loss": f"{val_loss:.4f}"})
+
+            # Logging the validation progress bar
+            logging.info(val_pbar)
 
         # Increment epoch count
         train_dataset.increment_epoch()
@@ -162,7 +174,15 @@ def main():
                 'discriminator_state_dict': model.discriminator.state_dict(),
                 'discriminator_optimizer_state_dict': discriminator_optimizer.state_dict(),
                 'epoch': epoch,
-            }, f"{experiment_path}/checkpoints/{epoch + 1}.pth")
+                'train_losses': train_losses,
+                'val_losses': val_losses
+            }, os.path.join(experiment_path, 'checkpoints', f'{epoch + 1}.pth'))
+
+            plot_losses(
+                loss_dicts={'Train Loss': train_losses, 'Validation Loss': val_losses},
+                title='Training and Validation Loss',
+                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'losses')
+            )
 
 
 if __name__ == '__main__':
@@ -188,6 +208,6 @@ if __name__ == '__main__':
         config = yaml.safe_load(f)
 
     # Set up logger
-    setup_logger(os.path.join(experiment_path, "logs", "train", datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")))
+    setup_logger(os.path.join(experiment_path, "logs", "train", f'{datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}.log'))
 
     main()
