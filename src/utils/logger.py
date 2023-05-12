@@ -9,9 +9,8 @@ class PrintLogger(object):
 
     def write(self, message):
         self.original_stdout.write(message)
-        if message != '\n':
-            with open(self.log_file_path, 'a') as f:
-                f.write(message)
+        with open(self.log_file_path, 'a') as f:
+            f.write(message)
 
     def flush(self):
         self.original_stdout.flush()
@@ -27,7 +26,7 @@ def setup_logger(log_file_path):
     # Create a logger object
     logger = logging.getLogger()
 
-    # Remove all handlers associated with the root logger object
+    # Remove all handlers associated with the root logger object (console/stream handler)
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
 
