@@ -5,7 +5,7 @@ import math
 
 class ConvolutionalBlock(nn.Module):
     def __init__(self, in_channels, out_channels, batch_norm=False, activation=True, max_pool=False, **kwargs):
-        super(ConvolutionalBlock, self).__init__()
+        super().__init__()
 
         # Convolutional Layer
         self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
@@ -25,7 +25,7 @@ class ConvolutionalBlock(nn.Module):
 
 class UpsampleBlock(nn.Module):
     def __init__(self, in_channels, out_channels, mode='nearest', activation=True, **kwargs):
-        super(UpsampleBlock, self).__init__()
+        super().__init__()
 
         # Upsample Layer
         self.upsample = nn.Upsample(scale_factor=2, mode=mode)
@@ -46,7 +46,7 @@ class UpsampleBlock(nn.Module):
 
 class ResidualDenseBlock(nn.Module):
     def __init__(self, in_channels, num_growth_features, num_conv_blocks=5):
-        super(ResidualDenseBlock, self).__init__()
+        super().__init__()
 
         # Convolutional Blocks
         self.conv_blocks = nn.ModuleList()
@@ -74,7 +74,7 @@ class ResidualDenseBlock(nn.Module):
 
 class ResidualInResidualDenseBlock(nn.Module):
     def __init__(self, in_channels, num_growth_features, num_rdb_blocks=3, num_rdb_conv_blocks=5, beta=0.2):
-        super(ResidualInResidualDenseBlock, self).__init__()
+        super().__init__()
 
         # Residual Scale Factor
         self.beta = beta
@@ -104,7 +104,7 @@ class ResidualInResidualDenseBlock(nn.Module):
 
 class Generator(nn.Module):
     def __init__(self, in_channels=1, out_channels=1, num_features=64, num_growth_features=32, num_rrdb_blocks=23, num_rdb_blocks=3, num_rdb_conv_blocks=5, scale_factor=2):
-        super(Generator, self).__init__()
+        super().__init__()
 
         # Input Layer
         self.input = ConvolutionalBlock(
@@ -177,7 +177,7 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
     def __init__(self, in_channels=1, num_features=64, num_conv_blocks=8, conv_blocks_output_size=6):
-        super(Discriminator, self).__init__()
+        super().__init__()
 
         # Convolutional Blocks
         self.conv_blocks = nn.Sequential(*[ConvolutionalBlock(
@@ -200,22 +200,6 @@ class Discriminator(nn.Module):
         x = self.conv_blocks(x)
 
         return self.output(x)
-
-
-class ESRGAN(nn.Module):
-    def __init__(self, generator, discriminator):
-        super(ESRGAN, self).__init__()
-
-        # Define Generator
-        self.generator = generator
-
-        # Define Discriminator
-        self.discriminator = discriminator
-
-    def forward(self, lr, hr):
-        gen = self.generator(lr)
-
-        return gen, self.discriminator(gen), self.discriminator(hr)
 
 
 if __name__ == '__main__':

@@ -1,10 +1,13 @@
 import os
 import sys
-import torch
 import argparse
 import datetime
 import logging
 import yaml
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from torchview import draw_graph
@@ -12,26 +15,27 @@ from tqdm import tqdm
 from glob import glob
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.esrgan import Generator, Discriminator, ESRGAN
+from src.models.esrgan import Generator, Discriminator
+from src.utils.losses import VGGLoss
 from src.utils.utils import create_experiment_directory, plot_losses
 from src.utils.logger import setup_logger
 
 
 def main():
     # Define device
-    torch.device("mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu"))
+    device = torch.device("mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu"))
 
     # Set seed for reproducibility
     torch.manual_seed(20)
 
     # Compute training data statistics
-    mean, std = SuperResolutionDataset.compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"], batch_size=config["DATA"]["BATCH_SIZE"])
+    mean, std = SuperResolutionDataset.compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"], batch_size=config["TRAINING"]["BATCH_SIZE"])
 
     # Define datasets and data loaders
     train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], mean=mean, std=std, scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], augmentation=config["TRAINING"]["AUGMENTATION"])
-    train_dataloader = DataLoader(train_dataset, batch_size=config["DATA"]["BATCH_SIZE"], shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"])
     val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], mean=mean, std=std, scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], augmentation=False)
-    val_dataloader = DataLoader(val_dataset, batch_size=config["DATA"]["BATCH_SIZE"], shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"])
 
     # Define model
     generator = Generator(
@@ -43,29 +47,30 @@ def main():
         num_rdb_blocks=config["MODEL"]["GENERATOR"]["NUM_RDB_BLOCKS"],
         num_rdb_conv_blocks=config["MODEL"]["GENERATOR"]["NUM_RDB_CONV_BLOCKS"],
         scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"],
-    )
+    ).to(device)
 
     discriminator = Discriminator(
         in_channels=config["MODEL"]["DISCRIMINATOR"]["IN_CHANNEL"],
         num_features=config["MODEL"]["DISCRIMINATOR"]["NUM_FEATURES"],
         num_conv_blocks=config["MODEL"]["DISCRIMINATOR"]["NUM_CONV_BLOCKS"],
         conv_blocks_output_size=config["MODEL"]["DISCRIMINATOR"]["CONV_BLOCKS_OUTPUT_SIZE"],
-    )
+    ).to(device)
 
-    model = ESRGAN(generator=generator, discriminator=discriminator)
+    # Log Generator and Discriminator
+    summary(generator, input_size=(1, 1, 200, 200), depth=1)
+    draw_graph(generator, input_size=(1, 1, 200, 200), depth=3, expand_nested=True, filename='generator_architecture', directory=os.path.join(experiment_path, 'figures', 'train')).visual_graph.view()
 
-    # Log model
-    summary(model, input_size=[(1, 1, 200, 200), (1, 1, 400, 400)], depth=1)
-    draw_graph(model, input_size=[(1, 1, 200, 200), (1, 1, 400, 400)], depth=3, expand_nested=True, filename='architecture', directory=os.path.join(experiment_path, 'figures', 'train')).visual_graph.view()
+    summary(discriminator, input_size=(1, 1, 400, 400), depth=1)
+    draw_graph(discriminator, input_size=(1, 1, 400, 400), depth=3, expand_nested=True, filename='discriminator_architecture', directory=os.path.join(experiment_path, 'figures', 'train')).visual_graph.view()
 
     # Define optimizers
-    generator_optimizer = optim.SGD(gan.generator.parameters(), lr=0.01)
-    discriminator_optimizer = optim.SGD(gan.discriminator.parameters(), lr=0.01)
+    generator_optimizer = optim.Adam(generator.parameters(), lr=config['OPTIMIZER']['GENERATOR']['LEARNING_RATE'], betas=(config['OPTIMIZER']['GENERATOR']['BETA_1'], config['OPTIMIZER']['GENERATOR']['BETA_2']))
+    discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=config['OPTIMIZER']['DISCRIMINATOR']['LEARNING_RATE'], betas=(config['OPTIMIZER']['DISCRIMINATOR']['BETA_1'], config['OPTIMIZER']['DISCRIMINATOR']['BETA_2']))
 
     # Define the loss function
-    criterion = nn.CrossEntropyLoss()
-    # adversarial_loss = nn.BCEWithLogitsLoss()
-    # content_loss = nn.L1Loss()
+    perceptual_criterion = VGGLoss().to(device)
+    adversarial_criterion = nn.BCEWithLogitsLoss().to(device)
+    content_criterion = nn.L1Loss().to(device)
 
     # Load pre-trained model
     if config["MODEL"]["GENERATOR"]["PRE_TRAINED_PATH"]:
@@ -73,13 +78,20 @@ def main():
         checkpoint = torch.load(config["MODEL"]["GENERATOR"]["PRE_TRAINED_PATH"])
 
         # Initialize generator weights
-        model.generator.load_state_dict(checkpoint['generator_state_dict'])
+        generator.load_state_dict(checkpoint['generator_state_dict'])
     elif config["MODEL"]["DISCRIMINATOR"]["PRE_TRAINED_PATH"]:
         # Load the pre-trained checkpoint
         checkpoint = torch.load(config["MODEL"]["DISCRIMINATOR"]["PRE_TRAINED_PATH"])
 
         # Initialize discriminator weights
-        model.discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
+        discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
+    elif config['MODEL']['PRE_TRAINED_PATH']:
+        # Load the pre-trained checkpoint
+        checkpoint = torch.load(config["MODEL"]["PRE_TRAINED_PATH"])
+
+        # Initialize generator and discriminator weights
+        generator.load_state_dict(checkpoint['generator_state_dict'])
+        discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
 
     # Define number of epochs and resume training if applicable
     if args.resume:
@@ -87,78 +99,193 @@ def main():
         checkpoint = torch.load(checkpoint_path)
 
         # Initialize weights, optimizers and epoch count
-        model.generator.load_state_dict(checkpoint['generator_state_dict'])
+        generator.load_state_dict(checkpoint['generator_state_dict'])
         generator_optimizer.load_state_dict(checkpoint['generator_optimizer_state_dict'])
-        model.discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
+        discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
         discriminator_optimizer.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
         train_dataset.update_epoch(start_epoch)
-        train_losses = checkpoint['train_losses']
-        val_losses = checkpoint['val_losses']
+        generator_train_losses = checkpoint['generator_train_losses']
+        generator_val_losses = checkpoint['generator_val_losses']
+        discriminator_train_losses = checkpoint['discriminator_train_losses']
+        discriminator_val_losses = checkpoint['discriminator_val_losses']
     else:
         start_epoch = 0
-        train_losses = dict()
-        val_losses = dict()
+        generator_train_losses = dict()
+        generator_val_losses = dict()
+        discriminator_train_losses = dict()
+        discriminator_val_losses = dict()
 
     end_epoch = config['TRAINING']['EPOCHS']
 
     # Training and validation loop
     for epoch in range(start_epoch, end_epoch):
         # Set the model to train mode
-        model.train()
-        train_loss = 0.0
+        generator.train()
+        discriminator.train()
+        generator_train_loss = 0.0
+        discriminator_train_loss = 0.0
 
         # Define training progress bar
         train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch}/{end_epoch}")
 
         for batch_index, (lr_volumes, hr_volumes) in enumerate(train_pbar):
+            # Move inputs to the designated device
+            lr_volumes = lr_volumes.to(device)
+            hr_volumes = hr_volumes.to(device)
+
+            # Define adversarial ground truths
+            real_labels_true = torch.tensor(np.ones((hr_volumes.size(0), *discriminator.output_shape)), requires_grad=False).to(device)
+            fake_labels_true = torch.tensor(np.zeros((lr_volumes.size(0), *discriminator.output_shape)), requires_grad=False).to(device)
+
+            #=========================#
+            #     Train Generator     #
+            #=========================#
+
             # Zero the gradients
-            optimizer.zero_grad()
+            generator_optimizer.zero_grad()
 
             # Forward pass
-            gen_volumes = model(lr_volumes)
-            loss = criterion(gen_volumes, hr_volumes)
+            gen_volumes = generator(lr_volumes)
+
+            real_labels_pred = discriminator(hr_volumes).detach()
+            fake_labels_pred = discriminator(gen_volumes)
+
+            # Compute perceptual loss
+            perceptual_loss = perceptual_criterion(gen_volumes, hr_volumes)
+
+            # Compute adversarial loss (relativistic average GAN)
+            adversarial_loss = adversarial_criterion(fake_labels_pred - real_labels_pred.mean(0, keepdim=True), real_labels_true)
+
+            # Compute pixel-wise loss
+            content_loss = content_criterion(gen_volumes, hr_volumes)
+
+            # Generator Total loss
+            generator_total_loss = perceptual_loss + config['LOSS_WEIGHTS']['GENERATOR']['ADVERSARIAL_LOSS'] * adversarial_loss + config['LOSS_WEIGHTS']['GENERATOR']['CONTENT_LOSS'] * content_loss
 
             # Backward pass
-            loss.backward()
-            optimizer.step()
+            generator_total_loss.backward()
+            generator_optimizer.step()
+
+            #=========================#
+            #   Train Discriminator   #
+            #=========================#
+
+            # Zero the gradients
+            discriminator_optimizer.zero_grad()
+
+            # Forward pass
+            real_labels_pred = discriminator(hr_volumes)
+            fake_labels_pred = discriminator(gen_volumes.detach())
+
+            # Compute adversarial loss (relativistic average GAN)
+            adversarial_loss_real = adversarial_criterion(real_labels_pred - fake_labels_pred.mean(0, keepdim=True), real_labels_true)
+            adversarial_loss_fake = adversarial_criterion(fake_labels_pred - real_labels_pred.mean(0, keepdim=True), fake_labels_true)
+
+            # Discriminator Total loss
+            discriminator_total_loss = (adversarial_loss_real + adversarial_loss_fake) / 2
+
+            # Backward pass
+            discriminator_total_loss.backward()
+            discriminator_optimizer.step()
 
             # Update the training loss
-            train_loss += loss.item()
-            train_pbar.set_postfix({"Train Loss": f"{loss.item():.4f}"})
+            generator_train_loss += generator_total_loss.item()
+            discriminator_train_loss += discriminator_total_loss.item()
+            train_pbar.set_postfix({
+                'Gen. Train. Loss': f'{generator_total_loss.item():.4f}',
+                'Disc. Train. Loss': f'{discriminator_total_loss.item():.4f}'
+            })
 
             # Compute average training loss for this epoch
             if batch_index + 1 == len(train_pbar):
-                train_loss /= len(train_dataloader)
-                train_losses[epoch + 1] = train_loss
-                train_pbar.set_postfix({"Avg. Train Loss": f"{train_loss:.4f}"})
+                generator_train_loss /= len(train_dataloader)
+                generator_train_losses[epoch + 1] = generator_train_loss
+                discriminator_train_loss /= len(train_dataloader)
+                discriminator_train_losses[epoch + 1] = discriminator_train_loss
+                train_pbar.set_postfix({
+                    "Avg. Gen. Train. Loss": f"{generator_train_loss:.4f}",
+                    "Avg. Disc. Train. Loss": f"{discriminator_train_loss:.4f}"
+                })
 
         # Logging the training progress bar
         logging.info(train_pbar)
 
         if args.val:
             # Set the model to evaluation mode
-            model.eval()
-            val_loss = 0.0
+            generator.eval()
+            discriminator.eval()
+            generator_val_loss = 0.0
+            discriminator_val_loss = 0.0
 
             # Define validation progress bar
             val_pbar = tqdm(val_dataloader, desc="Validating")
 
             with torch.no_grad():
                 for batch_index, (lr_volumes, hr_volumes) in enumerate(val_pbar):
+                    # Move inputs to the designated device
+                    lr_volumes = lr_volumes.to(device)
+                    hr_volumes = hr_volumes.to(device)
+
+                    # Define adversarial ground truths
+                    real_labels_true = torch.tensor(np.ones((hr_volumes.size(0), *discriminator.output_shape))).to(device)
+                    fake_labels_true = torch.tensor(np.zeros((lr_volumes.size(0), *discriminator.output_shape))).to(device)
+
+                    #=========================#
+                    #    Validate Generator   #
+                    #=========================#
+
                     # Forward pass
-                    gen_volumes = model(lr_volumes)
-                    loss = criterion(gen_volumes, hr_volumes)
+                    gen_volumes = generator(lr_volumes)
+
+                    real_labels_pred = discriminator(hr_volumes)
+                    fake_labels_pred = discriminator(gen_volumes)
+
+                    # Compute perceptual loss
+                    perceptual_loss = perceptual_criterion(gen_volumes, hr_volumes)
+
+                    # Compute adversarial loss (relativistic average GAN)
+                    adversarial_loss = adversarial_criterion(fake_labels_pred - real_labels_pred.mean(0, keepdim=True), real_labels_true)
+
+                    # Compute pixel-wise loss
+                    content_loss = content_criterion(gen_volumes, hr_volumes)
+
+                    # Generator Total loss
+                    generator_total_loss = perceptual_loss + config['LOSS_WEIGHTS']['GENERATOR']['ADVERSARIAL_LOSS'] * adversarial_loss + config['LOSS_WEIGHTS']['GENERATOR']['CONTENT_LOSS'] * content_loss
+
+                    #=========================#
+                    #  Validate Discriminator #
+                    #=========================#
+
+                    # Forward pass
+                    real_labels_pred = discriminator(hr_volumes)
+                    fake_labels_pred = discriminator(gen_volumes)
+
+                    # Compute adversarial loss (relativistic average GAN)
+                    adversarial_loss_real = adversarial_criterion(real_labels_pred - fake_labels_pred.mean(0, keepdim=True), real_labels_true)
+                    adversarial_loss_fake = adversarial_criterion(fake_labels_pred - real_labels_pred.mean(0, keepdim=True), fake_labels_true)
+
+                    # Discriminator Total loss
+                    discriminator_total_loss = (adversarial_loss_real + adversarial_loss_fake) / 2
 
                     # Update the validation loss
-                    val_loss += loss.item()
-                    val_pbar.set_postfix({"Val Loss": f"{loss.item():.4f}"})
+                    generator_val_loss += generator_total_loss.item()
+                    discriminator_val_loss += discriminator_total_loss.item()
+                    val_pbar.set_postfix({
+                        "Gen. Val. Loss": f"{generator_total_loss.item():.4f}",
+                        "Disc. Val. Loss": f"{discriminator_total_loss.item():.4f}"
+                    })
 
                     # Compute average validation loss for this epoch
                     if batch_index + 1 == len(val_pbar):
-                        val_loss /= len(val_dataloader)
-                        val_losses[epoch + 1] = val_loss
-                        val_pbar.set_postfix({"Avg. Val Loss": f"{val_loss:.4f}"})
+                        generator_val_loss /= len(val_dataloader)
+                        generator_val_losses[epoch + 1] = generator_val_loss
+                        discriminator_val_loss /= len(val_dataloader)
+                        discriminator_val_losses[epoch + 1] = discriminator_val_loss
+                        val_pbar.set_postfix({
+                            "Gen. Avg. Val. Loss": f"{generator_val_loss:.4f}",
+                            "Disc. Avg. Val. Loss": f"{discriminator_val_loss:.4f}"
+                        })
 
             # Logging the validation progress bar
             logging.info(val_pbar)
@@ -169,19 +296,27 @@ def main():
         # Save checkpoint
         if (epoch + 1) % config["TRAINING"]["SAVE_INTERVAL"] == 0:
             torch.save({
-                'generator_state_dict': model.generator.state_dict(),
+                'generator_state_dict': generator.state_dict(),
                 'generator_optimizer_state_dict': generator_optimizer.state_dict(),
-                'discriminator_state_dict': model.discriminator.state_dict(),
+                'discriminator_state_dict': discriminator.state_dict(),
                 'discriminator_optimizer_state_dict': discriminator_optimizer.state_dict(),
                 'epoch': epoch,
-                'train_losses': train_losses,
-                'val_losses': val_losses
+                'generator_train_losses': generator_train_losses,
+                'generator_val_losses': generator_val_losses,
+                'discriminator_train_losses': discriminator_train_losses,
+                'discriminator_val_losses': discriminator_val_losses
             }, os.path.join(experiment_path, 'checkpoints', f'{epoch + 1}.pth'))
 
             plot_losses(
-                loss_dicts={'Train Loss': train_losses, 'Validation Loss': val_losses},
+                loss_dicts={'Train Loss': generator_train_losses, 'Validation Loss': generator_val_losses},
                 title='Training and Validation Loss',
-                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'losses')
+                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'generator_loss')
+            )
+
+            plot_losses(
+                loss_dicts={'Train Loss': discriminator_train_losses, 'Validation Loss': discriminator_val_losses},
+                title='Training and Validation Loss',
+                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'discriminator_loss')
             )
 
 

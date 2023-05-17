@@ -32,10 +32,11 @@ def main():
     # dataloader = ...
 
 
-    # CHECK IF VOLUME IS PASSED IN ARGS. IF NOT LOOPS OVER DATA WITH DATALOADER.
+    # CHECK IF VOLUME IS PASSED IN ARGS. IF NOT LOOPS OVER DATA WITH DATALOADER (BATCH_SIZE=1 ??).
+    # display_batch(...)
     # MAYBE WE NEED TO CHANGE SPLIT_DATA TO RENAME FILES IN ORDER TO BE ABLE TO INDEX THEM
 
-    # display_volumes(-1, -1, "axial", [volume_to_grayscale(get_volume_data(volume_dir))], 1, 1, '2D')
+    # display_volumes(-1, -1, "axial", [volume_to_grayscale(get_volume_data(volume_dir))], 1, 1, '2D') ISTO É REDUNDANTE... DEVO APENAR USAR O display_batch maybe?
     pass
 
     elif args.mode == 'display_sr_ct_scan':

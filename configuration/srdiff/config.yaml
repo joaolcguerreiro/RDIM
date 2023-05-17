@@ -6,7 +6,7 @@ DATA:
   TRAIN_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training
   VAL_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation
   TEST_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing
-  BATCH_SIZE: 8
+  NUM_WORKERS: 4
 
 
 #=================================================================================================================#
@@ -24,10 +24,21 @@ MODEL:
 
 TRAINING:
   EPOCHS: 5000
+  BATCH_SIZE: 8
   AUGMENTATION: True
   SAVE_INTERVAL: 50
-  OPTIMIZER:
-    NAME:
-    LEARNING_RATE:
-    MOMENTUM:
-    WEIGHT_DECAY:
+
+OPTIMIZER:
+  LEARNING_RATE:
+  WEIGHT_DECAY:
+
+
+#=================================================================================================================#
+#                                         Evaluation Stage Configuration                                          #
+#=================================================================================================================#
+
+VALIDATION:
+  BATCH_SIZE: 8
+
+TESTING:
+  BATCH_SIZE: 8

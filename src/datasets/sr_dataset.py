@@ -10,7 +10,7 @@ from ..utils.utils import get_volume_data
 
 class SuperResolutionDataset(Dataset):
     def __init__(self, data_dir, mean, std, scale_factor=2, augmentation=False, normalization=True):
-        super(SuperResolutionDataset, self).__init__()
+        super().__init__()
 
         # Data Directory Path
         self.data_dir = data_dir
