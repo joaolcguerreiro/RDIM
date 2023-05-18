@@ -32,9 +32,9 @@ def main():
     mean, std = SuperResolutionDataset.compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"], batch_size=config["TRAINING"]["BATCH_SIZE"])
 
     # Define datasets and data loaders
-    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], mean=mean, std=std, scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], augmentation=config["TRAINING"]["AUGMENTATION"])
+    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
     train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"])
-    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], mean=mean, std=std, scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], augmentation=False)
+    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], mean=mean, std=std, augmentation=False)
     val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"])
 
     # Define model
@@ -57,15 +57,26 @@ def main():
     ).to(device)
 
     # Log Generator and Discriminator
-    summary(generator, input_size=(1, 1, 200, 200), depth=1)
-    draw_graph(generator, input_size=(1, 1, 200, 200), depth=3, expand_nested=True, filename='generator_architecture', directory=os.path.join(experiment_path, 'figures', 'train')).visual_graph.view()
+    summary(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=1)
+    draw_graph(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=3, expand_nested=True, filename='generator_architecture', directory=os.path.join(experiment_path, 'figures', 'train')).visual_graph.view()
 
-    summary(discriminator, input_size=(1, 1, 400, 400), depth=1)
-    draw_graph(discriminator, input_size=(1, 1, 400, 400), depth=3, expand_nested=True, filename='discriminator_architecture', directory=os.path.join(experiment_path, 'figures', 'train')).visual_graph.view()
+    summary(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=1)
+    draw_graph(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=3, expand_nested=True, filename='discriminator_architecture', directory=os.path.join(experiment_path, 'figures', 'train')).visual_graph.view()
 
     # Define optimizers
-    generator_optimizer = optim.Adam(generator.parameters(), lr=config['OPTIMIZER']['GENERATOR']['LEARNING_RATE'], betas=(config['OPTIMIZER']['GENERATOR']['BETA_1'], config['OPTIMIZER']['GENERATOR']['BETA_2']))
-    discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=config['OPTIMIZER']['DISCRIMINATOR']['LEARNING_RATE'], betas=(config['OPTIMIZER']['DISCRIMINATOR']['BETA_1'], config['OPTIMIZER']['DISCRIMINATOR']['BETA_2']))
+    generator_optimizer = optim.Adam(
+        generator.parameters(),
+        lr=config['OPTIMIZER']['GENERATOR']['LEARNING_RATE'],
+        betas=(config['OPTIMIZER']['GENERATOR']['BETA_1'], config['OPTIMIZER']['GENERATOR']['BETA_2']),
+        weight_decay=config['OPTIMIZER']['GENERATOR']['WEIGHT_DECAY']
+    )
+
+    discriminator_optimizer = optim.Adam(
+        discriminator.parameters(),
+        lr=config['OPTIMIZER']['DISCRIMINATOR']['LEARNING_RATE'],
+        betas=(config['OPTIMIZER']['DISCRIMINATOR']['BETA_1'], config['OPTIMIZER']['DISCRIMINATOR']['BETA_2']),
+        weight_decay=config['OPTIMIZER']['DISCRIMINATOR']['WEIGHT_DECAY']
+    )
 
     # Define the loss function
     perceptual_criterion = VGGLoss().to(device)

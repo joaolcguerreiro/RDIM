@@ -101,11 +101,11 @@ if __name__ == '__main__':
     summary(model, input_size=(1, 1, 240, 240), depth=1)
 
     # Load training data
-    train_dataset = SuperResolutionDataset(data_dir=parsePath(config["TRAIN"]["DATA_DIR_PATH"]), mean=config["TRAIN"]["MEAN"], std=config["TRAIN"]["STD"], scale_factor=TRAIN.SCALE_FACTOR, augmentation=TRAIN.AUGMENTATION)
+    train_dataset = SuperResolutionDataset(data_dir=parsePath(config["TRAIN"]["DATA_DIR_PATH"]), scale_factor=TRAIN.SCALE_FACTOR, mean=config["TRAIN"]["MEAN"], std=config["TRAIN"]["STD"], augmentation=TRAIN.AUGMENTATION)
     train_dataloader = DataLoader(train_dataset, batch_size=config["TRAIN"]["BATCH_SIZE"], shuffle=True)
 
     # Load validation data
-    val_dataset = SuperResolutionDataset(data_dir=parsePath(config["VAL"]["DATA_DIR_PATH"]), mean=config["TRAIN"]["MEAN"], std=config["TRAIN"]["STD"], scale_factor=VALIDATION.SCALE_FACTOR, augmentation=VALIDATION.AUGMENTATION)
+    val_dataset = SuperResolutionDataset(data_dir=parsePath(config["VAL"]["DATA_DIR_PATH"]), scale_factor=VALIDATION.SCALE_FACTOR, mean=config["TRAIN"]["MEAN"], std=config["TRAIN"]["STD"], augmentation=VALIDATION.AUGMENTATION)
     val_dataloader = DataLoader(train_dataset, batch_size=config["VAL"]["BATCH_SIZE"], shuffle=True)
 
     main()

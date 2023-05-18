@@ -9,7 +9,7 @@ from ..utils.utils import get_volume_data
 
 
 class SuperResolutionDataset(Dataset):
-    def __init__(self, data_dir, mean, std, scale_factor=2, augmentation=False, normalization=True):
+    def __init__(self, data_dir, scale_factor, mean=None, std=None, augmentation=False):
         super().__init__()
 
         # Data Directory Path
@@ -34,7 +34,7 @@ class SuperResolutionDataset(Dataset):
 
         self.final_transforms = transforms.Compose([
             transforms.ToTensor(),
-            transforms.NormalizeIntensity(subtrahend=mean, divisor=std) if normalization else (lambda x: x),
+            transforms.NormalizeIntensity(subtrahend=mean, divisor=std) if (mean and std) else (lambda x: x),
         ])
 
         # Data Augmentation Transforms
@@ -83,6 +83,16 @@ class SuperResolutionDataset(Dataset):
 
         return self.final_transforms(lr_volume), self.final_transforms(hr_volume)
 
+    def get_low_resolution_shape(self):
+        lr_volume, _ = self[0]
+
+        return lr_volume.shape
+
+    def get_high_resolution_shape(self):
+        _, hr_volume = self[0]
+
+        return hr_volume.shape
+
     def increment_epoch(self):
         self.epoch += 1
 
@@ -103,8 +113,8 @@ class SuperResolutionDataset(Dataset):
         std = np.zeros(1)
 
         # Load training data
-        dataset = SuperResolutionDataset(data_dir=data_dir, mean=-1, std=-1, scale_factor=1, normalization=False, augmentation=False)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        dataset = SuperResolutionDataset(data_dir=data_dir, scale_factor=1)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
 
         # Define progress bar
         pbar = tqdm(dataloader, desc="Computing Mean and STD")
