@@ -1,3 +1,16 @@
+# Setup Environment
+
+1) Install Python dependencies (Python 3 is required):
+   ```
+   pip install -r requirements.txt
+   ```
+
+2) Install PyTorch manually (https://pytorch.org/get-started/locally/).
+
+3) To install torchview macOS users need to install graphviz using Homebrew (https://github.com/mert-kurttutan/torchview).
+
+<hr style="border:2px solid gray">
+
 # Download NLST Dataset
 
 1) Download requires the [NBIA Data Retriever](https://wiki.cancerimagingarchive.net/display/NBIA/Downloading+TCIA+Images).

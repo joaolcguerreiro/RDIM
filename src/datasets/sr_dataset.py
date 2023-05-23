@@ -60,7 +60,7 @@ class SuperResolutionDataset(Dataset):
         self.upsample = transforms.Zoom(zoom=scale_factor, mode="trilinear", keep_size=False)
 
         # Revert Normalization Transform
-        self.denormalize = transforms.NormalizeIntensity(subtrahend=-mean/std, divisor=1/std)
+        self.denormalize = transforms.NormalizeIntensity(subtrahend=-mean/std, divisor=1/std) if (mean and std) else (lambda x: x)
 
     def __len__(self):
         return len(self.files)

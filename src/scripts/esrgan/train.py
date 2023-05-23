@@ -57,11 +57,11 @@ def main():
     ).to(device)
 
     # Log Generator and Discriminator
-    summary(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=1)
-    draw_graph(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=3, expand_nested=True, filename='generator_architecture', directory=os.path.join(experiment_path, 'figures', 'train')).visual_graph.view()
+    summary(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=1, device=device)
+    draw_graph(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=3, expand_nested=True, filename='generator_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
 
-    summary(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=1)
-    draw_graph(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=3, expand_nested=True, filename='discriminator_architecture', directory=os.path.join(experiment_path, 'figures', 'train')).visual_graph.view()
+    summary(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=1, device=device)
+    draw_graph(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=3, expand_nested=True, filename='discriminator_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
 
     # Define optimizers
     generator_optimizer = optim.Adam(

@@ -8,16 +8,16 @@ class ConvolutionalBlock(nn.Module):
         super().__init__()
 
         # Convolutional Layer
-        self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
+        self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
 
         # Batch Normalization Layer
-        self.bn = nn.BatchNorm2d(out_channels) if batch_norm else (lambda x: x)
+        self.bn = nn.BatchNorm3d(out_channels) if batch_norm else (lambda x: x)
 
         # Activation Function
         self.act = nn.LeakyReLU(negative_slope=0.2) if activation else (lambda x: x)
 
         # Max Polling Layer
-        self.pool = nn.MaxPool2d(kernel_size=2) if max_pool else (lambda x: x)
+        self.pool = nn.MaxPool3d(kernel_size=2) if max_pool else (lambda x: x)
 
     def forward(self, x):
         return self.pool(self.act(self.bn(self.conv(x))))
@@ -189,9 +189,9 @@ class Discriminator(nn.Module):
 
         # Output Block
         self.output = nn.Sequential(
-            nn.AdaptiveAvgPool2d(conv_blocks_output_size),
+            nn.AdaptiveAvgPool3d(conv_blocks_output_size),
             nn.Flatten(),
-            nn.Linear(num_features * (2 ** ((num_conv_blocks - 1) // 2)) * conv_blocks_output_size * conv_blocks_output_size, 1024),
+            nn.Linear(num_features * (2 ** ((num_conv_blocks - 1) // 2)) * (conv_blocks_output_size ** 3), 1024),
             nn.LeakyReLU(negative_slope=0.2),
             nn.Linear(1024, 1)
         )
