@@ -320,13 +320,13 @@ def main():
 
             plot_losses(
                 loss_dicts={'Train Loss': generator_train_losses, 'Validation Loss': generator_val_losses},
-                title='Training and Validation Loss',
+                title='Generator Training and Validation Loss',
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'generator_loss')
             )
 
             plot_losses(
                 loss_dicts={'Train Loss': discriminator_train_losses, 'Validation Loss': discriminator_val_losses},
-                title='Training and Validation Loss',
+                title='Discriminator Training and Validation Loss',
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'discriminator_loss')
             )
 

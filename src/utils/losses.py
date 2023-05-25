@@ -15,8 +15,8 @@ class VGGLoss(nn.Module):
         # Set the model to eval mode
         self.vgg.eval()
 
-        for param in self.vgg.parameters():
-            param.requires_grad = False
+        for parameter in self.vgg.parameters():
+            parameter.requires_grad = False
 
-    def forward(self, input, target):
-        return self.criterion(self.vgg(input), self.vgg(target))
+    def forward(self, prediction, ground_truth):
+        return self.criterion(self.vgg(prediction), self.vgg(ground_truth))

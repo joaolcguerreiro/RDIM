@@ -2,6 +2,8 @@ import os
 import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
 import shutil
 
 
@@ -123,6 +125,18 @@ def plot_losses(loss_dicts, title, save_dir_path, x_label='Epoch', y_label='Loss
     plt.ylabel(y_label)
     plt.title(title)
     plt.legend()
+
+    # Save chart
+    plt.savefig(save_dir_path)
+
+
+def plot_metric(data, title, save_dir_path, x_label, y_label='Metric', hue=None):
+    # Create a new figure
+    plt.figure()
+
+    # Chart customization
+    sns.boxplot(data=pd.DataFrame(data), x=x_label, y=y_label, hue=hue, palette="Pastel1")
+    plt.title(title)
 
     # Save chart
     plt.savefig(save_dir_path)

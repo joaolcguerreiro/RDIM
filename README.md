@@ -15,13 +15,23 @@
 
 1) Download requires the [NBIA Data Retriever](https://wiki.cancerimagingarchive.net/display/NBIA/Downloading+TCIA+Images).
 
-2) Open Manifest File in `SRMeDiff/data/manifest.txt`.
-
-3) Select `Descriptive Directory Name` option;
-
-4) Click `Browse` and select destiny directory for downloaded files. We recommend `SRMeDiff/data` directory;
-
-5) Click `Start`;
+2) Download data with Manifest File.
+   - **macOS** and **Windows**
+     - Double click manifest file in `srmediff/data/manifest.tcia` to open it;
+     - Select `Descriptive Directory Name` option;
+     - Click `Browse` and select destiny directory for downloaded files. We recommend `srmediff/data` directory;
+     - Click `Start`;
+   - **Linux**
+     - Run command:
+       ```
+       # For CentOS
+       /opt/NBIADataRetriever/NBIADataRetriever --cli <abolute_path_to_project>/srmediff/data/manifest.tcia -d <abolute_path_to_project>/srmediff/data
+       ```
+       ```
+       # For Ubuntu
+       /opt/nbia-data-retriever/nbia-data-retriever --cli <abolute_path_to_project>/srmediff/data/manifest.tcia -d <abolute_path_to_project>/srmediff/data
+       ```
+     - Help: Follow *"Running the NBIA Data Retriever on Linux"* section in https://wiki.cancerimagingarchive.net/display/NBIA/NBIA+Data+Retriever+Command-Line+Interface+Guide. `<location>/<manifest file name>.tcia` and `<parent location>/<download directory>` are expected to be the absolute paths. The remaining command-line options are not considered.
 
 <hr style="border:2px solid gray">
 
@@ -29,13 +39,17 @@
 
 **NLST Dataset**
 
-1) Run data cleaning script:
+0) Navigate to `preprocessing` directory:
    ```
    cd src/preprocessing
+   ```
+
+2) Run data cleaning script:
+   ```
    python clean_data.py
    ```
 
-2) Run data formatting script:
+3) Run data formatting script:
    ```
    python format_data.py
    ```
@@ -110,77 +124,88 @@ results/ .... Contains the output of running the trained model on the test set. 
 
 <hr style="border:2px solid gray">
 
-# Run ESRGAN
+# Run Model
+
+In the following instructions, replace `<model>` by one of these options:
+
+* `esrgan`
+
+* `srdiff`
+
+* `srmediff`
+
+---
 
 ### Train and Validation
-1) go to configuration/ and update configuration parameters....
-2) Run ...
+
+1) go to configuration/ and adjust configuration parameters needed....
+
+2) Navigate to `src/scripts/<model>/`
+
+3) Run ...
    ```
-   cd src/scripts/esrgan/
+   # With Validation
    python train.py
    ```
 
+   ```
+   # Without Validation
+   python train.py --val=False
+   ```
+
+---
+
 ### Load Pre-trained
-go to configuration/ and update pre-trained path key parameter of model....
-go to src/scripts/esrgan/ and run scripts
+
+1) go to `configuration/<model>/config.yaml` and update pre-trained path key parameter of model....
+
+2) Navigate to `src/scripts/<model>/`
+
+3) Run ...
+   ```
    python train.py
-   python test.py --epoch=<epoch>
-   python inference.py
-This way only model weights will be loaded.
+   ```
 
-Note: If you simultaneously resume a training the checkpoint weights will override the pre-trained weights.
+---
 
 ### Resume Training
-go to experiments/esrgan/<date_time> and copy experiment path
-go to src/scripts/esrgan/ and run python train.py --resume=<experiment_path>
+
+1) go to `experiments/<model>` and copy experiment path
+
+2) Navigate to `src/scripts/<model>/`
+
+3) Run ...
+   ```
+   python train.py --resume=<experiment_path>
+   ```
+
+    Note: Load pre-trained differs from resume training since in pre-training only the model weights are loaded. If you simultaneously resume a training the checkpoint weights will override the pre-trained weights.
+
+---
 
 ### Test
-go to experiments/esrgan/<date_time>/checkpoints/ and copy checkpoint file path....
-go to experiments/esrgan/<date_time>/config.yaml and update checkpoint path key parameter of test stage....
-go to src/scripts/esrgan/ and run python test.py --epoch=<epoch>
-....
+
+1) go to `experiments/<model>` and copy experiment path
+
+2) Navigate to `src/scripts/<model>/`
+
+3) Run ...
+   ```
+   python test.py --exp=<experiment_path> --epoch=<epoch>
+   ```
+
+---
 
 ### Inference
-go to experiments/ or pretrained_models/ and copy the path of a checkpoint file....
-go to src/scripts/esrgan/ and run python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir>
 
-<hr style="border:2px solid gray">
+1) Get path of a checkpoint file...
 
-# Run SRDiff
+2) Navigate to `src/scripts/<model>/`
 
-### Train and Validation
-....
-
-### Load Pre-trained
-....
-
-### Resume Training
-....
-
-### Test
-....
-
-### Inference
-....
-
-<hr style="border:2px solid gray">
-
-# Run SRMeDiff
-
-### Train and Validation
-....
-
-### Resume Training
-....
-
-### Test
-....
-
-### Inference
-....
-
-### Load Pre-trained
-....
+3) Run ...
+   ```
+    python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir>
+   ```
 
 <hr style="border:2px solid gray">
 
