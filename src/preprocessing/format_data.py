@@ -9,7 +9,7 @@ from glob import glob
 
 def main():
     # Data path
-    old_dir_path = max(glob.glob(os.path.join('..', '..', 'data', 'manifest*')), key=os.path.getmtime)
+    old_dir_path = max(glob(os.path.join('..', '..', 'data', 'manifest*')), key=os.path.getmtime)
     new_dir_path = os.path.join('..', '..', 'data', 'LIDC-IDRI')
 
     # Remove metadata and license files

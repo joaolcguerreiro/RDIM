@@ -7,7 +7,7 @@ from glob import glob
 def main():
     # Open CSV metadata file
     try:
-        with open(max(glob.glob(os.path.join('..', '..', 'data', 'manifest*', 'metadata.csv')), key=os.path.getmtime), newline='') as csvfile:
+        with open(max(glob(os.path.join('..', '..', 'data', 'manifest*', 'metadata.csv')), key=os.path.getmtime), newline='') as csvfile:
             reader = csv.reader(csvfile)
 
             # Skip first row (Column names)
@@ -18,7 +18,7 @@ def main():
             path_index = 15
 
             # Parse path function
-            parse_path = lambda path: max(glob.glob(os.path.join('..', '..', 'data', 'manifest*', os.path.dirname(path)[2:])), key=os.path.getmtime)
+            parse_path = lambda path: max(glob(os.path.join('..', '..', 'data', 'manifest*', os.path.dirname(path)[2:])), key=os.path.getmtime)
 
             # Clean data
             for row in reader:
