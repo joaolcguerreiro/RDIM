@@ -123,21 +123,26 @@ class RandForegroundGaussianNoise(RandomizableTransform):
         return volume
 
 
-class RandStreakNoise(RandomizableTransform):
+class RandForegroundStreakNoise(RandomizableTransform):
     """
-    Add random streaks to volume from bottom corners.
+    Add random streaks to volume from bottom corners and middle top.
     Streaks are simulated as lines with random slope and intensity.
 
     Args:
-        prob: Probability to add streak noise.
-        dtype: output data type, if None, same as input image. defaults to float32.
+        prob (float): Probability to add streak noise.
+        intensity (float): The intensity of the streaks.
+        line_thickness (Tuple[int, int, int]): The thickness of the lines that form the streaks, one per origin.
+        num_streaks (Tuple[int, int, int]): The maximum number of streaks to generate from each origin.
+        origins (Tuple[bool, bool, bool]): Flags to specify whether to generate streaks from each of the three origins: left-bottom corner, right-bottom corner, top-middle.
+        dtype (DtypeLike): Output data type, if None, same as input image.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, prob: float = 0.1, intensity: float = 0.1, num_streaks: Tuple[int, int, int] = (10, 10, 10), origins: Tuple[bool, bool, bool] = (True, True, True), dtype: DtypeLike = np.float32) -> None:
+    def __init__(self, prob: float = 0.1, intensity: float = 0.1, line_thickness: Tuple[int, int, int] = (3, 3, 3), num_streaks: Tuple[int, int, int] = (10, 10, 10), origins: Tuple[bool, bool, bool] = (True, True, True), dtype: DtypeLike = np.float32) -> None:
         RandomizableTransform.__init__(self, prob)
         self.intensity = intensity
+        self.line_thickness = line_thickness
         self.num_streaks = num_streaks
         self.origins = origins
         self.dtype = dtype
@@ -173,7 +178,11 @@ class RandStreakNoise(RandomizableTransform):
                 x_lb = np.arange(volume.shape[-1])
                 y_lb = (slope_lb * (x_lb - volume.shape[-2] * 2) + volume.shape[-2]).astype(np.int64)
 
-                self.streak[..., np.clip(y_lb, 0, volume.shape[-2] - 1), np.clip(volume.shape[-1] - 1 - x_lb, 0, volume.shape[-1] - 1)] += intensity
+                # Adjust line thickness and intensity
+                line_thickness = self.R.randint(low=0, high=self.line_thickness[0] + 1)
+
+                for i in range(-line_thickness + 1, line_thickness):
+                    self.streak[..., np.clip(y_lb + i, 0, volume.shape[-2] - 1), np.clip(volume.shape[-1] - 1 - x_lb, 0, volume.shape[-1] - 1)] += intensity / (np.abs(i) * (3 / 2) + 5)
 
         if self.origins[1]:
             for _ in range(num_streaks[1]):
@@ -187,7 +196,11 @@ class RandStreakNoise(RandomizableTransform):
                 x_rb = np.arange(volume.shape[-1])
                 y_rb = (slope_rb * (x_rb - volume.shape[-2] * 2) + volume.shape[-2]).astype(np.int64)
 
-                self.streak[..., np.clip(y_rb, 0, volume.shape[-2] - 1), np.clip(x_rb, 0, volume.shape[-1] - 1)] += intensity
+                # Adjust line thickness and intensity
+                line_thickness = self.R.randint(low=0, high=self.line_thickness[1] + 1)
+
+                for i in range(-line_thickness + 1, line_thickness):
+                    self.streak[..., np.clip(y_rb + i, 0, volume.shape[-2] - 1), np.clip(x_rb, 0, volume.shape[-1] - 1)] += intensity / (np.abs(i) * (3 / 2) + 5)
 
         if self.origins[2]:
             for _ in range(num_streaks[2]):
@@ -201,7 +214,11 @@ class RandStreakNoise(RandomizableTransform):
                 y_tm = np.arange(volume.shape[-2])
                 x_tm = (slope_tm * (y_tm + volume.shape[-2] // 4) + volume.shape[-1] // 2).astype(np.int64)
 
-                self.streak[..., np.clip(y_tm, 0, volume.shape[-2] - 1), np.clip(x_tm, 0, volume.shape[-1] - 1)] += intensity
+                # Adjust line thickness and intensity
+                line_thickness = self.R.randint(low=0, high=self.line_thickness[2] + 1)
+
+                for i in range(-line_thickness + 1, line_thickness):
+                    self.streak[..., np.clip(y_tm + i, 0, volume.shape[-2] - 1), np.clip(x_tm, 0, volume.shape[-1] - 1)] += intensity / (np.abs(i) * (3 / 2) + 5)
 
         # Convert streak to desired type
         self.streak, *_ = convert_data_type(self.streak, dtype=self.dtype)
