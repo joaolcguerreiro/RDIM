@@ -17,7 +17,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
 from src.utils.losses import VGGLoss
-from src.utils.utils import create_experiment_directory, plot_losses
+from src.utils.utils import create_experiment_directory, compute_data_statistics, draw_line_chart
 from src.utils.logger import setup_logger
 
 
@@ -29,13 +29,13 @@ def main():
     torch.manual_seed(20)
 
     # Compute training data statistics
-    mean, std = SuperResolutionDataset.compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"], batch_size=config["TRAINING"]["BATCH_SIZE"])
+    _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"])
 
     # Define datasets and data loaders
-    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
-    train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"])
-    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], mean=mean, std=std, augmentation=False)
-    val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"])
+    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
+    train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
+    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
+    val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
     # Define model
     generator = Generator(
@@ -116,6 +116,7 @@ def main():
         discriminator_optimizer.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
         train_dataset.update_epoch(start_epoch)
+        val_dataset.update_epoch(start_epoch)
         generator_train_losses = checkpoint['generator_train_losses']
         generator_val_losses = checkpoint['generator_val_losses']
         discriminator_train_losses = checkpoint['discriminator_train_losses']
@@ -140,7 +141,7 @@ def main():
         # Define training progress bar
         train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch}/{end_epoch}")
 
-        for batch_index, (lr_volumes, hr_volumes) in enumerate(train_pbar):
+        for batch_index, (lr_volumes, hr_volumes, _) in enumerate(train_pbar):
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
             hr_volumes = hr_volumes.to(device)
@@ -233,7 +234,7 @@ def main():
             val_pbar = tqdm(val_dataloader, desc="Validating")
 
             with torch.no_grad():
-                for batch_index, (lr_volumes, hr_volumes) in enumerate(val_pbar):
+                for batch_index, (lr_volumes, hr_volumes, _) in enumerate(val_pbar):
                     # Move inputs to the designated device
                     lr_volumes = lr_volumes.to(device)
                     hr_volumes = hr_volumes.to(device)
@@ -311,22 +312,44 @@ def main():
                 'generator_optimizer_state_dict': generator_optimizer.state_dict(),
                 'discriminator_state_dict': discriminator.state_dict(),
                 'discriminator_optimizer_state_dict': discriminator_optimizer.state_dict(),
-                'epoch': epoch,
+                'generator_in_channels': config["MODEL"]["GENERATOR"]["IN_CHANNEL"],
+                'generator_out_channels': config["MODEL"]["GENERATOR"]["OUT_CHANNEL"],
+                'generator_num_features': config["MODEL"]["GENERATOR"]["NUM_FEATURES"],
+                'generator_num_growth_features': config["MODEL"]["GENERATOR"]["NUM_GROWTH_FEATURES"],
+                'generator_num_rrdb_blocks': config["MODEL"]["GENERATOR"]["NUM_RRDB_BLOCKS"],
+                'generator_num_rdb_blocks': config["MODEL"]["GENERATOR"]["NUM_RDB_BLOCKS"],
+                'generator_num_rdb_conv_blocks': config["MODEL"]["GENERATOR"]["NUM_RDB_CONV_BLOCKS"],
+                'generator_scale_factor': config["MODEL"]["GENERATOR"]["SCALE_FACTOR"],
                 'generator_train_losses': generator_train_losses,
                 'generator_val_losses': generator_val_losses,
                 'discriminator_train_losses': discriminator_train_losses,
-                'discriminator_val_losses': discriminator_val_losses
+                'discriminator_val_losses': discriminator_val_losses,
+                'epoch': epoch,
+                'training_data_min': _min,
+                'training_data_max': _max,
+                'training_data_mean': mean,
+                'training_data_std': std
             }, os.path.join(experiment_path, 'checkpoints', f'{epoch + 1}.pth'))
 
-            plot_losses(
-                loss_dicts={'Train Loss': generator_train_losses, 'Validation Loss': generator_val_losses},
+            draw_line_chart(
+                data=[
+                    {'Epoch': generator_train_losses.keys(), 'Loss': generator_train_losses.values(), 'Label': 'Train Loss'},
+                    {'Epoch': generator_val_losses.keys(), 'Loss': generator_val_losses.values(), 'Label': 'Validation Loss'},
+                ],
                 title='Generator Training and Validation Loss',
+                x_label='Epoch',
+                y_label='Loss',
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'generator_loss')
             )
 
-            plot_losses(
-                loss_dicts={'Train Loss': discriminator_train_losses, 'Validation Loss': discriminator_val_losses},
+            draw_line_chart(
+                data=[
+                    {'Epoch': discriminator_train_losses.keys(), 'Loss': discriminator_train_losses.values(), 'Label': 'Train Loss'},
+                    {'Epoch': discriminator_val_losses.keys(), 'Loss': discriminator_val_losses.values(), 'Label': 'Validation Loss'},
+                ],
                 title='Discriminator Training and Validation Loss',
+                x_label='Epoch',
+                y_label='Loss',
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'discriminator_loss')
             )
 
@@ -341,7 +364,7 @@ if __name__ == '__main__':
     if args.resume:
         experiment_path = args.resume
         config_path = os.path.join(args.resume, "config.yaml")
-        checkpoint_path = max(glob.glob(os.path.join(args.resume, "checkpoints", "*.pth")), key=os.path.getctime)
+        checkpoint_path = max(glob(os.path.join(args.resume, "checkpoints", "*.pth")), key=os.path.getctime)
     else:
         experiment_path = os.path.join('..', '..', '..', 'experiments', "esrgan", datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
         config_path = os.path.join('..', '..', '..', 'configuration', "esrgan", 'config.yaml')

@@ -15,7 +15,7 @@ from glob import glob
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.srdiff import ????????????????????????????????????????
-from src.utils.utils import create_experiment_directory, plot_losses
+from src.utils.utils import create_experiment_directory, compute_data_statistics, plot_losses
 from src.utils.logger import setup_logger
 
 
@@ -27,13 +27,13 @@ def main():
     torch.manual_seed(20)
 
     # Compute training data statistics
-    mean, std = SuperResolutionDataset.compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"], batch_size=config["TRAINING"]["BATCH_SIZE"])
+    _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"])
 
     # Define datasets and data loaders
-    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
-    train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"])
-    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], mean=mean, std=std, augmentation=False)
-    val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"])
+    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
+    train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
+    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
+    val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
     # Define model
     model = SRDiff(??????).to(device)
@@ -84,7 +84,7 @@ def main():
         # Define training progress bar
         train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch}/{end_epoch}")
 
-        for batch_index, (lr_volumes, hr_volumes) in enumerate(train_pbar):
+        for batch_index, (lr_volumes, hr_volumes, _) in enumerate(train_pbar):
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
             hr_volumes = hr_volumes.to(device)
@@ -122,7 +122,7 @@ def main():
             val_pbar = tqdm(val_dataloader, desc="Validating")
 
             with torch.no_grad():
-                for batch_index, (lr_volumes, hr_volumes) in enumerate(val_pbar):
+                for batch_index, (lr_volumes, hr_volumes, _) in enumerate(val_pbar):
                     # Move inputs to the designated device
                     lr_volumes = lr_volumes.to(device)
                     hr_volumes = hr_volumes.to(device)
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     if args.resume:
         experiment_path = args.resume
         config_path = os.path.join(args.resume, "config.yaml")
-        checkpoint_path = max(glob.glob(os.path.join(args.resume, "checkpoints", "*.pth")), key=os.path.getctime)
+        checkpoint_path = max(glob(os.path.join(args.resume, "checkpoints", "*.pth")), key=os.path.getctime)
     else:
         experiment_path = os.path.join('..', '..', '..', 'experiments', "srdiff", datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
         config_path = os.path.join('..', '..', '..', 'configuration', "srdiff", 'config.yaml')
