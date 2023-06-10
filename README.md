@@ -1,3 +1,26 @@
+# SRMeDiff
+
+Repository ....
+
+...
+
+---
+
+### Quick Inference
+
+1) Setup Environment
+
+2) Download NLST Dataset
+
+3) Data Preparation
+
+4) Run ...
+   ```
+    python src/scripts/srmediff/inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--num-workers=<num_workers>]
+   ```
+
+<hr style="border:2px solid gray">
+
 # Setup Environment
 
 1) Install Python dependencies (Python 3 is required):
@@ -44,17 +67,17 @@
    cd src/preprocessing
    ```
 
-2) Run data cleaning script:
+1) Run data cleaning script:
    ```
    python clean_data.py
    ```
 
-3) Run data formatting script:
+2) Run data formatting script:
    ```
    python format_data.py
    ```
 
-4) Run data splitting script:
+3) Run data splitting script:
    ```
    python split_data.py
    ```
@@ -65,7 +88,7 @@
 
 1) VALIDATION DATA IS OPTIONAL... BUT YOU CAN RUN SPLIT SCRIPT IF YOU WANT TO SPLIT YOUR TRAINING DATA (USE --DIR FLAG TO SPECIFY DIRECTORY PATH)...
 
-2) BE SURE THAT FILE FORMAT SHOULD BE NIFTI
+2) BE SURE THAT FILE FORMAT SHOULD BE NIFTI AND RANGE IN HU SCALE!!!!
 
 3) UPDATE CONFIG FILE WITH DATA PATHS (NOT NECESSARY IF YOU RUN SPLIT SCRIPT)
 
@@ -126,7 +149,7 @@ results/ .... Contains the output of running the trained model on the test set. 
 
 # Run Model
 
-In the following instructions, replace `<model>` by one of these options:
+In the following instructions, replace `<model>` by one of the options below:
 
 * `esrgan`
 
@@ -204,10 +227,142 @@ In the following instructions, replace `<model>` by one of these options:
 
 3) Run ...
    ```
-    python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir>
+    python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--num-workers=<num_workers>]
    ```
 
 <hr style="border:2px solid gray">
 
 # Visualize Results
-...
+
+CT scan visualization file... scans are expected to be in HU scale...
+
+0) Navigate to `visualization` directory:
+   ```
+   cd visualization
+   ```
+
+1) Run visualization script:
+   ```
+   python visualization.py --data-dir=<data_dir> --mode=<mode> [--checkpoint=<checkpoint>] [--scale-factor=<scale_factor>] [--plane=<plane>] [--dim=<dimension>] [--volume=<volume_index>] [--slice=<slice_index>] [--batch-size=<batch_size>]
+   ```
+   
+---
+
+#### Data Directory
+
+`--data-dir`
+
+| Option | Description                                                                |
+|--------|----------------------------------------------------------------------------|
+| `str`  | Path to data directory                                   |
+
+---
+
+#### Visualization Mode
+
+`--mode`
+
+| Option           | Description                                                                |
+|------------------|----------------------------------------------------------------------------|
+| `'gt_scans'`       | Display ground-truth CT scan counterpart                                   |
+| `'lr_scans'`       | Display low-resolution CT scan counterpart                                 |
+| `'sr_scans'`       | Display super-resolution CT scancounterpart                                |
+| `'compare_scans'`  | Display low-resolution, super-resolution and ground truth CT scans jointly |
+
+---
+
+#### Model Checkpoint *[OPTIONAL]*
+
+`--checkpoint`
+
+| Option | Description                                                                | Default |
+|--------|----------------------------------------------------------------------------|:-------:|
+| `str`  | Path to model checkpoint file                                   |  None   |
+
+---
+
+#### Scale Factor *[OPTIONAL]*
+
+`--scale-factor`
+
+| Option | Description                                                                | Default |
+|--------|----------------------------------------------------------------------------|:-------:|
+| `int`  | Downsample factor                                   |  None   |
+
+---
+
+#### Target Tissue for Visualization *[OPTIONAL]*
+
+`--tissue`
+
+| Option     | Description                                             | Default |
+|------------|---------------------------------------------------------|:-------:|
+| `'full'`   | Sets Hounsfield Unit (HU) window range to (-1000, 3000) |    ✓     |
+| `'lung'`   | Sets Hounsfield Unit (HU) window range to (-900, -500)  |         |
+| `'fat'`    | Sets Hounsfield Unit (HU) window range to (-200, -50)   |         |
+| `'muscle'` | Sets Hounsfield Unit (HU) window range to (-50, 50)     |         |
+| `'bone'`   | Sets Hounsfield Unit (HU) window range to (50, 1000)    |         |
+
+---
+
+#### View Plane *[OPTIONAL]*
+
+`--plane`
+
+| Option          | Description | Default |
+|-----------------| --- |:-------:|
+| `'axial'` | Your description here |    ✓     |
+| `'sagittal'` | Your description here |         |
+| `'coronal'` | Your description here |         |
+
+---
+
+#### Visualization Spacial Dimension *[OPTIONAL]*
+
+`--dim`
+
+| Option          | Description | Default |
+|-----------------| --- |:-------:|
+| `'2D'` | Your description here |    ✓     |
+| `'3D'` | Your description here |         |
+
+---
+
+#### Volume Index *[OPTIONAL]*
+
+`--volume`
+
+| Option | Description                                                                  | Default |
+|--------|------------------------------------------------------------------------------|:-------:|
+| `int`  | Non-negative integer (n > 0) referencing volume. (-1 to display all volumes) |   -1    |
+
+---
+
+#### Slice Index *[OPTIONAL]*
+
+`--slice`
+
+| Option | Description | Default |
+|--------| --- |:-------:|
+| `int`  | ... |   -1    |
+---
+
+#### Batch Size *[OPTIONAL]*
+
+`--batch-size`
+
+| Option | Description | Default |
+|--------| --- |:-------:|
+| `int`  | ... |    4    |
+
+---
+
+#### Data Loading Subprocesses *[OPTIONAL]*
+
+`--num-workers`
+
+| Option | Description | Default |
+|--------| --- |:-------:|
+| `int`  | ... |    4    |
+
+<hr style="border:2px solid gray">
