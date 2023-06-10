@@ -1,9 +1,9 @@
 import shutil
 import os
-import argparse
 import ast
-import numpy as np
+import argparse
 import pydicom
+import numpy as np
 import nibabel as nib
 import monai.transforms as transforms
 from glob import glob
@@ -11,15 +11,6 @@ from glob import glob
 
 def main():
     try:
-        # Uniform shape transforms
-        uniform_transforms = transforms.Compose([
-            transforms.EnsureChannelFirst(channel_dim='no_channel'),
-            transforms.SpatialPad(spatial_size=args.uniform_shape),
-            transforms.CenterSpatialCrop(roi_size=args.uniform_shape),
-            transforms.SqueezeDim(),
-            transforms.ToNumpy()
-        ])
-
         if args.old_dir:
             # Remove metadata and license files
             license_file = os.path.join(args.old_dir, 'LIDC-IDRI', 'LICENSE')
@@ -41,7 +32,7 @@ def main():
                 shutil.move(src, dst)
                 shutil.rmtree(args.old_dir)
 
-        # Fetch all training data file paths
+        # Fetch all data file paths
         dataset_files = sorted(glob(os.path.join(args.new_dir, '*')))
 
         # Simplify dataset hierarchy by removing redundant intermediary folders
@@ -67,7 +58,7 @@ def main():
                 # Remove the child directory
                 shutil.rmtree(child_dir)
 
-        # Transform DICOM to NIfTI file format and uniformize shape
+        # Transform DICOM to NIfTI file format
         for volume_dir in dataset_files:
             # Pass non-directory files
             if not os.path.isdir(volume_dir):
@@ -95,13 +86,12 @@ def main():
 
                 # Get the data as a 3D numpy array
                 data = []
+
                 for dataset in datasets:
                     # Convert to HU scale
                     data.append(dataset.pixel_array * dataset.RescaleSlope + dataset.RescaleIntercept)
-                data = np.array(data).astype(np.int16)
 
-                # Apply the uniform shape transforms
-                data = uniform_transforms(data)
+                data = np.array(data).astype(np.int16)
 
                 # Create a NIfTI image from the DICOM datasets
                 nifti_img = nib.Nifti1Image(data, np.eye(4), None)
@@ -110,9 +100,58 @@ def main():
                 # Save the NIFTI image to a file
                 nib.save(nifti_img, volume_dir + ".nii.gz")
 
+        # Fetch all data file paths
+        dataset_files = sorted(glob(os.path.join(args.new_dir, '*')))
+
+        # Compute training data range to perform transforms accordingly
+        _min = float('+inf')
+        _max = float('-inf')
+
+        for file in dataset_files:
+            if file.endswith('.nii') or file.endswith('.nii.gz'):
+                # Load the NIfTI file
+                nifti_img = nib.load(file)
+                data = nifti_img.get_fdata()
+
+                # Compute the minimum and maximum values
+                _min = min(_min, data.min())
+                _max = max(_max, data.max())
+
+        # Uniform shape transforms
+        uniform_transforms = transforms.Compose([
+            transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max-_min)),
+            transforms.EnsureChannelFirst(channel_dim='no_channel'),
+            transforms.SpatialPad(spatial_size=args.uniform_shape),
+            transforms.CenterSpatialCrop(roi_size=args.uniform_shape),
+            transforms.NormalizeIntensity(subtrahend=-_min/(_max-_min), divisor=1/(_max-_min)),
+            transforms.SqueezeDim(),
+            transforms.ToNumpy()
+        ])
+
+        for file in dataset_files:
+            if file.endswith('.nii') or file.endswith('.nii.gz'):
+                # Load the NIfTI file
+                nifti_img = nib.load(file)
+                data = nifti_img.get_fdata()
+
+                # Apply the transformations
+                uniform_data = np.around(uniform_transforms(data)).astype(np.int16)
+
+                # Update header of the transformed image
+                new_header = nifti_img.header.copy()
+
+                # Update header to reflect the new image dimensions
+                new_header.set_data_shape(uniform_data.shape)
+
+                # Create a new NIfTI image
+                uniform_nifti_img = nib.Nifti1Image(uniform_data, nifti_img.affine, new_header)
+
+                # Save the transformed NIfTI file
+                nib.save(uniform_nifti_img, file)
+
         # Remove old directories
         for volume_dir in dataset_files:
-            if not volume_dir.endswith(".nii.gz") and os.path.exists(volume_dir):
+            if not (file.endswith('.nii') or volume_dir.endswith(".nii.gz")) and os.path.exists(volume_dir):
                 shutil.rmtree(volume_dir)
     except Exception as e:
         print("Check directory paths. If error remains download data again. An error occurred: {}".format(e))
