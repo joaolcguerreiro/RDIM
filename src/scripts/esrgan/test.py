@@ -9,9 +9,9 @@ from torchinfo import summary
 from tqdm import tqdm
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.esrgan import Generator, Discriminator
+from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics
-from src.utils.utils import plot_metric
+from src.utils.utils import draw_box_plot, save_batch
 from src.utils.logger import setup_logger
 
 
@@ -22,53 +22,44 @@ def main():
     # Set seed for reproducibility
     torch.manual_seed(20)
 
-    # Compute training data statistics
-    mean, std = SuperResolutionDataset.compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"], batch_size=config["TRAINING"]["BATCH_SIZE"])
+    # Load checkpoint
+    checkpoint = torch.load(checkpoint_path)
 
-    test_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TEST_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], mean=mean, std=std, augmentation=False)
-    test_dataloader = DataLoader(test_dataset, batch_size=config["TESTING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"])
+    # Fetch training data statistics
+    _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
+
+    test_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TEST_DIR_PATH"], scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=config["TESTING"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
     # Define model
     generator = Generator(
-        in_channels=config["MODEL"]["GENERATOR"]["IN_CHANNEL"],
-        out_channels=config["MODEL"]["GENERATOR"]["OUT_CHANNEL"],
-        num_features=config["MODEL"]["GENERATOR"]["NUM_FEATURES"],
-        num_growth_features=config["MODEL"]["GENERATOR"]["NUM_GROWTH_FEATURES"],
-        num_rrdb_blocks=config["MODEL"]["GENERATOR"]["NUM_RRDB_BLOCKS"],
-        num_rdb_blocks=config["MODEL"]["GENERATOR"]["NUM_RDB_BLOCKS"],
-        num_rdb_conv_blocks=config["MODEL"]["GENERATOR"]["NUM_RDB_CONV_BLOCKS"],
-        scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"],
-    ).to(device)
-
-    discriminator = Discriminator(
-        in_channels=config["MODEL"]["DISCRIMINATOR"]["IN_CHANNEL"],
-        num_features=config["MODEL"]["DISCRIMINATOR"]["NUM_FEATURES"],
-        num_conv_blocks=config["MODEL"]["DISCRIMINATOR"]["NUM_CONV_BLOCKS"],
-        conv_blocks_output_size=config["MODEL"]["DISCRIMINATOR"]["CONV_BLOCKS_OUTPUT_SIZE"],
+        in_channels=checkpoint['generator_in_channels'],
+        out_channels=checkpoint['generator_out_channels'],
+        num_features=checkpoint['generator_num_features'],
+        num_growth_features=checkpoint['generator_num_growth_features'],
+        num_rrdb_blocks=checkpoint['generator_num_rrdb_blocks'],
+        num_rdb_blocks=checkpoint['generator_num_rdb_blocks'],
+        num_rdb_conv_blocks=checkpoint['generator_num_rdb_conv_blocks'],
+        scale_factor=checkpoint['generator_scale_factor'],
     ).to(device)
 
     # Log Generator and Discriminator
     summary(generator, input_size=(1, *test_dataset.get_low_resolution_shape()), depth=1, device=device)
-    summary(discriminator, input_size=(1, *test_dataset.get_high_resolution_shape()), depth=1, device=device)
 
     # Define metrics
     metrics = SuperResolutionMetrics()
 
-    # Load checkpoint and initialize generator and discriminator weights
-    checkpoint = torch.load(checkpoint_path)
-
+    # Initialize generator and discriminator weights
     generator.load_state_dict(checkpoint['generator_state_dict'])
-    discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
 
     # Set the model to evaluation mode
     generator.eval()
-    discriminator.eval()
 
     # Define validation progress bar
     test_pbar = tqdm(test_dataloader, desc="Testing")
 
     with torch.no_grad():
-        for batch_index, (lr_volumes, hr_volumes) in enumerate(test_pbar):
+        for batch_index, (lr_volumes, hr_volumes, hr_metadata) in enumerate(test_pbar):
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
             hr_volumes = hr_volumes.to(device)
@@ -80,6 +71,9 @@ def main():
             scores = metrics.compute_scores(gen_volumes, hr_volumes)
             test_pbar.set_postfix(scores)
 
+            # Save volumes
+            save_batch(gen_volumes, hr_metadata, batch_index, os.path.join(experiment_path, 'results'), mean=mean, std=std)
+
         # Logging the validation progress bar
         logging.info(test_pbar)
 
@@ -88,17 +82,15 @@ def main():
 
     # Plot metrics
     for metric_name, metric_scores in metrics.get().items():
-        plot_metric(
-            data={
-                'model': ['ESRGAN'] * len(metric_scores),
-                'Scale factor': [config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]] * len(metric_scores),
-                f'{metric_name}': metric_scores,
-            },
+        draw_box_plot(
+            data=[
+                {'Model': ['ESRGAN'] * len(metric_scores), 'Scale factor': [checkpoint['generator_scale_factor']] * len(metric_scores), metric_name: metric_scores}
+            ],
             title='Quantitative Results',
             x_label='Scale factor',
             y_label=metric_name,
-            hue='model',
-            save_dir_path=os.path.join(experiment_path, 'figures', 'test', f'{args.epoch}_metrics')
+            hue='Model',
+            save_dir_path=os.path.join(experiment_path, 'figures', 'test', f'{metric_name}', f'{args.epoch}')
         )
 
 
