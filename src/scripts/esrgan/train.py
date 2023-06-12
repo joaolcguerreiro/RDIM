@@ -34,8 +34,8 @@ def main():
     # Define datasets and data loaders
     train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
     train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
-    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
-    val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
+    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False) if args.val else None
+    val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate) if args.val else None
 
     # Define model
     generator = Generator(
@@ -116,7 +116,7 @@ def main():
         discriminator_optimizer.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
         train_dataset.update_epoch(start_epoch)
-        val_dataset.update_epoch(start_epoch)
+        val_dataset.update_epoch(start_epoch) if args.val else None
         generator_train_losses = checkpoint['generator_train_losses']
         generator_val_losses = checkpoint['generator_val_losses']
         discriminator_train_losses = checkpoint['discriminator_train_losses']
