@@ -304,6 +304,7 @@ def main():
 
         # Increment epoch count
         train_dataset.increment_epoch()
+        val_dataset.increment_epoch() if args.val else None
 
         # Save checkpoint
         if (epoch + 1) % config["TRAINING"]["SAVE_INTERVAL"] == 0:
