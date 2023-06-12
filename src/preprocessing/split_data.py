@@ -5,22 +5,17 @@ from glob import glob
 from sklearn.model_selection import train_test_split
 
 
-def clean_directory(dir_path):
-    for file in sorted(glob(os.path.join(dir_path, '*'))):
-        os.remove(file)
-
-
 def main():
     try:
-        # Path to training, validation, and testing directories
-        training_dir = args.train_dir
-        validation_dir = args.val_dir
-        testing_dir = args.test_dir
+        # Remove training, validation, and testing directories
+        shutil.rmtree(args.train_dir)
+        shutil.rmtree(args.val_dir)
+        shutil.rmtree(args.test_dir)
 
-        # Clean training and testing directories
-        clean_directory(training_dir)
-        clean_directory(validation_dir)
-        clean_directory(testing_dir)
+        # Create training, validation, and testing directories
+        os.makedirs(args.train_dir, exist_ok=True)
+        os.makedirs(args.val_dir, exist_ok=True) if args.val else None
+        os.makedirs(args.test_dir, exist_ok=True)
 
         # Fetch all training data file paths
         dataset_files = sorted(glob(os.path.join(args.dir, '*')))
@@ -29,7 +24,7 @@ def main():
         train, val = train_test_split(dataset_files, test_size=(0.20 if args.val else 0.10), shuffle=True, random_state=20)
         val, test = train_test_split(val, test_size=0.5, shuffle=True, random_state=20) if args.val else ([], val)
 
-        for (split, directory) in [(train, training_dir), (val, validation_dir), (test, testing_dir)]:
+        for (split, directory) in [(train, args.train_dir), (val, args.val_dir), (test, args.test_dir)]:
             for file in split:
                 _, file_name = os.path.split(file)
                 shutil.copy(file, os.path.join(directory, file_name))
