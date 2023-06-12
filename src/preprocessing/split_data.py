@@ -8,9 +8,9 @@ from sklearn.model_selection import train_test_split
 def main():
     try:
         # Remove training, validation, and testing directories
-        shutil.rmtree(args.train_dir)
-        shutil.rmtree(args.val_dir)
-        shutil.rmtree(args.test_dir)
+        shutil.rmtree(args.train_dir) if os.path.exists(args.train_dir) else None
+        shutil.rmtree(args.val_dir) if os.path.exists(args.val_dir) else None
+        shutil.rmtree(args.test_dir) if os.path.exists(args.test_dir) else None
 
         # Create training, validation, and testing directories
         os.makedirs(args.train_dir, exist_ok=True)
