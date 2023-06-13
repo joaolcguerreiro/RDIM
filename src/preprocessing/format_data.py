@@ -123,6 +123,7 @@ def main():
             transforms.EnsureChannelFirst(channel_dim='no_channel'),
             transforms.SpatialPad(spatial_size=args.uniform_shape),
             transforms.CenterSpatialCrop(roi_size=args.uniform_shape),
+            transforms.Zoom(zoom=(1 / args.scale_factor), mode="trilinear", keep_size=False),
             transforms.NormalizeIntensity(subtrahend=-_min/(_max-_min), divisor=1/(_max-_min)),
             transforms.SqueezeDim(),
             transforms.ToNumpy()
@@ -139,12 +140,15 @@ def main():
 
                 # Update header of the transformed image
                 new_header = nifti_img.header.copy()
-
-                # Update header to reflect the new image dimensions
+                new_header.set_zooms(np.array(new_header.get_zooms()) * args.scale_factor)
                 new_header.set_data_shape(uniform_data.shape)
 
+                # Update the affine matrix to account for the new voxel dimensions
+                new_affine = nifti_img.affine.copy()
+                np.fill_diagonal(new_affine[:3, :3], np.diagonal(new_affine[:3, :3]) * args.scale_factor)
+
                 # Create a new NIfTI image
-                uniform_nifti_img = nib.Nifti1Image(uniform_data, nifti_img.affine, new_header)
+                uniform_nifti_img = nib.Nifti1Image(uniform_data, new_affine, new_header)
 
                 # Save the transformed NIfTI file
                 nib.save(uniform_nifti_img, file)
@@ -164,7 +168,8 @@ if __name__ == '__main__':
     parser.add_argument('--new-dir', default=os.path.join('..', '..', 'data', 'LIDC-IDRI'), help='Path to destiny directory', type=str)
     parser.add_argument('--min-slices', default=256, help='Minimum number of slices per volume', type=int)
     parser.add_argument('--min-slice-thick', default=1.25, help='Minimum slice thickness per volume', type=float)
-    parser.add_argument('--uniform-shape', default=(400, 400, 400), help='Uniform shape for volume standardization', type=ast.literal_eval)
+    parser.add_argument('--uniform-shape', default=(512, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
+    parser.add_argument('--scale-factor', default=2, help='Scale factor to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()
 
     main()
