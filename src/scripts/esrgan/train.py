@@ -79,7 +79,7 @@ def main():
     )
 
     # Define the loss function
-    perceptual_criterion = VGGLoss().to(device)
+    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)
     adversarial_criterion = nn.BCEWithLogitsLoss().to(device)
     content_criterion = nn.L1Loss().to(device)
 

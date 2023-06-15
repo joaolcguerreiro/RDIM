@@ -1,13 +1,13 @@
 import torch
 import numpy as np
 import monai.transforms as transforms
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, Sequence, Union
 from monai.config import DtypeLike
 from monai.data.meta_obj import get_track_meta
 from monai.utils.misc import ensure_tuple_size
 from monai.utils.enums import TransformBackends
 from monai.config.type_definitions import NdarrayOrTensor
-from monai.transforms.transform import RandomizableTransform
+from monai.transforms.transform import RandomizableTransform, Transform
 from monai.utils.type_conversion import convert_data_type, convert_to_dst_type, convert_to_tensor
 
 
@@ -249,3 +249,64 @@ class RandForegroundStreakNoise(RandomizableTransform):
         volume = torch.clamp(volume, self.min, self.max)
 
         return volume
+
+
+class NormalizeIntensity(Transform):
+    """
+    Normalize the input image by subtracting the mean and dividing by the standard deviation.
+    Supports both 2D and 3D images, grayscale and RGB channels.
+
+    Args:
+        mean: mean value(s) for normalization. If grayscale, provide a single float value. If RGB, provide a sequence of three floats.
+        std: standard deviation value(s) for normalization. Same format as `mean`.
+        channel_wise: if True, normalize each channel separately. Please ensure that the first dimension represents the channel of the image if True.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(
+        self,
+        mean: Union[Sequence[float], float],
+        std: Union[Sequence[float], float],
+        channel_wise: bool = False,
+    ) -> None:
+        self.mean = mean
+        self.std = std
+        self.channel_wise = channel_wise
+
+    def __call__(self, img: NdarrayOrTensor) -> NdarrayOrTensor:
+        img = convert_to_tensor(img, track_meta=get_track_meta())
+        img_t = convert_to_tensor(img, track_meta=False)
+        ret: NdarrayOrTensor
+        if self.channel_wise:
+            if isinstance(self.mean, float):
+                mean = [self.mean] * img_t.shape[0]
+            else:
+                mean = self.mean
+
+            if isinstance(self.std, float):
+                std = [self.std] * img_t.shape[0]
+            else:
+                std = self.std
+
+            img_t = self._channel_wise_normalize(img_t, mean, std)
+            ret = img_t
+        else:
+            mean = torch.tensor(self.mean)
+            std = torch.tensor(self.std)
+            img_t = self._normalize(img_t, mean, std)
+            ret = img_t
+
+        ret = convert_to_dst_type(ret, dst=img, dtype=img_t.dtype)[0]
+        return ret
+
+    def _normalize(self, img_t: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+        img_t = (img_t - mean) / std
+        return img_t
+
+    def _channel_wise_normalize(
+        self, img_t: torch.Tensor, mean: Sequence[float], std: Sequence[float]
+    ) -> torch.Tensor:
+        for i in range(img_t.shape[0]):
+            img_t[i] = (img_t[i] - mean[i]) / std[i]
+        return img_t
