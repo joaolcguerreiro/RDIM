@@ -30,7 +30,23 @@ Repository ....
 
 2) Install PyTorch manually (https://pytorch.org/get-started/locally/).
 
-3) To install torchview macOS users need to install graphviz using Homebrew (https://github.com/mert-kurttutan/torchview).
+3) Install layout engine of Graphviz properly (https://github.com/mert-kurttutan/torchview).
+   ```
+   # For macOS
+   brew install graphviz
+   ```
+   ```
+   # For CentOS
+   sudo yum install graphviz
+   ```
+   ```
+   # For Debian-based Linux (e.g. Ubuntu)
+   apt-get install graphviz
+   ```
+   ```
+   # For Windows
+   choco install graphviz
+   ```
 
 <hr style="border:2px solid gray">
 

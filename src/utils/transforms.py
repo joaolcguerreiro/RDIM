@@ -276,37 +276,41 @@ class NormalizeIntensity(Transform):
 
     def __call__(self, img: NdarrayOrTensor) -> NdarrayOrTensor:
         img = convert_to_tensor(img, track_meta=get_track_meta())
-        img_t = convert_to_tensor(img, track_meta=False)
+        normalized_img = convert_to_tensor(img, track_meta=False)
         ret: NdarrayOrTensor
+
         if self.channel_wise:
             if isinstance(self.mean, float):
-                mean = [self.mean] * img_t.shape[0]
+                mean = [self.mean] * normalized_img.shape[0]
             else:
                 mean = self.mean
 
             if isinstance(self.std, float):
-                std = [self.std] * img_t.shape[0]
+                std = [self.std] * normalized_img.shape[0]
             else:
                 std = self.std
 
-            img_t = self._channel_wise_normalize(img_t, mean, std)
-            ret = img_t
+            normalized_img = self._channel_wise_normalize(normalized_img, mean, std)
+            ret = normalized_img
         else:
             mean = torch.tensor(self.mean)
             std = torch.tensor(self.std)
-            img_t = self._normalize(img_t, mean, std)
-            ret = img_t
+            normalized_img = self._normalize(normalized_img, mean, std)
+            ret = normalized_img
 
-        ret = convert_to_dst_type(ret, dst=img, dtype=img_t.dtype)[0]
+        ret = convert_to_dst_type(ret, dst=img, dtype=normalized_img.dtype)[0]
+
         return ret
 
-    def _normalize(self, img_t: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
-        img_t = (img_t - mean) / std
-        return img_t
+    def _normalize(self, normalized_img: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+        normalized_img = (normalized_img - mean) / std
+
+        return normalized_img
 
     def _channel_wise_normalize(
-        self, img_t: torch.Tensor, mean: Sequence[float], std: Sequence[float]
+        self, normalized_img: torch.Tensor, mean: Sequence[float], std: Sequence[float]
     ) -> torch.Tensor:
-        for i in range(img_t.shape[0]):
-            img_t[i] = (img_t[i] - mean[i]) / std[i]
-        return img_t
+        for i in range(normalized_img.shape[0]):
+            normalized_img[i] = (normalized_img[i] - mean[i]) / std[i]
+
+        return normalized_img

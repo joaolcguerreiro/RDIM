@@ -45,20 +45,20 @@ TRAINING:
 
 OPTIMIZER:
   GENERATOR:
-    LEARNING_RATE: 1e-4
+    LEARNING_RATE: 1.0e-4
     WEIGHT_DECAY: 0
     BETA_1: 0.9
     BETA_2: 0.999
   DISCRIMINATOR:
-    LEARNING_RATE: 1e-4
+    LEARNING_RATE: 1.0e-4
     WEIGHT_DECAY: 0
     BETA_1: 0.9
     BETA_2: 0.999
 
 LOSS_WEIGHTS:
   GENERATOR:
-    CONTENT_LOSS: 1e-2
-    ADVERSARIAL_LOSS: 5e-3
+    CONTENT_LOSS: 1.0e-2
+    ADVERSARIAL_LOSS: 5.0e-3
 
 
 #=================================================================================================================#
