@@ -169,7 +169,7 @@ class RandForegroundStreakNoise(RandomizableTransform):
         if self.origins[0]:
             for _ in range(num_streaks[0]):
                 # Random intensity of the streak within the volume range
-                intensity = self.R.uniform(0, self.intensity * volume_range)
+                intensity = self.R.uniform(-volume_range, volume_range) * self.intensity
 
                 # Random slope for the line, create two for each corner and one for the top middle
                 slope_lb = self.R.uniform(-1, 1)
@@ -187,7 +187,7 @@ class RandForegroundStreakNoise(RandomizableTransform):
         if self.origins[1]:
             for _ in range(num_streaks[1]):
                 # Random intensity of the streak within the volume range
-                intensity = self.R.uniform(0, self.intensity * volume_range)
+                intensity = self.R.uniform(-volume_range, volume_range) * self.intensity
 
                 # Random slope for the line, create two for each corner and one for the top middle
                 slope_rb = self.R.uniform(-1, 1)
@@ -205,7 +205,7 @@ class RandForegroundStreakNoise(RandomizableTransform):
         if self.origins[2]:
             for _ in range(num_streaks[2]):
                 # Random intensity of the streak within the volume range
-                intensity = self.R.uniform(0, self.intensity * volume_range)
+                intensity = self.R.uniform(-volume_range, volume_range) * self.intensity
 
                 # Random slope for the line, create two for each corner and one for the top middle
                 slope_tm = self.R.uniform(-1, 1)
@@ -221,7 +221,7 @@ class RandForegroundStreakNoise(RandomizableTransform):
                     self.streak[..., np.clip(y_tm + i, 0, volume.shape[-2] - 1), np.clip(x_tm, 0, volume.shape[-1] - 1)] += intensity / (np.abs(i) * (3 / 2) + 5)
 
         # Convert streak to desired type
-        self.streak, *_ = convert_data_type(self.streak, dtype=self.dtype)
+        self.streak, *_ = convert_data_type(np.clip(self.streak, self.min, self.max), dtype=self.dtype)
 
     def __call__(self, volume: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
         # Calculate foreground and background masks
@@ -243,7 +243,7 @@ class RandForegroundStreakNoise(RandomizableTransform):
         streak, *_ = convert_data_type(self.streak, dtype=self.dtype)
 
         # Add the streak to the volume
-        volume = torch.tensor(volume + streak) * foreground_mask + volume * background_mask
+        volume = torch.tensor(self.R.poisson(volume - self.min + streak - streak.min()) + self.min + streak.min()) * foreground_mask + volume * background_mask
 
         # Clip values to the min and max of the original volume to keep the same range
         volume = torch.clamp(volume, self.min, self.max)
