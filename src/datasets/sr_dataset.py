@@ -48,9 +48,9 @@ class SuperResolutionDataset(Dataset):
         # Low-Resolution Transforms
         self.lr_transforms = transforms.Compose([
             RandGaussianSmooth(prob=0.5, sigma=(0.0, 1.0)),
-            transforms.Zoom(zoom=(1 / scale_factor), mode="trilinear", keep_size=False) if scale_factor else transforms.Identity(),
-            RandForegroundGaussianNoise(prob=0.5, mean=0.0, std=0.025),
-            RandForegroundStreakNoise(prob=0.5, intensity=0.1, line_thickness=(3, 3, 0), num_streaks=(400, 400, 400), origins=(True, True, False))
+            transforms.Zoom(zoom=(1/scale_factor), mode="trilinear", keep_size=False) if scale_factor else transforms.Identity(),
+            RandForegroundGaussianNoise(prob=0.5, mean=0.01, std=0.03),
+            RandForegroundStreakNoise(prob=0.5, intensity=1.4, line_thickness=1, num_origins=(40, 90), num_streaks=(60, 120), origin_radius_ratio=1.5, slope_variation=0.7, white_noise=False)
         ]) if downsample else transforms.Compose([])
 
         # High-Resolution Transforms

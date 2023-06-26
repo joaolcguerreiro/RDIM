@@ -125,26 +125,36 @@ class RandForegroundGaussianNoise(RandomizableTransform):
 
 class RandForegroundStreakNoise(RandomizableTransform):
     """
-    Add random streaks to volume from bottom corners and middle top.
-    Streaks are simulated as lines with random slope and intensity.
+    Add random streaks to a volume from a set of origins along a circular path, using Poisson noise.
 
     Args:
         prob (float): Probability to add streak noise.
         intensity (float): The intensity of the streaks.
-        line_thickness (Tuple[int, int, int]): The thickness of the lines that form the streaks, one per origin.
-        num_streaks (Tuple[int, int, int]): The maximum number of streaks to generate from each origin.
-        origins (Tuple[bool, bool, bool]): Flags to specify whether to generate streaks from each of the three origins: left-bottom corner, right-bottom corner, top-middle.
+        line_thickness (int): The thickness of the lines that form the streaks.
+        num_origins (tuple[int, int] | int): The number or range of origins along the circular path.
+        num_streaks (tuple[int, int] | int): The number or range of streaks to generate from each origin.
+        origin_radius_ratio (float, optional): The ratio to scale the circular path radius for the origins.
+                                                If it's greater than 1, the origins will be outside the volume.
+                                                If it's less than 1, the origins will be inside the volume.
+                                                Default is 1 (no scaling, origins lie on the volume boundary).
+        slope_variation (float): Control streak slope variation.
+        white_noise (bool): Define streaks color range.
+                                                If true streaks are brighter.
+                                                If false streaks both dark and bright (span grayscale range).
         dtype (DtypeLike): Output data type, if None, same as input image.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, prob: float = 0.1, intensity: float = 0.1, line_thickness: Tuple[int, int, int] = (3, 3, 3), num_streaks: Tuple[int, int, int] = (10, 10, 10), origins: Tuple[bool, bool, bool] = (True, True, True), dtype: DtypeLike = np.float32) -> None:
+    def __init__(self, prob: float = 0.1, intensity: float = 0.1, line_thickness: int = 3, num_origins: tuple[int, int] | int = 360, num_streaks: tuple[int, int] | int = 10, origin_radius_ratio: float = 1.5, slope_variation: float = 1.0,  white_noise: bool = True, dtype: DtypeLike = np.float32) -> None:
         RandomizableTransform.__init__(self, prob)
         self.intensity = intensity
         self.line_thickness = line_thickness
+        self.num_origins = num_origins
         self.num_streaks = num_streaks
-        self.origins = origins
+        self.origin_radius_ratio = origin_radius_ratio
+        self.slope_variation = slope_variation
+        self.white_noise = white_noise
         self.dtype = dtype
         self.streak: Optional[np.ndarray] = None
         self.min = None
@@ -163,62 +173,44 @@ class RandForegroundStreakNoise(RandomizableTransform):
         # Create an empty array for streaks
         self.streak = np.zeros_like(volume, dtype=self.dtype)
 
-        # Random number of streaks
-        num_streaks = (self.R.randint(0, self.num_streaks[0]), self.R.randint(0, self.num_streaks[1]), self.R.randint(0, self.num_streaks[2]))
+        # Center of the volume
+        center_y, center_x = volume.shape[-2] // 2, volume.shape[-1] // 2
 
-        if self.origins[0]:
-            for _ in range(num_streaks[0]):
+        rand_num_origins = self.R.randint(0, self.num_origins) if isinstance(self.num_origins, int) else self.R.randint(self.num_origins[0], self.num_origins[1])
+
+        for origin in range(rand_num_origins):
+            # angle for current origin
+            theta = 2 * np.pi * origin / rand_num_origins
+
+            rand_num_streaks = self.R.randint(0, self.num_streaks) if isinstance(self.num_streaks, int) else self.R.randint(self.num_streaks[0], self.num_streaks[1])
+
+            for _ in range(rand_num_streaks):
                 # Random intensity of the streak within the volume range
-                intensity = self.R.uniform(-volume_range, volume_range) * self.intensity
+                intensity = self.R.uniform(0 if self.white_noise else -volume_range, volume_range) * self.intensity / 50
 
-                # Random slope for the line, create two for each corner and one for the top middle
-                slope_lb = self.R.uniform(-1, 1)
+                # Generate streaks along the line y = slope * x
+                slope = self.R.uniform(-self.slope_variation, self.slope_variation)
+                x_line = np.arange(-center_x * self.origin_radius_ratio, volume.shape[-1] * self.origin_radius_ratio - center_x)
+                y_line = (slope * x_line).astype(int)
 
-                # Create streaks for left bottom
-                x_lb = np.arange(volume.shape[-1])
-                y_lb = (slope_lb * (x_lb - volume.shape[-2] * 2) + volume.shape[-2]).astype(np.int64)
+                # Reduce intensity from streaks that are far from the volume center
+                intensity = intensity / 2 if np.abs(slope) > 0.2 else intensity
+
+                # Rotate the line by the angle theta and shift the origin to the edge of the circle
+                radius = min(center_x, center_y) * self.origin_radius_ratio
+                origin_x = int(center_x + radius * np.cos(theta))
+                origin_y = int(center_y + radius * np.sin(theta))
+                x = origin_x + x_line * np.cos(theta) - y_line * np.sin(theta)
+                y = origin_y + x_line * np.sin(theta) + y_line * np.cos(theta)
 
                 # Adjust line thickness and intensity
-                line_thickness = self.R.randint(low=0, high=self.line_thickness[0] + 1)
+                line_thickness = self.R.randint(low=0, high=self.line_thickness + 1)
 
                 for i in range(-line_thickness + 1, line_thickness):
-                    self.streak[..., np.clip(y_lb + i, 0, volume.shape[-2] - 1), np.clip(volume.shape[-1] - 1 - x_lb, 0, volume.shape[-1] - 1)] += intensity / (np.abs(i) * (3 / 2) + 5)
-
-        if self.origins[1]:
-            for _ in range(num_streaks[1]):
-                # Random intensity of the streak within the volume range
-                intensity = self.R.uniform(-volume_range, volume_range) * self.intensity
-
-                # Random slope for the line, create two for each corner and one for the top middle
-                slope_rb = self.R.uniform(-1, 1)
-
-                # Create streaks right bottom
-                x_rb = np.arange(volume.shape[-1])
-                y_rb = (slope_rb * (x_rb - volume.shape[-2] * 2) + volume.shape[-2]).astype(np.int64)
-
-                # Adjust line thickness and intensity
-                line_thickness = self.R.randint(low=0, high=self.line_thickness[1] + 1)
-
-                for i in range(-line_thickness + 1, line_thickness):
-                    self.streak[..., np.clip(y_rb + i, 0, volume.shape[-2] - 1), np.clip(x_rb, 0, volume.shape[-1] - 1)] += intensity / (np.abs(i) * (3 / 2) + 5)
-
-        if self.origins[2]:
-            for _ in range(num_streaks[2]):
-                # Random intensity of the streak within the volume range
-                intensity = self.R.uniform(-volume_range, volume_range) * self.intensity
-
-                # Random slope for the line, create two for each corner and one for the top middle
-                slope_tm = self.R.uniform(-1, 1)
-
-                # Create streaks for top middle
-                y_tm = np.arange(volume.shape[-2])
-                x_tm = (slope_tm * (y_tm + volume.shape[-2] // 4) + volume.shape[-1] // 2).astype(np.int64)
-
-                # Adjust line thickness and intensity
-                line_thickness = self.R.randint(low=0, high=self.line_thickness[2] + 1)
-
-                for i in range(-line_thickness + 1, line_thickness):
-                    self.streak[..., np.clip(y_tm + i, 0, volume.shape[-2] - 1), np.clip(x_tm, 0, volume.shape[-1] - 1)] += intensity / (np.abs(i) * (3 / 2) + 5)
+                    # Generate streaks with varying intensity and thickness
+                    x_coords = np.clip(x + i, 0, volume.shape[-1] - 1).astype(int)
+                    y_coords = np.clip(y + i, 0, volume.shape[-2] - 1).astype(int)
+                    self.streak[..., y_coords, x_coords] += intensity / (np.abs(i) * (3 / 2) + 1)
 
         # Convert streak to desired type
         self.streak, *_ = convert_data_type(np.clip(self.streak, self.min, self.max), dtype=self.dtype)
