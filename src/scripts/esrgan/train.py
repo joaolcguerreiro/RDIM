@@ -367,15 +367,18 @@ if __name__ == '__main__':
         config_path = os.path.join(args.resume, "config.yaml")
         checkpoint_path = max(glob(os.path.join(args.resume, "checkpoints", "*.pth")), key=os.path.getctime)
     else:
-        experiment_path = os.path.join('..', '..', '..', 'experiments', "esrgan", datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
         config_path = os.path.join('..', '..', '..', 'configuration', "esrgan", 'config.yaml')
-
-        # Create experiment folder
-        create_experiment_directory(experiment_path, config_path)
 
     # Load configuration file
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
+
+    # Build experiment directory
+    if not args.resume:
+        experiment_path = os.path.join('..', '..', '..', 'experiments', "esrgan", f'x{config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]}_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
+
+        # Create experiment folder
+        create_experiment_directory(experiment_path, config_path)
 
     # Set up logger
     setup_logger(os.path.join(experiment_path, "logs", "train", f'{datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}.log'))
