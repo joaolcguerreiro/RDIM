@@ -8,13 +8,15 @@ Repository ....
 
 ### Quick Inference
 
-1) Setup Environment
+- Using your own dataset
+  * Make sure your dataset is aligned with **[Dataset Structure]()** section.
 
-2) Download NLST Dataset
+- Using NLST Dataset
+  * Follow Download **[NLST Dataset]()** and **[Data Preparation]()** sections.
 
-3) Data Preparation
+1) Setup Environment...
 
-4) Run ...
+2) Run ...
    ```
     python src/scripts/srmediff/inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--num-workers=<num_workers>]
    ```
@@ -23,12 +25,18 @@ Repository ....
 
 # Setup Environment
 
-1) Install Python dependencies (Python 3 is required):
+1) Create environment:
+   ```
+   conda create -n srmediff python=3.10.11
+   ```
+   ```
+   conda activate srmediff
+   ```
+
+2) Install Python dependencies (Python 3.10 is recommended):
    ```
    pip install -r requirements.txt
    ```
-
-2) Install PyTorch manually (https://pytorch.org/get-started/locally/).
 
 3) Install layout engine of Graphviz properly (https://github.com/mert-kurttutan/torchview).
    ```
