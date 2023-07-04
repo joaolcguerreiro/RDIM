@@ -163,6 +163,12 @@ class Generator(nn.Module):
             )
         )
 
+        # Initialize weights
+        for module in self.modules():
+            if isinstance(module, nn.Conv3d):
+                nn.init.kaiming_normal_(module.weight.data)
+                module.weight.data *= 0.1
+
     def forward(self, x):
         x = skip_connection = self.input(x)
 
