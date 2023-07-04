@@ -63,13 +63,14 @@ def main():
     summary(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=1, device=device)
     draw_graph(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=3, expand_nested=True, filename='discriminator_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
 
-    # Define optimizers
+    # Define optimizers and schedulers
     generator_optimizer = optim.Adam(
         generator.parameters(),
         lr=config['OPTIMIZER']['GENERATOR']['LEARNING_RATE'],
         betas=(config['OPTIMIZER']['GENERATOR']['BETA_1'], config['OPTIMIZER']['GENERATOR']['BETA_2']),
         weight_decay=config['OPTIMIZER']['GENERATOR']['WEIGHT_DECAY']
     )
+    generator_scheduler = optim.lr_scheduler.StepLR(generator_optimizer, step_size=config['SCHEDULER']['GENERATOR']['STEP_SIZE'], gamma=config['SCHEDULER']['GENERATOR']['GAMMA'])
 
     discriminator_optimizer = optim.Adam(
         discriminator.parameters(),
@@ -77,6 +78,7 @@ def main():
         betas=(config['OPTIMIZER']['DISCRIMINATOR']['BETA_1'], config['OPTIMIZER']['DISCRIMINATOR']['BETA_2']),
         weight_decay=config['OPTIMIZER']['DISCRIMINATOR']['WEIGHT_DECAY']
     )
+    discriminator_scheduler = optim.lr_scheduler.StepLR(discriminator_optimizer, step_size=config['SCHEDULER']['DISCRIMINATOR']['STEP_SIZE'], gamma=config['SCHEDULER']['DISCRIMINATOR']['GAMMA'])
 
     # Define the loss function
     perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)
@@ -112,8 +114,10 @@ def main():
         # Initialize weights, optimizers and epoch count
         generator.load_state_dict(checkpoint['generator_state_dict'])
         generator_optimizer.load_state_dict(checkpoint['generator_optimizer_state_dict'])
+        generator_scheduler.load_state_dict(checkpoint['generator_scheduler_state_dict'])
         discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
         discriminator_optimizer.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
+        discriminator_scheduler.load_state_dict(checkpoint['discriminator_scheduler_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
         train_dataset.update_epoch(start_epoch)
         val_dataset.update_epoch(start_epoch) if args.val else None
@@ -178,6 +182,7 @@ def main():
             # Backward pass
             generator_total_loss.backward()
             generator_optimizer.step()
+            generator_scheduler.step()
 
             #=========================#
             #   Train Discriminator   #
@@ -200,6 +205,7 @@ def main():
             # Backward pass
             discriminator_total_loss.backward()
             discriminator_optimizer.step()
+            discriminator_scheduler.step()
 
             # Update the training loss
             generator_train_loss += generator_total_loss.item()
@@ -311,8 +317,10 @@ def main():
             torch.save({
                 'generator_state_dict': generator.state_dict(),
                 'generator_optimizer_state_dict': generator_optimizer.state_dict(),
+                'generator_scheduler_state_dict': generator_scheduler.state_dict(),
                 'discriminator_state_dict': discriminator.state_dict(),
                 'discriminator_optimizer_state_dict': discriminator_optimizer.state_dict(),
+                'discriminator_scheduler_state_dict': discriminator_scheduler.state_dict(),
                 'generator_in_channels': config["MODEL"]["GENERATOR"]["IN_CHANNEL"],
                 'generator_out_channels': config["MODEL"]["GENERATOR"]["OUT_CHANNEL"],
                 'generator_num_features': config["MODEL"]["GENERATOR"]["NUM_FEATURES"],

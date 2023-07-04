@@ -38,7 +38,7 @@ MODEL:
 #=================================================================================================================#
 
 TRAINING:
-  EPOCHS: 5000
+  EPOCHS: 500
   BATCH_SIZE: 8
   AUGMENTATION: True
   SAVE_INTERVAL: 50
@@ -54,6 +54,14 @@ OPTIMIZER:
     WEIGHT_DECAY: 0
     BETA_1: 0.9
     BETA_2: 0.999
+
+SCHEDULER:
+  GENERATOR:
+    STEP_SIZE: 2000
+    GAMMA: 0.5
+  DISCRIMINATOR:
+    STEP_SIZE: 2000
+    GAMMA: 0.5
 
 LOSS_WEIGHTS:
   GENERATOR:
