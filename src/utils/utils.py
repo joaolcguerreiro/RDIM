@@ -83,8 +83,13 @@ def adjust_volume_orientation(volume):
     return volume.swapaxes(0, -1).swapaxes(1, 2)
 
 
-def display_2d(imgs, n_rows=1, n_cols=1, fig_size=(3, 3)):
-    _, ax = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(fig_size[0] * n_cols, fig_size[1] * n_rows), squeeze=False)
+def draw_image_2d(imgs, n_rows=1, n_cols=1, fig_size=(3, 3), show=True, ax=None, theme='light'):
+    if theme == 'dark':
+        plt.style.use('dark_background')
+
+    # Create a new figure
+    if ax is None:
+        _, ax = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(fig_size[0] * n_cols, fig_size[1] * n_rows), squeeze=False)
 
     for index in range(n_rows * n_cols):
         ax[index // n_cols, index % n_cols].axis('off')
@@ -93,28 +98,28 @@ def display_2d(imgs, n_rows=1, n_cols=1, fig_size=(3, 3)):
         ax[index // n_cols, index % n_cols].imshow(img, cmap='gray')
         ax[index // n_cols, index % n_cols].axis('off')
 
-    plt.tight_layout()
-    plt.show()
+    plt.tight_layout() if show else None
+    plt.show() if show else None
 
 
-def display_3d(volumes, n_rows=1, n_cols=1, fig_size=(750, 750)):
+def draw_image_3d(volumes, n_rows=1, n_cols=1, fig_size=(750, 750), ax=None, theme='light'):
     pass
 
 
-def display_volumes(slice_index, volume_index, plane, volumes, n_rows, n_cols, dimension):
+def display_volumes(slice_index, volume_index, plane, volumes, n_rows, n_cols, dimension, theme='light'):
     if dimension == '2D':
         if int(slice_index) >= 0:
             print('Volume {}... Slice {}...'.format(f'{volume_index:05}', slice_index))
             imgs = [slice_volume(slice_index, plane, volume) for volume in volumes]
-            display_2d(imgs, n_rows, n_cols)
+            draw_image_2d(imgs, n_rows, n_cols, theme=theme)
         else:
             for slice_index in range(count_volume_slices(plane, volumes[0])):
                 print('Volume {}... Slice {}...'.format(f'{volume_index:05}', slice_index))
                 imgs = [slice_volume(slice_index, plane, volume) for volume in volumes]
-                display_2d(imgs, n_rows, n_cols)
+                draw_image_2d(imgs, n_rows, n_cols, theme=theme)
     elif dimension == '3D':
         print('Volume {}...'.format(f'{volume_index:05}'))
-        display_3d(volumes, n_rows, n_cols)
+        draw_image_3d(volumes, n_rows, n_cols, theme=theme)
     else:
         raise NotImplementedError('Invalid dimension')
 
@@ -204,7 +209,7 @@ def compute_scale_factor(lr_volume, gt_volume):
     return scale_factor
 
 
-def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axial', dimension='2D', slice_index=-1, volume_index=-1):
+def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axial', dimension='2D', slice_index=-1, volume_index=-1, theme='light'):
     lr_volumes = list() if lr_volumes is None else list(lr_volumes)
     sr_volumes = list() if sr_volumes is None else list(sr_volumes)
     gt_volumes = list() if gt_volumes is None else list(gt_volumes)
@@ -228,7 +233,7 @@ def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axia
     num_series = sum(1 for _dict in [lr_volumes, sr_volumes, gt_volumes] if _dict)
     num_samples = len(lr_volumes or sr_volumes or gt_volumes)
 
-    display_volumes(slice_index, volume_index, plane, lr_volumes + sr_volumes + gt_volumes, num_series, num_samples, dimension)
+    display_volumes(slice_index, volume_index, plane, lr_volumes + sr_volumes + gt_volumes, num_series, num_samples, dimension, theme)
 
 
 def save_batch(batch, batch_metadata, batch_index, save_dir_path, mean=None, std=None):
@@ -239,38 +244,121 @@ def save_batch(batch, batch_metadata, batch_index, save_dir_path, mean=None, std
         save_volume(volume, affine, header, str(volume_index * batch_index), save_dir_path)
 
 
-def draw_line_chart(data, title, x_label, y_label, save_dir_path):
+def save_sample(gen_volume, gt_volume, save_dir_path, mean=None, std=None, plane='axial', theme='light'):
+    # Reorient volume for visualization
+    gen_volume = adjust_volume_orientation(gen_volume)
+    gt_volume = adjust_volume_orientation(gt_volume)
+
+    # Denormalize volumes
+    gen_volume = gen_volume if (mean is None or std is None) else denormalize(gen_volume)
+    gt_volume = gt_volume if (mean is None or std is None) else denormalize(gt_volume)
+
+    # Define slice index
+    slice_index = count_volume_slices(plane=plane, volume=gt_volume) // 2
+
+    gen_slice = slice_volume(slice_index=slice_index, plane=plane, volume=gen_volume)
+    gt_slice = slice_volume(slice_index=slice_index, plane=plane, volume=gt_volume)
+
     # Create a new figure
-    plt.figure()
+    _ = plt.figure(figsize=(6, 6))
 
-    for _dict in data:
-        plt.plot(_dict[x_label], _dict[y_label], label=_dict['Label'])
+    if theme == 'dark':
+        plt.style.use('dark_background')
 
-    # Chart customization
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    plt.title(title)
-    plt.legend()
+    # Create a new grid
+    grid = plt.GridSpec(2, 2, wspace=0, height_ratios=[1, 0.9])
+    ax_img = np.array([[plt.subplot(grid[0]), plt.subplot(grid[1])]])
+    ax_hist = plt.subplot(grid[2:])
 
-    # Save chart
+    # Draw slices
+    draw_image_2d([gen_slice, gt_slice], n_rows=1, n_cols=2, show=False, ax=ax_img, theme=theme)
+
+    # Draw pixel distribution histogram
+    draw_histogram(
+        data=[
+            {'Pixel Intensity': gen_slice.flatten().tolist(), 'Data Type': ['Synthetic'] * gen_slice.numel()},
+            {'Pixel Intensity': gt_slice.flatten().tolist(), 'Data Type': ['Ground Truth'] * gt_slice.numel()},
+        ],
+        title='Pixel Distribution',
+        x_label='Pixel Intensity',
+        hue='Data Type',
+        element='step',
+        fill=False,
+        ax=ax_hist,
+        theme=theme
+    )
+
+    # Figure customization
+    plt.tight_layout()
+
+    # Save figure
     plt.savefig(save_dir_path)
 
 
-def draw_box_plot(data, title, x_label, y_label, save_dir_path, hue=None):
+def draw_line_chart(data, title, x_label, y_label, save_dir_path, ax=None, theme='light'):
+    if theme == 'dark':
+        plt.style.use('dark_background')
+
+    # Create a new figure
+    if ax is None:
+        _, ax = plt.subplots()
+
+    for _dict in data:
+        ax.plot(_dict[x_label], _dict[y_label], label=_dict['Label'])
+
+    # Chart customization
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(title)
+    ax.legend()
+
+    # Save chart
+    if save_dir_path:
+        plt.savefig(save_dir_path)
+
+
+def draw_histogram(data, title, x_label, hue=None, stat='count', element='bars', fill=True, save_dir_path=None, ax=None, theme='light'):
+    # Parse data
+    data = pd.DataFrame({
+        key: sum((_dict[key] for _dict in data), []) for key in [x_label, hue] if key is not None
+    })
+
+    if theme == 'dark':
+        plt.style.use('dark_background')
+
+    # Create a new figure
+    if ax is None:
+        _, ax = plt.subplots()
+
+    # Chart customization
+    sns.histplot(data=data, x=x_label, hue=hue, stat=stat, element=element, fill=fill, palette="Pastel1")
+    ax.set_title(title)
+
+    # Save chart
+    if save_dir_path:
+        plt.savefig(save_dir_path)
+
+
+def draw_box_plot(data, title, x_label, y_label, hue=None, save_dir_path=None, ax=None, theme='light'):
     # Parse data
     data = pd.DataFrame({
         key: sum((_dict[key] for _dict in data), []) for key in [x_label, y_label, hue] if key is not None
     })
 
+    if theme == 'dark':
+        plt.style.use('dark_background')
+
     # Create a new figure
-    plt.figure()
+    if ax is None:
+        _, ax = plt.subplots()
 
     # Chart customization
-    sns.boxplot(data=data, x=x_label, y=y_label, hue=hue, orient='h', palette="Pastel1")
-    plt.title(title)
+    sns.boxplot(data=data, x=x_label, y=y_label, hue=hue, palette="Pastel1")
+    ax.set_title(title)
 
     # Save chart
-    plt.savefig(save_dir_path)
+    if save_dir_path:
+        plt.savefig(save_dir_path)
 
 
 def create_experiment_directory(experiment_path, config_path):

@@ -17,7 +17,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
 from src.utils.losses import VGGLoss
-from src.utils.utils import create_experiment_directory, compute_data_statistics, draw_line_chart
+from src.utils.utils import create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample
 from src.utils.logger import setup_logger
 
 
@@ -339,6 +339,13 @@ def main():
                 'training_data_mean': mean,
                 'training_data_std': std
             }, os.path.join(experiment_path, 'checkpoints', f'{epoch + 1}.pth'))
+
+            save_sample(
+                gen_volume=gen_volumes[-1],
+                gt_volume=hr_volumes[-1],
+                mean=mean, std=std,
+                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}')
+            ) if args.val else None
 
             draw_line_chart(
                 data=[
