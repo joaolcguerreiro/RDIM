@@ -340,13 +340,16 @@ def main():
                 'training_data_std': std
             }, os.path.join(experiment_path, 'checkpoints', f'{epoch + 1}.pth'))
 
+            # Plot sample figure
             save_sample(
                 gen_volume=gen_volumes[-1],
                 gt_volume=hr_volumes[-1],
                 mean=mean, std=std,
-                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}')
+                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}'),
+                fig_size=(6, 6.5)
             ) if args.val else None
 
+            # Plot generator loss
             draw_line_chart(
                 data=[
                     {'Epoch': generator_train_losses.keys(), 'Loss': generator_train_losses.values(), 'Label': 'Train Loss'},
@@ -358,6 +361,7 @@ def main():
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'generator_loss')
             )
 
+            # Plot discriminator loss
             draw_line_chart(
                 data=[
                     {'Epoch': discriminator_train_losses.keys(), 'Loss': discriminator_train_losses.values(), 'Label': 'Train Loss'},

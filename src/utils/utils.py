@@ -249,6 +249,18 @@ def save_batch(batch, batch_metadata, batch_index, save_dir_path, mean=None, std
         save_volume(volume, affine, header, str(volume_index * batch_index), save_dir_path)
 
 
+def flatten_batch(batch, mean=None, std=None):
+    batch_pixels = []
+
+    for volume in batch:
+        # Denormalize volume
+        volume = volume if (mean is None or std is None) else denormalize(volume, mean=mean, std=std)
+
+        batch_pixels.extend(volume.flatten().tolist())
+
+    return batch_pixels
+
+
 def save_sample(gen_volume, gt_volume, save_dir_path, mean=None, std=None, plane='axial', fig_size=(6, 6), theme='light'):
     # Reorient volume for visualization
     gen_volume = adjust_volume_orientation(gen_volume)

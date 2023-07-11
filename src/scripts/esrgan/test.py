@@ -11,7 +11,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics
-from src.utils.utils import draw_box_plot, save_batch
+from src.utils.utils import save_batch, flatten_batch, draw_box_plot, draw_histogram
 from src.utils.logger import setup_logger
 
 
@@ -54,6 +54,8 @@ def main():
 
     # Set the model to evaluation mode
     generator.eval()
+    hr_pixel_values = []
+    gen_pixel_values = []
 
     # Define validation progress bar
     test_pbar = tqdm(test_dataloader, desc="Testing")
@@ -74,13 +76,18 @@ def main():
             # Save volumes
             save_batch(gen_volumes, hr_metadata, batch_index, os.path.join(experiment_path, 'results'), mean=mean, std=std)
 
+            # Track last batch pixel intensities
+            if batch_index + 1 == len(test_pbar):
+                hr_pixel_values = flatten_batch(hr_volumes, mean=mean, std=std)
+                gen_pixel_values = flatten_batch(gen_volumes, mean=mean, std=std)
+
         # Logging the validation progress bar
         logging.info(test_pbar)
 
     # Log metrics
     metrics.summary()
 
-    # Plot metrics
+    # Plot metric scores
     for metric_name, metric_scores in metrics.get().items():
         draw_box_plot(
             data=[
@@ -92,6 +99,20 @@ def main():
             hue='Model',
             save_dir_path=os.path.join(experiment_path, 'figures', 'test', f'{metric_name}', f'{args.epoch}')
         )
+
+    # Plot sample pixel distribution
+    draw_histogram(
+        data=[
+            {'Pixel Intensity': hr_pixel_values, 'Data Type': ['Synthetic'] * len(hr_pixel_values)},
+            {'Pixel Intensity': gen_pixel_values, 'Data Type': ['Ground Truth'] * len(gen_pixel_values)},
+        ],
+        title='Sample Pixel Distribution',
+        x_label='Pixel Intensity',
+        hue='Data Type',
+        element='step',
+        fill=False,
+        save_dir_path=os.path.join(experiment_path, 'figures', 'test', 'pixel_distribution', f'{args.epoch}')
+    )
 
 
 if __name__ == '__main__':
