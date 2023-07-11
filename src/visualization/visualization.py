@@ -59,7 +59,7 @@ def main():
         dataset = SuperResolutionDataset(data_dir=args.data_dir, scale_factor=args.scale_factor, _min=tissues[args.tissue][0], _max=tissues[args.tissue][1], augmentation=True, downsample=(args.mode != 'gt_scans'))
     else:
         # Load checkpoint
-        checkpoint = torch.load(args.checkpoint_path)
+        checkpoint = torch.load(args.checkpoint)
 
         # Fetch training data statistics
         mean, std = checkpoint['training_data_mean'], checkpoint['training_data_std']
@@ -88,52 +88,55 @@ def main():
     # Define Dataloader
     dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
+    # Generate list of consecutive indexes for a given batch
+    volume_indexes = lambda _batch_index, batch_size: [index for index in range(_batch_index * batch_size, (_batch_index + 1) * batch_size)]
+
     with torch.no_grad():
         if args.mode == 'gt_scans':
             if int(args.volume) >= 0:
-                display_batch(gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, slice_index=args.slice, volume_index=args.volume)
+                display_batch(gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
 
             else:
                 for batch_index, (_, hr_volumes, _) in enumerate(dataloader):
-                    display_batch(gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, slice_index=args.slice, volume_index=args.volume)
+                    display_batch(gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
 
         elif args.mode == 'lr_scans':
             if int(args.volume) >= 0:
-                display_batch(gt_volumes=[dataset[args.volume][0]], plane=args.plane, dimension=args.dim, slice_index=args.slice, volume_index=args.volume)
+                display_batch(lr_volumes=[dataset[args.volume][0]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
 
             else:
                 for batch_index, (lr_volumes, _, _) in enumerate(dataloader):
-                    display_batch(lr_volumes=lr_volumes, plane=args.plane, dimension=args.dim, slice_index=args.slice, volume_index=args.volume)
+                    display_batch(lr_volumes=lr_volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
 
         elif args.mode == 'sr_scans':
             if int(args.volume) >= 0:
-                display_batch(sr_volumes=[generator(dataset[args.volume][0].unsqueeze(0))], plane=args.plane, dimension=args.dim, slice_index=args.slice, volume_index=args.volume)
+                display_batch(sr_volumes=[generator(dataset[args.volume][0].unsqueeze(0))], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
 
             else:
                 for batch_index, (lr_volumes, _, _) in enumerate(dataloader):
                     # Move inputs to the designated device
                     lr_volumes = lr_volumes.to(device)
 
-                    display_batch(sr_volumes=generator(lr_volumes), plane=args.plane, dimension=args.dim, slice_index=args.slice, volume_index=args.volume)
+                    display_batch(sr_volumes=generator(lr_volumes), plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
 
         elif args.mode == 'gt_lr_scans':
             if int(args.volume) >= 0:
-                display_batch(lr_volumes=[dataset[args.volume][0]], gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, slice_index=args.slice, volume_index=args.volume)
+                display_batch(lr_volumes=[dataset[args.volume][0]], gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
 
             else:
                 for batch_index, (lr_volumes, hr_volumes, _) in enumerate(dataloader):
-                    display_batch(lr_volumes=lr_volumes, gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, slice_index=args.slice, volume_index=args.volume)
+                    display_batch(lr_volumes=lr_volumes, gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
 
         elif args.mode == 'compare_scans':
             if int(args.volume) >= 0:
-                display_batch(lr_volumes=[dataset[args.volume][0]], sr_volumes=[generator(dataset[args.volume][0].unsqueeze(0))], gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, slice_index=args.slice, volume_index=args.volume)
+                display_batch(lr_volumes=[dataset[args.volume][0]], sr_volumes=[generator(dataset[args.volume][0].unsqueeze(0))], gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
 
             else:
                 for batch_index, (lr_volumes, hr_volumes, _) in enumerate(dataloader):
                     # Move inputs to the designated device
                     lr_volumes = lr_volumes.to(device)
 
-                    display_batch(lr_volumes=lr_volumes, sr_volumes=generator(lr_volumes), gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, slice_index=args.slice, volume_index=args.volume)
+                    display_batch(lr_volumes=lr_volumes, sr_volumes=generator(lr_volumes), gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
 
 
 if __name__ == '__main__':
@@ -149,6 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('--slice', default=-1, help='Slice index (-1 for all)', type=int)
     parser.add_argument('--batch-size', default=4, help='Number of samples to visualize'.format(dimensions), type=int)
     parser.add_argument('--num-workers', default=4, help='Number of subprocesses used for data loading', type=int)
+    parser.add_argument('--labels', default=True, help='Display image labels', type=(lambda arg: (str(arg).lower() == 'true')))
     args = parser.parse_args()
 
     main()
