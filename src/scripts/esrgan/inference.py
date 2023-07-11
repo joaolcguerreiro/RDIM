@@ -11,7 +11,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.utils import save_batch, compute_batch_super_resolution_metadata
-from src.utils.logger import setup_logger
+from src.utils.logger import setup_logger, print_divisor
 
 
 def main():
@@ -43,7 +43,8 @@ def main():
     ).to(device)
 
     # Log Generator
-    summary(generator, input_size=(1, *inference_dataset.get_low_resolution_shape()), depth=1, device=device)
+    summary(generator, input_size=(1, *inference_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    print_divisor(width=0, last=True)
 
     # Initialize generator weights
     generator.load_state_dict(checkpoint['generator_state_dict'])
@@ -55,6 +56,8 @@ def main():
     inference_pbar = tqdm(inference_dataloader, desc="Inferring")
 
     with torch.no_grad():
+        print_divisor()
+
         for batch_index, (lr_volumes, _, lr_metadata) in enumerate(inference_pbar):
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
@@ -67,6 +70,7 @@ def main():
 
         # Logging the validation progress bar
         logging.info(inference_pbar)
+        print_divisor(last=True)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,10 @@
+import os
+import sys
 import numpy as np
 from monai.metrics import MSEMetric, PSNRMetric, SSIMMetric
 from tabulate import tabulate
+sys.path.append(os.path.join('..', '..'))
+from src.utils.logger import print_divisor
 
 
 class Metrics:
@@ -19,13 +23,13 @@ class Metrics:
         return {metric['name']: metric['scores'] for metric in self.metrics}
 
     def summary(self):
-        print("=" * 115)
+        print_divisor()
 
         print(tabulate([
             [metric['name'], np.mean(metric['scores'])] for metric in self.metrics
         ], headers=['Metric', 'Score']))
 
-        print("=" * 115)
+        print_divisor(last=True)
 
 
 class SuperResolutionMetrics(Metrics):

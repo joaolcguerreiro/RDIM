@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import logging
 import nibabel as nib
@@ -10,6 +11,8 @@ import monai.transforms as transforms
 from glob import glob
 from tqdm import tqdm
 from matplotlib.patches import Patch
+sys.path.append(os.path.join('..', '..'))
+from src.utils.logger import print_divisor
 
 
 # Load CT Scan Volume
@@ -129,7 +132,7 @@ def display_volumes(volumes, plane, dimension, n_rows, n_cols, volume_indexes=No
 
 
 def compute_data_statistics(data_dir):
-    print("=" * 115)
+    print_divisor()
 
     _min = float('+inf')
     _max = float('-inf')
@@ -158,6 +161,7 @@ def compute_data_statistics(data_dir):
 
     # Logging the progress bar
     logging.info(pbar)
+    print_divisor(last=True)
 
     return _min, _max, mean, std
 

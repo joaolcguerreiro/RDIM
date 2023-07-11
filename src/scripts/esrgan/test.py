@@ -12,7 +12,7 @@ from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics
 from src.utils.utils import save_batch, flatten_batch, draw_box_plot, draw_histogram
-from src.utils.logger import setup_logger
+from src.utils.logger import setup_logger, print_divisor
 
 
 def main():
@@ -43,13 +43,14 @@ def main():
         scale_factor=checkpoint['generator_scale_factor'],
     ).to(device)
 
-    # Log Generator and Discriminator
-    summary(generator, input_size=(1, *test_dataset.get_low_resolution_shape()), depth=1, device=device)
+    # Log Generator
+    summary(generator, input_size=(1, *test_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    print_divisor(width=0, last=True)
 
     # Define metrics
     metrics = SuperResolutionMetrics()
 
-    # Initialize generator and discriminator weights
+    # Initialize generator weights
     generator.load_state_dict(checkpoint['generator_state_dict'])
 
     # Set the model to evaluation mode
@@ -61,6 +62,8 @@ def main():
     test_pbar = tqdm(test_dataloader, desc="Testing")
 
     with torch.no_grad():
+        print_divisor()
+
         for batch_index, (lr_volumes, hr_volumes, hr_metadata) in enumerate(test_pbar):
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
@@ -76,13 +79,16 @@ def main():
             # Save volumes
             save_batch(gen_volumes, hr_metadata, batch_index, os.path.join(experiment_path, 'results'), mean=mean, std=std)
 
-            # Track last batch pixel intensities
             if batch_index + 1 == len(test_pbar):
+                test_pbar.set_postfix()
+
+                # Track last batch pixel intensities
                 hr_pixel_values = flatten_batch(hr_volumes, mean=mean, std=std)
                 gen_pixel_values = flatten_batch(gen_volumes, mean=mean, std=std)
 
         # Logging the validation progress bar
         logging.info(test_pbar)
+        print_divisor(last=True)
 
     # Log metrics
     metrics.summary()

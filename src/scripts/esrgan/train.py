@@ -18,7 +18,7 @@ from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
 from src.utils.losses import VGGLoss
 from src.utils.utils import create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample
-from src.utils.logger import setup_logger
+from src.utils.logger import setup_logger, print_divisor
 
 
 def main():
@@ -57,11 +57,13 @@ def main():
     ).to(device)
 
     # Log Generator and Discriminator
-    summary(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=1, device=device)
+    summary(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     draw_graph(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=3, expand_nested=True, filename='generator_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
+    print_divisor(width=0, last=True)
 
-    summary(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=1, device=device)
+    summary(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     draw_graph(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=3, expand_nested=True, filename='discriminator_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
+    print_divisor(width=0, last=True)
 
     # Define optimizers and schedulers
     generator_optimizer = optim.Adam(
@@ -135,6 +137,8 @@ def main():
     end_epoch = config['TRAINING']['EPOCHS']
 
     # Training and validation loop
+    print_divisor()
+
     for epoch in range(start_epoch, end_epoch):
         # Set the model to train mode
         generator.train()
@@ -372,6 +376,8 @@ def main():
                 y_label='Loss',
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'discriminator_loss')
             )
+
+    print_divisor(last=True)
 
 
 if __name__ == '__main__':

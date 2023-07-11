@@ -38,7 +38,7 @@ def setup_logger(log_file_path):
     handler.setLevel(logging.INFO)
 
     # Create a formatter
-    formatter = logging.Formatter('%(asctime)s - %(message)s')
+    formatter = logging.Formatter('%(message)s')
     handler.setFormatter(formatter)
 
     # Add the handlers to the logger
@@ -46,3 +46,7 @@ def setup_logger(log_file_path):
 
     # Replace sys.stdout with our custom PrintLogger
     sys.stdout = PrintLogger(log_file_path, sys.stdout)
+
+
+def print_divisor(width=140, last=False):
+    print('=' * width + ('\n\n' if last else ''))
