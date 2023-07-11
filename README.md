@@ -115,7 +115,7 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 1) VALIDATION DATA IS OPTIONAL... BUT YOU CAN RUN SPLIT SCRIPT IF YOU WANT TO SPLIT YOUR TRAINING DATA (USE --DIR FLAG TO SPECIFY DIRECTORY PATH)...
 
-2) BE SURE THAT FILE FORMAT SHOULD BE NIFTI AND RANGE IN HU SCALE!!!!
+2) BE SURE THAT FILE FORMAT SHOULD BE NIFTI AND ??RANGE IN HU SCALE??!!!! ??IMAGES SHOULD NOT HAVE CHANNEL DIM??
 
 3) UPDATE CONFIG FILE WITH DATA PATHS (NOT NECESSARY IF YOU RUN SPLIT SCRIPT)
 
@@ -124,6 +124,8 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 # Data Structure
 
 dsdsasa
+
+IMPORTANT: BE SURE THAT FILE FORMAT SHOULD BE NIFTI AND ??RANGE IN HU SCALE??!!!! ??IMAGES SHOULD NOT HAVE CHANNEL DIM??
 
 <hr style="border:2px solid gray">
 
@@ -372,6 +374,7 @@ CT scan visualization file... scans are expected to be in HU scale...
 | Option | Description | Default |
 |--------| --- |:-------:|
 | `int`  | ... |   -1    |
+
 ---
 
 #### Batch Size *[OPTIONAL]*
@@ -391,5 +394,15 @@ CT scan visualization file... scans are expected to be in HU scale...
 | Option | Description | Default |
 |--------| --- |:-------:|
 | `int`  | ... |    4    |
+
+---
+
+#### Image Labels *[OPTIONAL]*
+
+`--labels`
+
+| Option | Description | Default |
+|--------| --- |:-------:|
+| `bool` | ... |  True   |
 
 <hr style="border:2px solid gray">
