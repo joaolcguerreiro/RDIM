@@ -3,7 +3,7 @@ import sys
 import torch
 import torch.nn as nn
 import monai.transforms as transforms
-from torchvision.models import vgg19
+from torchvision.models import vgg19, VGG19_Weights
 sys.path.append(os.path.join('..', '..'))
 from src.utils.transforms import NormalizeIntensity
 
@@ -15,8 +15,12 @@ class VGGLoss(nn.Module):
         # Define Criterion
         self.criterion = nn.L1Loss()
 
+        # TODO: 3D FEATURE EXTRACTOR
+        # https://github.com/shijianjian/EfficientNet-PyTorch-3D
+        # https://pypi.org/project/efficientnet-pytorch/
+
         # VGG Network as feature extractor
-        self.vgg = vgg19(pretrained=True).features[:35]
+        self.vgg = vgg19(weights=VGG19_Weights.IMAGENET1K_V1).features[:35]
 
         # Set the model to eval mode
         self.vgg.eval()
