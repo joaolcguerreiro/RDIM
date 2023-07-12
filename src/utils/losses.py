@@ -40,6 +40,11 @@ class VGGLoss(nn.Module):
         ])
 
     def forward(self, predictions, ground_truths):
+        # Move inputs to the designated device
+        device = next(self.parameters()).device
+        predictions = predictions.to(device)
+        ground_truths = ground_truths.to(device)
+
         # Preprocess data as expected by VGG
         transformed_prediction = torch.stack([self.vgg_transforms(prediction) for prediction in predictions], dim=0)
         transformed_ground_truth = torch.stack([self.vgg_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
