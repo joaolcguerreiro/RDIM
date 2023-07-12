@@ -87,7 +87,16 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 # Data Preparation
 
-**NLST Dataset**
+**LDCT and Projection Data Dataset**
+
+0) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+...
+
+**LIDC-IDRI Dataset** ???maybe apago isto qd meter o LDST a funcionar???
 
 0) Navigate to `preprocessing` directory:
    ```
@@ -96,15 +105,20 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 1) Run data cleaning script:
    ```
-   python clean_data.py
+   python clean_lidc_idri.py
    ```
 
 2) Run data formatting script:
    ```
-   python format_data.py
+   python format_lidc_idri.py
    ```
 
-3) Run data splitting script:
+3) Run data downsampling script:
+   ```
+   python downsample_data.py
+   ```
+
+4) Run data splitting script:
    ```
    python split_data.py
    ```
@@ -113,11 +127,13 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 **Using Alternative Dataset**
 
-1) VALIDATION DATA IS OPTIONAL... BUT YOU CAN RUN SPLIT SCRIPT IF YOU WANT TO SPLIT YOUR TRAINING DATA (USE --DIR FLAG TO SPECIFY DIRECTORY PATH)...
+1) VALIDATION DATA IS OPTIONAL... BUT YOU CAN RUN SPLIT SCRIPT [OPTIONAL] IF YOU WANT TO SPLIT YOUR TRAINING DATA (USE --DIR FLAG TO SPECIFY DIRECTORY PATH)...
 
 2) BE SURE THAT FILE FORMAT SHOULD BE NIFTI... IF DICOM THEN CONVERT BEFORE ??RANGE IN HU SCALE??!!!! ????CURRENTLY DATA FILES SHOULD NOT HAVE THE CHANNEL DIM... accepted data shape: (H, W, D), WHERE H, W, D can interchange...???
 
-3) UPDATE CONFIG FILE WITH DATA PATHS (NOT NECESSARY IF YOU RUN SPLIT SCRIPT)
+3) UPDATE CONFIG FILE WITH DATA PATHS
+
+4) YOU CAN SIMULATE THE DEGRADATIONS WITH DOWNSAMPLE_DATA SCRIPT... [OPTIONAL]
 
 <hr style="border:2px solid gray">
 
@@ -126,6 +142,8 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 dsdsasa
 
 IMPORTANT: BE SURE THAT FILE FORMAT SHOULD BE NIFTI AND ??RANGE IN HU SCALE??!!!! ????CURRENTLY DATA FILES SHOULD NOT HAVE THE CHANNEL DIM... accepted data shape: (H, W, D), WHERE H, W, D can interchange...???
+
+Supported files: NifTI...
 
 <hr style="border:2px solid gray">
 
