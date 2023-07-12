@@ -30,27 +30,21 @@ class VGGLoss(nn.Module):
 
         # VGG transforms
         self.vgg_transforms = transforms.Compose([
-            transforms.Resize(spatial_size=(256, 256, 256), mode="trilinear"),
-            transforms.CenterSpatialCrop(roi_size=(224, 224, 224)),
             NormalizeIntensity(mean=-mean / std, std=1 / std),
             NormalizeIntensity(mean=_min, std=(_max - _min)),
+            transforms.SpatialPad(spatial_size=(32, 32, 32)),
             transforms.RepeatChannel(repeats=3),
             transforms.ToTensor(),
             NormalizeIntensity(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], channel_wise=True),
         ])
 
     def forward(self, predictions, ground_truths):
-        # Move inputs to the designated device
-        device = next(self.parameters()).device
-        predictions = predictions.to(device)
-        ground_truths = ground_truths.to(device)
-
         # Preprocess data as expected by VGG
         transformed_prediction = torch.stack([self.vgg_transforms(prediction) for prediction in predictions], dim=0)
         transformed_ground_truth = torch.stack([self.vgg_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
 
         # Convert 3D data to 2D
-        transformed_prediction_2d = transformed_prediction.view(-1, 3, 224, 224)
-        transformed_ground_truth_2d = transformed_ground_truth.view(-1, 3, 224, 224)
+        transformed_prediction_2d = transformed_prediction.view(-1, 3, *(transformed_prediction.shape[-2:]))
+        transformed_ground_truth_2d = transformed_ground_truth.view(-1, 3, *(transformed_ground_truth.shape[-2:]))
 
         return self.criterion(self.vgg(transformed_prediction_2d), self.vgg(transformed_ground_truth_2d).detach())

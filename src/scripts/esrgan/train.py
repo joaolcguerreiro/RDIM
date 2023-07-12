@@ -83,7 +83,7 @@ def main():
     discriminator_scheduler = optim.lr_scheduler.StepLR(discriminator_optimizer, step_size=config['SCHEDULER']['DISCRIMINATOR']['STEP_SIZE'], gamma=config['SCHEDULER']['DISCRIMINATOR']['GAMMA'])
 
     # Define the loss function
-    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std).to("cpu")
+    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)
     adversarial_criterion = nn.BCEWithLogitsLoss().to(device)
     content_criterion = nn.L1Loss().to(device)
 
