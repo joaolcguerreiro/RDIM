@@ -11,13 +11,13 @@ class ConvolutionalBlock(nn.Module):
         self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
 
         # Batch Normalization Layer
-        self.bn = nn.BatchNorm3d(out_channels) if batch_norm else (lambda x: x)
+        self.bn = nn.BatchNorm3d(out_channels) if batch_norm else nn.Identity()
 
         # Activation Function
-        self.act = nn.LeakyReLU(negative_slope=0.2) if activation else (lambda x: x)
+        self.act = nn.LeakyReLU(negative_slope=0.2) if activation else nn.Identity()
 
         # Max Polling Layer
-        self.pool = nn.MaxPool3d(kernel_size=2) if max_pool else (lambda x: x)
+        self.pool = nn.MaxPool3d(kernel_size=2) if max_pool else nn.Identity()
 
     def forward(self, x):
         return self.pool(self.act(self.bn(self.conv(x))))

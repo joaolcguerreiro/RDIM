@@ -2,6 +2,8 @@ import os
 import sys
 import shutil
 import logging
+import torch
+import random
 import nibabel as nib
 import numpy as np
 import seaborn as sns
@@ -260,15 +262,15 @@ def flatten_batch(batch, mean=None, std=None):
         # Denormalize volume
         volume = volume if (mean is None or std is None) else denormalize(volume, mean=mean, std=std)
 
-        batch_pixels.extend(volume.flatten().tolist())
+        batch_pixels.extend(volume.to('cpu').flatten().tolist())
 
     return batch_pixels
 
 
 def save_sample(gen_volume, gt_volume, save_dir_path, mean=None, std=None, plane='axial', fig_size=(6, 6), theme='light'):
     # Reorient volume for visualization
-    gen_volume = adjust_volume_orientation(gen_volume)
-    gt_volume = adjust_volume_orientation(gt_volume)
+    gen_volume = adjust_volume_orientation(gen_volume.to('cpu'))
+    gt_volume = adjust_volume_orientation(gt_volume.to('cpu'))
 
     # Denormalize volumes
     gen_volume = gen_volume if (mean is None or std is None) else denormalize(gen_volume, mean=mean, std=std)
@@ -318,6 +320,7 @@ def save_sample(gen_volume, gt_volume, save_dir_path, mean=None, std=None, plane
     )
 
     # Save figure
+    ensure_dir_exists(save_dir_path)
     plt.savefig(save_dir_path)
 
 
@@ -340,6 +343,7 @@ def draw_line_chart(data, title, x_label, y_label, save_dir_path, ax=None, theme
 
     # Save chart
     if save_dir_path:
+        ensure_dir_exists(save_dir_path)
         plt.savefig(save_dir_path)
 
 
@@ -362,6 +366,7 @@ def draw_histogram(data, title, x_label, hue=None, stat='count', element='bars',
 
     # Save chart
     if save_dir_path:
+        ensure_dir_exists(save_dir_path)
         plt.savefig(save_dir_path)
 
 
@@ -384,6 +389,7 @@ def draw_box_plot(data, title, x_label, y_label, hue=None, save_dir_path=None, a
 
     # Save chart
     if save_dir_path:
+        ensure_dir_exists(save_dir_path)
         plt.savefig(save_dir_path)
 
 
@@ -403,3 +409,19 @@ def create_experiment_directory(experiment_path, config_path):
 
     # Clone global config file for reproducibility
     shutil.copy(config_path, experiment_path)
+
+
+def set_seed(seed=20):
+    torch.manual_seed(seed)
+    torch.set_deterministic_debug_mode("default")
+    torch.backends.cudnn.benchmark = False
+    random.seed(seed)
+    np.random.seed(seed)
+
+
+def ensure_dir_exists(file_path):
+    dir_path = os.path.dirname(file_path)
+
+    # Create the directory if it doesn't exist
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)

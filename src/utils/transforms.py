@@ -3,11 +3,12 @@ import numpy as np
 import monai.transforms as transforms
 from typing import Any, Optional, Tuple, Sequence, Union
 from monai.config import DtypeLike
+from monai.utils import ensure_tuple, ensure_tuple_rep
 from monai.data.meta_obj import get_track_meta
 from monai.utils.misc import ensure_tuple_size
 from monai.utils.enums import TransformBackends
 from monai.config.type_definitions import NdarrayOrTensor
-from monai.transforms.transform import RandomizableTransform, Transform
+from monai.transforms.transform import Transform, RandomizableTransform
 from monai.utils.type_conversion import convert_data_type, convert_to_dst_type, convert_to_tensor
 
 
@@ -46,7 +47,7 @@ class RandGaussianSmooth(RandomizableTransform):
         if not self._do_transform:
             return img
 
-        sigma = ensure_tuple_size(tup=(self.rand_sigma, self.rand_sigma, self.rand_sigma), dim=img.ndim - 1)
+        sigma = ensure_tuple_size(vals=(self.rand_sigma, self.rand_sigma, self.rand_sigma), dim=img.ndim - 1)
 
         return transforms.GaussianSmooth(sigma=sigma, approx=self.approx)(img)
 
@@ -306,3 +307,66 @@ class NormalizeIntensity(Transform):
             normalized_img[i] = (normalized_img[i] - mean[i]) / std[i]
 
         return normalized_img
+
+
+class RandSpatialCropPair(RandomizableTransform):
+    """
+    Randomly crop a pair of low-resolution (LR) and high-resolution (HR) volumes with the same spatial coordinates.
+
+    Args:
+        lr_roi_size: Low resolution region of interest size for the crop.
+        scale_factor: Scale factor between HR and LR volumes.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, lr_roi_size: Union[Sequence[int], int], scale_factor: int = 2) -> None:
+        RandomizableTransform.__init__(self, 1.0)
+        self.lr_roi_size = ensure_tuple(lr_roi_size)
+        self.scale_factor = scale_factor
+        self._start_pos = (0,) * len(self.lr_roi_size)
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        super().randomize(None)
+
+        if not self._do_transform:
+            return None
+
+        # Exclude channel dimension
+        spatial_dims = len(data.shape) - 1
+
+        # Ensure lr_roi_size matches with spatial dimensions
+        if len(self.lr_roi_size) < spatial_dims:
+            self.lr_roi_size = ensure_tuple_rep(self.lr_roi_size, spatial_dims)
+
+        start_pos = []
+        for i in range(spatial_dims):
+            if self.lr_roi_size[i] > 0:
+                max_val = data.shape[-spatial_dims + i] - self.lr_roi_size[i] + 1
+                start_pos.append(self.R.randint(max_val))
+            else:
+                # Start from the beginning for negative ROI sizes
+                start_pos.append(0)
+
+        self._start_pos = tuple(start_pos)
+
+    def __call__(self, lr_volume: torch.Tensor, hr_volume: torch.Tensor, randomize: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
+        if randomize:
+            self.randomize(data=lr_volume)
+
+        if not self._do_transform:
+            return lr_volume, hr_volume
+
+        # Crop LR
+        lr_slicer = [slice(None)] + [slice(start, start + size) if size > 0 else slice(None) for start, size in zip(self._start_pos, self.lr_roi_size)]
+        lr_volume_crop = lr_volume[lr_slicer]
+
+        # Scale start coordinates and size for HR
+        hr_start_pos = tuple(pos*self.scale_factor for pos in self._start_pos)
+        hr_roi_size = tuple(size*self.scale_factor if size > 0 else size for size in self.lr_roi_size)
+
+        # Crop HR
+        hr_slicer = [slice(None)] + [slice(start, start + size) if size > 0 else slice(None) for start, size in zip(hr_start_pos, hr_roi_size)]
+        hr_volume_crop = hr_volume[hr_slicer]
+
+        return lr_volume_crop, hr_volume_crop

@@ -214,14 +214,21 @@ In the following instructions, replace `<model>` by one of the options below:
 
 3) Run ...
    ```
-   # With Validation
+   # Default execution
    python train.py
+   ```
+
+   ```
+   # With patch-based training (Recommended)
+   python train.py --patch_size=<patch_size>
    ```
 
    ```
    # Without Validation
    python train.py --val=False
    ```
+
+Note: If `patch_size="[-1, -1, -1]"` then no cropping is employed (more computationally expensive)... Also, for `patch_size` equal or smaller than `"[8, 8, 8]"` the `batch_size` is required to be greater than `1`.
 
 ---
 

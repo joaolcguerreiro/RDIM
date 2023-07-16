@@ -4,20 +4,17 @@ import torch
 import torch.nn as nn
 import monai.transforms as transforms
 from torchvision.models import vgg19, VGG19_Weights
+from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.join('..', '..'))
 from src.utils.transforms import NormalizeIntensity
 
 
 class VGGLoss(nn.Module):
-    def __init__(self, _min, _max, mean, std):
+    def __init__(self, _min, _max, mean, std, patch_size=(-1, -1, -1)):
         super().__init__()
 
         # Define Criterion
         self.criterion = nn.L1Loss()
-
-        # TODO: 3D FEATURE EXTRACTOR
-        # https://github.com/shijianjian/EfficientNet-PyTorch-3D
-        # https://pypi.org/project/efficientnet-pytorch/
 
         # VGG Network as feature extractor
         self.vgg = vgg19(weights=VGG19_Weights.IMAGENET1K_V1).features[:35]
@@ -38,13 +35,20 @@ class VGGLoss(nn.Module):
             NormalizeIntensity(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], channel_wise=True),
         ])
 
+        # Define network inferer
+        self.inferer = SlidingWindowInferer(roi_size=patch_size[-2:], overlap=0.25, mode='gaussian', cval=_min)
+
     def forward(self, predictions, ground_truths):
         # Preprocess data as expected by VGG
-        transformed_prediction = torch.stack([self.vgg_transforms(prediction) for prediction in predictions], dim=0)
-        transformed_ground_truth = torch.stack([self.vgg_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
+        transformed_predictions = torch.stack([self.vgg_transforms(prediction) for prediction in predictions], dim=0)
+        transformed_ground_truths = torch.stack([self.vgg_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
 
         # Convert 3D data to 2D
-        transformed_prediction_2d = transformed_prediction.view(-1, 3, *(transformed_prediction.shape[-2:]))
-        transformed_ground_truth_2d = transformed_ground_truth.view(-1, 3, *(transformed_ground_truth.shape[-2:]))
+        transformed_predictions_2d = transformed_predictions.view(-1, 3, *(transformed_predictions.shape[-2:]))
+        transformed_ground_truths_2d = transformed_ground_truths.view(-1, 3, *(transformed_ground_truths.shape[-2:]))
 
-        return self.criterion(self.vgg(transformed_prediction_2d), self.vgg(transformed_ground_truth_2d).detach())
+        # Compute VGG features
+        vgg_features_predictions = self.inferer(inputs=transformed_predictions_2d, network=self.vgg)
+        vgg_features_ground_truths = self.inferer(inputs=transformed_ground_truths_2d, network=self.vgg).detach()
+
+        return self.criterion(vgg_features_predictions, vgg_features_ground_truths)

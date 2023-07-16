@@ -1,5 +1,6 @@
 import os
 import sys
+import ast
 import argparse
 import datetime
 import logging
@@ -13,31 +14,33 @@ from torchinfo import summary
 from torchview import draw_graph
 from tqdm import tqdm
 from glob import glob
+from monai.inferers.inferer import SlidingWindowInferer, PatchInferer
+from monai.inferers import SlidingWindowSplitter
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
 from src.utils.losses import VGGLoss
-from src.utils.utils import create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample
+from src.utils.utils import create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logger, print_divisor
 
 
 def main():
-    # Define device
-    device = torch.device("mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu"))
-
     # Set seed for reproducibility
-    torch.manual_seed(20)
+    set_seed(20)
+
+    # Define device
+    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
     # Compute training data statistics
     _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"])
 
     # Define datasets and data loaders
-    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
+    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], lr_patch_size=args.lr_patch_size, _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
     train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
     val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False) if args.val else None
     val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate) if args.val else None
 
-    # Define model
+    # Define models
     generator = Generator(
         in_channels=config["MODEL"]["GENERATOR"]["IN_CHANNEL"],
         out_channels=config["MODEL"]["GENERATOR"]["OUT_CHANNEL"],
@@ -65,6 +68,10 @@ def main():
     draw_graph(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=3, expand_nested=True, filename='discriminator_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
     print_divisor(width=0, last=True)
 
+    # Define patch-based inferers
+    generator_inferer = SlidingWindowInferer(roi_size=args.lr_patch_size, overlap=0.25, mode='gaussian', cval=_min, sw_device=device, device=device)
+    discriminator_inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], args.lr_patch_size)), overlap=0.25, pad_value=_min, device=device), match_spatial_shape=False, device=device)
+
     # Define optimizers and schedulers
     generator_optimizer = optim.Adam(
         generator.parameters(),
@@ -83,7 +90,7 @@ def main():
     discriminator_scheduler = optim.lr_scheduler.StepLR(discriminator_optimizer, step_size=config['SCHEDULER']['DISCRIMINATOR']['STEP_SIZE'], gamma=config['SCHEDULER']['DISCRIMINATOR']['GAMMA'])
 
     # Define the loss function
-    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)
+    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], args.lr_patch_size))).to(device)
     adversarial_criterion = nn.BCEWithLogitsLoss().to(device)
     content_criterion = nn.L1Loss().to(device)
 
@@ -258,10 +265,10 @@ def main():
                     #=========================#
 
                     # Forward pass
-                    gen_volumes = generator(lr_volumes)
+                    gen_volumes = generator_inferer(inputs=lr_volumes, network=generator)
 
-                    real_labels_pred = discriminator(hr_volumes)
-                    fake_labels_pred = discriminator(gen_volumes)
+                    real_labels_pred = discriminator_inferer(inputs=hr_volumes, network=discriminator)
+                    fake_labels_pred = discriminator_inferer(inputs=gen_volumes, network=discriminator)
 
                     # Compute perceptual loss
                     perceptual_loss = perceptual_criterion(gen_volumes, hr_volumes)
@@ -280,8 +287,8 @@ def main():
                     #=========================#
 
                     # Forward pass
-                    real_labels_pred = discriminator(hr_volumes)
-                    fake_labels_pred = discriminator(gen_volumes)
+                    real_labels_pred = discriminator_inferer(inputs=hr_volumes, network=discriminator)
+                    fake_labels_pred = discriminator_inferer(inputs=gen_volumes, network=discriminator)
 
                     # Compute adversarial loss (relativistic average GAN)
                     adversarial_loss_real = adversarial_criterion(real_labels_pred - fake_labels_pred.mean(0, keepdim=True), real_labels_true)
@@ -338,6 +345,7 @@ def main():
                 'discriminator_train_losses': discriminator_train_losses,
                 'discriminator_val_losses': discriminator_val_losses,
                 'epoch': epoch,
+                'training_lr_patch_size': args.lr_patch_size,
                 'training_data_min': _min,
                 'training_data_max': _max,
                 'training_data_mean': mean,
@@ -385,6 +393,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training Script')
     parser.add_argument('--val', default=True, help='Apply validation during training', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--resume', default=None, help="Path to experiment directory to be resumed", type=str)
+    parser.add_argument('--lr-patch-size', default=(-1, -1, -1), help="Low-resolution training patch size to reduce computation", type=ast.literal_eval)
     args = parser.parse_args()
 
     if args.resume:

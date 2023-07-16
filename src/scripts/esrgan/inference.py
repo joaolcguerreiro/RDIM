@@ -7,19 +7,20 @@ import datetime
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
+from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
-from src.utils.utils import save_batch, compute_batch_super_resolution_metadata
+from src.utils.utils import save_batch, compute_batch_super_resolution_metadata, set_seed
 from src.utils.logger import setup_logger, print_divisor
 
 
 def main():
-    # Define device
-    device = torch.device("mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu"))
-
     # Set seed for reproducibility
-    torch.manual_seed(20)
+    set_seed(20)
+
+    # Define device
+    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path)
@@ -46,6 +47,9 @@ def main():
     summary(generator, input_size=(1, *inference_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True)
 
+    # Define patch-based inferer
+    generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', cval=_min, sw_device=device, device=device)
+
     # Initialize generator weights
     generator.load_state_dict(checkpoint['generator_state_dict'])
 
@@ -63,7 +67,7 @@ def main():
             lr_volumes = lr_volumes.to(device)
 
             # Forward pass
-            gen_volumes = generator(lr_volumes)
+            gen_volumes = generator_inferer(inputs=lr_volumes, network=generator)
 
             # Save volumes
             save_batch(gen_volumes, compute_batch_super_resolution_metadata(lr_metadata, checkpoint['generator_scale_factor']), batch_index, os.path.join(args.save_dir, 'results'), mean=mean, std=std)
@@ -79,7 +83,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint', required=True, help='Path to model checkpoint', type=str)
     parser.add_argument('--lr-dir', required=True, help='Path to low-resolution data directory', type=str)
     parser.add_argument('--save-dir', required=True, help='Path to directory where results are saved', type=str)
-    parser.add_argument('--batch-size', default=4, help='Number of samples per batch', type=int)
+    parser.add_argument('--batch-size', default=2, help='Number of samples per batch', type=int)
     parser.add_argument('--num-workers', default=4, help='Number of subprocesses used for data loading', type=int)
     args = parser.parse_args()
 

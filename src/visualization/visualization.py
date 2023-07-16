@@ -3,10 +3,11 @@ import sys
 import argparse
 import torch
 from torch.utils.data import DataLoader
+from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.join('..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
-from src.utils.utils import display_batch
+from src.utils.utils import display_batch, set_seed
 
 
 # Available display modes
@@ -42,11 +43,11 @@ tissues = {
 
 
 def main():
-    # Define device
-    device = torch.device("mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu"))
-
     # Set seed for reproducibility
-    torch.manual_seed(20)
+    set_seed(20)
+
+    # Define device
+    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
     if not (args.checkpoint or args.mode in ('gt_scans', 'lr_scans', 'gt_lr_scans')):
         raise NotImplementedError(f'Provide model checkpoint file to visualize with mode \'{args.mode}\'.')
@@ -62,7 +63,7 @@ def main():
         checkpoint = torch.load(args.checkpoint)
 
         # Fetch training data statistics
-        mean, std = checkpoint['training_data_mean'], checkpoint['training_data_std']
+        _min, _, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
         # Define Dataset
         dataset = SuperResolutionDataset(data_dir=args.data_dir, scale_factor=checkpoint['generator_scale_factor'], _min=tissues[args.tissue][0], _max=tissues[args.tissue][1], mean=mean, std=std, augmentation=True)
@@ -78,6 +79,9 @@ def main():
             num_rdb_conv_blocks=checkpoint['generator_num_rdb_conv_blocks'],
             scale_factor=checkpoint['generator_scale_factor'],
         ).to(device)
+
+        # Define patch-based inferer
+        generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', cval=_min, sw_device=device, device=device)
 
         # Initialize generator weights
         generator.load_state_dict(checkpoint['generator_state_dict'])
@@ -110,14 +114,17 @@ def main():
 
         elif args.mode == 'sr_scans':
             if int(args.volume) >= 0:
-                display_batch(sr_volumes=[generator(dataset[args.volume][0].unsqueeze(0))], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
+                # Add batch dimension and move inputs to the designated device
+                lr_volume = dataset[args.volume][0].unsqueeze(0).to(device)
+
+                display_batch(sr_volumes=generator_inferer(inputs=lr_volume, network=generator), plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
 
             else:
                 for batch_index, (lr_volumes, _, _) in enumerate(dataloader):
                     # Move inputs to the designated device
                     lr_volumes = lr_volumes.to(device)
 
-                    display_batch(sr_volumes=generator(lr_volumes), plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
+                    display_batch(sr_volumes=generator_inferer(inputs=lr_volumes, network=generator), plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
 
         elif args.mode == 'gt_lr_scans':
             if int(args.volume) >= 0:
@@ -129,14 +136,17 @@ def main():
 
         elif args.mode == 'compare_scans':
             if int(args.volume) >= 0:
-                display_batch(lr_volumes=[dataset[args.volume][0]], sr_volumes=[generator(dataset[args.volume][0].unsqueeze(0))], gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
+                # Add batch dimension and move inputs to the designated device
+                lr_volume = dataset[args.volume][0].unsqueeze(0).to(device)
+
+                display_batch(lr_volumes=lr_volume, sr_volumes=generator_inferer(inputs=lr_volume, network=generator), gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
 
             else:
                 for batch_index, (lr_volumes, hr_volumes, _) in enumerate(dataloader):
                     # Move inputs to the designated device
                     lr_volumes = lr_volumes.to(device)
 
-                    display_batch(lr_volumes=lr_volumes, sr_volumes=generator(lr_volumes), gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
+                    display_batch(lr_volumes=lr_volumes, sr_volumes=generator_inferer(inputs=lr_volumes, network=generator), gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
 
 
 if __name__ == '__main__':

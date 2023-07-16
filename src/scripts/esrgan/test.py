@@ -7,20 +7,21 @@ import torch
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
+from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics
-from src.utils.utils import save_batch, flatten_batch, draw_box_plot, draw_histogram
+from src.utils.utils import save_batch, flatten_batch, draw_box_plot, draw_histogram, set_seed
 from src.utils.logger import setup_logger, print_divisor
 
 
 def main():
-    # Define device
-    device = torch.device("mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu"))
-
     # Set seed for reproducibility
-    torch.manual_seed(20)
+    set_seed(20)
+
+    # Define device
+    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path)
@@ -47,6 +48,9 @@ def main():
     summary(generator, input_size=(1, *test_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True)
 
+    # Define patch-based inferer
+    generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', cval=_min, sw_device=device, device=device)
+
     # Define metrics
     metrics = SuperResolutionMetrics()
 
@@ -70,7 +74,7 @@ def main():
             hr_volumes = hr_volumes.to(device)
 
             # Forward pass
-            gen_volumes = generator(lr_volumes)
+            gen_volumes = generator_inferer(inputs=lr_volumes, network=generator)
 
             # Compute metrics
             scores = metrics.compute_scores(gen_volumes, hr_volumes)
