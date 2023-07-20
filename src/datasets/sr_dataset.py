@@ -4,19 +4,24 @@ import monai.transforms as transforms
 import torch
 from torch.utils.data import Dataset
 sys.path.append(os.path.join('..', '..'))
-from src.utils.utils import get_volume_data, get_metadata
-from src.utils.transforms import RandGaussianSmooth, RandForegroundGaussianNoise, RandForegroundStreakNoise, RandSpatialCropPair
+from src.utils.utils import get_volume_data, get_metadata, compute_super_resolution_metadata
+from src.utils.transforms import RandSpatialCrop
 
 
 class SuperResolutionDataset(Dataset):
-    def __init__(self, data_dir, scale_factor=None, lr_patch_size=(-1, -1, -1), _min=None, _max=None, mean=None, std=None, augmentation=False, downsample=True):
+    def __init__(self, lr_data_dir=None, hr_data_dir=None, scale_factor=1, lr_patch_size=(-1, -1, -1), _min=None, _max=None, mean=None, std=None, augmentation=False):
         super().__init__()
 
-        # Data Directory Path
-        self.data_dir = data_dir
+        # Data Directory Paths
+        self.lr_data_dir = lr_data_dir
+        self.hr_data_dir = hr_data_dir
 
         # Files
-        self.files = os.listdir(data_dir)
+        self.lr_files = os.listdir(lr_data_dir) if lr_data_dir else None
+        self.hr_files = os.listdir(hr_data_dir) if hr_data_dir else None
+
+        # Resolution ratio between LR and HR
+        self.scale_factor = scale_factor
 
         # Track Epoch Count
         self.epoch = 0
@@ -25,7 +30,7 @@ class SuperResolutionDataset(Dataset):
         self.initial_transforms = transforms.Compose([
             transforms.EnsureChannelFirst(channel_dim='no_channel'),    # TODO MAKE MY OWN TRANSFORM? GUARANTEE CHANNEL DIM
             transforms.ThresholdIntensity(threshold=(_min-1), above=True, cval=_min) if _min is not None else transforms.Identity(),
-            transforms.ThresholdIntensity(threshold=(_max+1), above=False, cval=_min) if (_min is not None and _max is not None) else transforms.Identity(),
+            transforms.ThresholdIntensity(threshold=(_max+1), above=False, cval=_max) if _max is not None else transforms.Identity(),
         ])
 
         self.final_transforms = transforms.Compose([
@@ -46,50 +51,39 @@ class SuperResolutionDataset(Dataset):
         ]) if augmentation else transforms.Compose([])
 
         # Patch-based computation transform
-        self.patch_transform = RandSpatialCropPair(lr_roi_size=lr_patch_size, scale_factor=scale_factor)
-
-        # Low-Resolution Transforms # TODO REMOVE THIS TRANSFORMS
-        self.lr_transforms = transforms.Compose([
-            # TODO REMOVE DOWNSAMPLING TRANSFORMS
-            RandGaussianSmooth(prob=0.5, sigma=(0.0, 1.0)),
-            transforms.Zoom(zoom=(1/scale_factor), mode="trilinear", keep_size=False) if scale_factor else transforms.Identity(),
-            RandForegroundGaussianNoise(prob=0.5, mean=0.01, std=0.03),
-            RandForegroundStreakNoise(prob=0.5, intensity=1.1, line_thickness=1, num_origins=(40, 90), num_streaks=(60, 120), origin_radius_ratio=1.5, slope_variation=0.7, white_noise=False),
-        ]) if downsample else transforms.Compose([])
-
-        # High-Resolution Transforms # TODO REMOVE THIS TRANSFORMS
-        self.hr_transforms = transforms.Compose([
-        ])
+        self.patch_transform = RandSpatialCrop(lr_roi_size=lr_patch_size)
 
     def __len__(self):
-        return len(self.files)
+        return len(self.lr_files) if self.lr_data_dir else (len(self.hr_files) if self.hr_data_dir else 0)
 
     def __getitem__(self, index):
-        # Set Augmentation, Low-Resolution and Patch Transforms Seed
-        self.augmentation_transforms.set_random_state(seed=(index + self.epoch * self.__len__()))
-        self.lr_transforms.set_random_state(seed=(index + self.epoch * self.__len__()))
-        self.patch_transform.set_random_state(seed=(index + self.epoch * self.__len__()))
+        # Set Transforms Seed
+        seed = index + self.epoch * self.__len__()
 
-        # Define volume path
-        volume_path = os.path.join(self.data_dir, self.files[index])
+        # Define volumes path
+        lr_volume_path = os.path.join(self.lr_data_dir, self.lr_files[index]) if self.lr_data_dir else None
+        hr_volume_path = os.path.join(self.hr_data_dir, self.hr_files[index]) if self.hr_data_dir else None
 
-        # Load Volume and Metadata
-        volume = self.initial_transforms(get_volume_data(volume_path))
-        volume_metadata = get_metadata(volume_path)
+        # Load Volumes and Metadata
+        lr_volume = self.initial_transforms(get_volume_data(lr_volume_path)) if self.lr_data_dir else None
+        hr_volume = self.initial_transforms(get_volume_data(hr_volume_path)) if self.hr_data_dir else None
+
+        # Compute Super-Resolution Metadata
+        sr_metadata = compute_super_resolution_metadata(lr_metadata=get_metadata(lr_volume_path), scale_factor=self.scale_factor) if self.lr_data_dir else (get_metadata(hr_volume_path) if self.hr_data_dir else None)
 
         # Employ Data Augmentation
-        volume = self.augmentation_transforms(volume)
-
-        # Transform Low-Resolution Volume
-        lr_volume = self.lr_transforms(volume)
-
-        # High-Resolution Volume
-        hr_volume = self.hr_transforms(volume)
+        lr_volume = self.apply_random_transform(transform=self.augmentation_transforms, volume=lr_volume, seed=seed) if self.lr_data_dir else None
+        hr_volume = self.apply_random_transform(transform=self.augmentation_transforms, volume=hr_volume, seed=seed) if self.hr_data_dir else None
 
         # Employ Patch Crop
-        lr_volume, hr_volume = self.patch_transform(lr_volume=lr_volume, hr_volume=hr_volume)
+        lr_volume = self.apply_random_transform(transform=self.patch_transform, volume=lr_volume, seed=seed, scale_factor=1) if self.lr_data_dir else None
+        hr_volume = self.apply_random_transform(transform=self.patch_transform, volume=hr_volume, seed=seed, scale_factor=self.scale_factor) if self.hr_data_dir else None
 
-        return self.final_transforms(lr_volume), self.final_transforms(hr_volume), volume_metadata
+        # Apply Final Transforms
+        lr_volume = self.final_transforms(lr_volume) if self.lr_data_dir else None
+        hr_volume = self.final_transforms(hr_volume) if self.hr_data_dir else None
+
+        return lr_volume, hr_volume, sr_metadata
 
     def get_low_resolution_shape(self):
         lr_volume, _, _ = self[0]
@@ -108,16 +102,22 @@ class SuperResolutionDataset(Dataset):
         self.epoch = epoch
 
     @staticmethod
+    def apply_random_transform(transform, volume, seed, **kwargs):
+        transform.set_random_state(seed=seed)
+
+        return transform(volume, **kwargs)
+
+    @staticmethod
     def sr_dataset_collate(batch):
         # Unpack data which is a list of tuples
         lr_volumes, hr_volumes, volumes_metadata = zip(*batch)
 
-        # Stack the lr_volumes and hr_volumes
-        lr_volumes = torch.stack(lr_volumes, 0)
-        hr_volumes = torch.stack(hr_volumes, 0)
+        # Stack the lr_volumes and hr_volumes (expects either all None or all not None)
+        lr_volumes = None if all(lr_volume is None for lr_volume in lr_volumes) else torch.stack(lr_volumes, 0)
+        hr_volumes = None if all(hr_volume is None for hr_volume in hr_volumes) else torch.stack(hr_volumes, 0)
 
-        # Combine metadata into one dict
-        volumes_metadata = {key: [_dict[key] for _dict in volumes_metadata] for key in next(iter(volumes_metadata or []), {})}
+        # Combine metadata into one dict (expects either all None or all not None)
+        volumes_metadata = None if all(metadata is None for metadata in volumes_metadata) else {key: [_dict[key] for _dict in volumes_metadata] for key in next(iter(volumes_metadata or []), {})}
 
         return lr_volumes, hr_volumes, volumes_metadata
 

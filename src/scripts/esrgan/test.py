@@ -29,7 +29,7 @@ def main():
     # Fetch training data statistics
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
-    test_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TEST_DIR_PATH"], scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
+    test_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TESTING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TESTING"]["HR_DIR_PATH"], scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     test_dataloader = DataLoader(test_dataset, batch_size=config["TESTING"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
     # Define model
@@ -68,7 +68,7 @@ def main():
     with torch.no_grad():
         print_divisor()
 
-        for batch_index, (lr_volumes, hr_volumes, hr_metadata) in enumerate(test_pbar):
+        for batch_index, (lr_volumes, hr_volumes, sr_metadatas) in enumerate(test_pbar):
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
             hr_volumes = hr_volumes.to(device)
@@ -81,7 +81,7 @@ def main():
             test_pbar.set_postfix(scores)
 
             # Save volumes
-            save_batch(gen_volumes, hr_metadata, batch_index, os.path.join(experiment_path, 'results'), mean=mean, std=std)
+            save_batch(gen_volumes, sr_metadatas, batch_index, os.path.join(experiment_path, 'results'), mean=mean, std=std)
 
             if batch_index + 1 == len(test_pbar):
                 test_pbar.set_postfix()

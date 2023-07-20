@@ -11,7 +11,7 @@ from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
-from src.utils.utils import save_batch, compute_batch_super_resolution_metadata, set_seed
+from src.utils.utils import save_batch, set_seed
 from src.utils.logger import setup_logger, print_divisor
 
 
@@ -28,7 +28,7 @@ def main():
     # Fetch training data statistics
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
-    inference_dataset = SuperResolutionDataset(data_dir=args.lr_dir, _min=_min, _max=_max, mean=mean, std=std, augmentation=False, downsample=False)
+    inference_dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     inference_dataloader = DataLoader(inference_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
     # Define model
@@ -62,7 +62,7 @@ def main():
     with torch.no_grad():
         print_divisor()
 
-        for batch_index, (lr_volumes, _, lr_metadata) in enumerate(inference_pbar):
+        for batch_index, (lr_volumes, _, sr_metadatas) in enumerate(inference_pbar):
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
 
@@ -70,7 +70,7 @@ def main():
             gen_volumes = generator_inferer(inputs=lr_volumes, network=generator)
 
             # Save volumes
-            save_batch(gen_volumes, compute_batch_super_resolution_metadata(lr_metadata, checkpoint['generator_scale_factor']), batch_index, os.path.join(args.save_dir, 'results'), mean=mean, std=std)
+            save_batch(gen_volumes, sr_metadatas, batch_index, os.path.join(args.save_dir, 'results'), mean=mean, std=std)
 
         # Logging the validation progress bar
         logging.info(inference_pbar)

@@ -1,5 +1,6 @@
 import os
 import sys
+import ast
 import argparse
 import torch
 from torch.utils.data import DataLoader
@@ -12,11 +13,11 @@ from src.utils.utils import display_batch, set_seed
 
 # Available display modes
 modes = {
-    'gt_scans': 'Display ground-truth CT scan counterpart ',
-    'lr_scans': 'Display low-resolution CT scan counterpart',
-    'sr_scans': 'Display super-resolution CT scan counterpart',
-    'gt_lr_scans': 'Display low-resolution and ground truth CT scans jointly',
-    'compare_scans': 'Display low-resolution, super-resolution and ground truth CT scans jointly',
+    'gt_scans': 'Display ground-truth scan counterpart ',
+    'lr_scans': 'Display low-resolution scan counterpart',
+    'sr_scans': 'Display super-resolution scan counterpart',
+    'lr_gt_scans': 'Display low-resolution and ground truth scans jointly',
+    'compare_scans': 'Display low-resolution, super-resolution and ground truth scans jointly',
 }
 
 # Available anatomical planes
@@ -32,15 +33,6 @@ dimensions = [
     '3D'
 ]
 
-# Available Target Visualization Tissues
-tissues = {
-    'full': (-1000, 3000),
-    'lung': (-900, -500),
-    'fat': (-200, -50),
-    'muscle': (-50, 50),
-    'bone': (50, 1000)
-}
-
 
 def main():
     # Set seed for reproducibility
@@ -49,24 +41,27 @@ def main():
     # Define device
     device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
-    if not (args.checkpoint or args.mode in ('gt_scans', 'lr_scans', 'gt_lr_scans')):
+    if not (args.checkpoint or args.mode in ('gt_scans', 'lr_scans', 'lr_gt_scans')):
         raise NotImplementedError(f'Provide model checkpoint file to visualize with mode \'{args.mode}\'.')
 
-    if not (args.checkpoint or args.scale_factor) and (args.mode in ('lr_scans', 'gt_lr_scans')):
-        raise NotImplementedError(f'Provide model checkpoint file or scale factor to visualize with mode \'{args.mode}\'.')
+    if not args.lr_dir and args.mode in ('lr_scans', 'sr_scans', 'lr_gt_scans', 'compare_scans'):
+        raise NotImplementedError(f'Low-resolution data directory path is required to visualize with mode \'{args.mode}\'.')
+
+    if not args.hr_dir and args.mode in ('gt_scans', 'lr_gt_scans', 'compare_scans'):
+        raise NotImplementedError(f'High-resolution data directory path is required to visualize with mode \'{args.mode}\'.')
 
     if not args.checkpoint:
         # Define Dataset
-        dataset = SuperResolutionDataset(data_dir=args.data_dir, scale_factor=args.scale_factor, _min=tissues[args.tissue][0], _max=tissues[args.tissue][1], augmentation=True, downsample=(args.mode != 'gt_scans'))
+        dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, hr_data_dir=args.hr_dir, _min=args.pixel_range[0], _max=args.pixel_range[1], augmentation=args.augmentation)
     else:
         # Load checkpoint
         checkpoint = torch.load(args.checkpoint)
 
         # Fetch training data statistics
-        _min, _, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
+        _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
         # Define Dataset
-        dataset = SuperResolutionDataset(data_dir=args.data_dir, scale_factor=checkpoint['generator_scale_factor'], _min=tissues[args.tissue][0], _max=tissues[args.tissue][1], mean=mean, std=std, augmentation=True)
+        dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, hr_data_dir=args.hr_dir, _min=_min, _max=_max, mean=mean, std=std, augmentation=args.augmentation)
 
         # Define model
         generator = Generator(
@@ -126,7 +121,7 @@ def main():
 
                     display_batch(sr_volumes=generator_inferer(inputs=lr_volumes, network=generator), plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
 
-        elif args.mode == 'gt_lr_scans':
+        elif args.mode == 'lr_gt_scans':
             if int(args.volume) >= 0:
                 display_batch(lr_volumes=[dataset[args.volume][0]], gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
 
@@ -151,12 +146,13 @@ def main():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data Visualizer')
-    parser.add_argument('--data-dir', required=True, help='Path to data directory', type=str)
     parser.add_argument('--mode', default=None, help='Display mode {}'.format(modes), type=str)
+    parser.add_argument('--lr-dir', help='Path to low-resolution data directory', type=str)
+    parser.add_argument('--hr-dir', help='Path to high-resolution data directory', type=str)
     parser.add_argument('--checkpoint', default=None, help='Path to model checkpoint', type=str)
-    parser.add_argument('--scale-factor', default=None, help='Downsample factor', type=int)
-    parser.add_argument('--tissue', default='full', help='Sets Hounsfield Unit (HU) range to visualize tissue {}'.format(tissues.keys()), type=str)
-    parser.add_argument('--plane', default='axial', help='anatomical planes {}'.format(planes), type=str)
+    parser.add_argument('--augmentation', default=False, help='Apply augmentation techniques to the visualization data', type=(lambda arg: (str(arg).lower() == 'true')))
+    parser.add_argument('--pixel-range', default=(None, None), help='Window range of pixel values (min, max)', type=ast.literal_eval)
+    parser.add_argument('--plane', default='axial', help='Anatomical planes {}'.format(planes), type=str)
     parser.add_argument('--dim', default='2D', help='Visualization dimension {}'.format(dimensions), type=str)
     parser.add_argument('--volume', default=-1, help='Volume index (-1 for all)', type=int)
     parser.add_argument('--slice', default=-1, help='Slice index (-1 for all)', type=int)

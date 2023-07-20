@@ -35,9 +35,9 @@ def main():
     _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAIN_DIR_PATH"])
 
     # Define datasets and data loaders
-    train_dataset = SuperResolutionDataset(data_dir=config["DATA"]["TRAIN_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], lr_patch_size=args.lr_patch_size, _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
+    train_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], lr_patch_size=args.lr_patch_size, _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
     train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
-    val_dataset = SuperResolutionDataset(data_dir=config["DATA"]["VAL_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False) if args.val else None
+    val_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["VALIDATION"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["VALIDATION"]["HR_DIR_PATH"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False) if args.val else None
     val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate) if args.val else None
 
     # Define models

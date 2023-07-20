@@ -3,9 +3,15 @@
 #=================================================================================================================#
 
 DATA:
-  TRAIN_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training
-  VAL_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation
-  TEST_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing
+  TRAINING:
+    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training/LR
+    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training/HR
+  VALIDATION:
+    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation/LR
+    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation/HR
+  TESTING:
+    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing/LR
+    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing/HR
   NUM_WORKERS: 4
 
 

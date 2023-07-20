@@ -185,21 +185,6 @@ def compute_super_resolution_metadata(lr_metadata, scale_factor):
     }
 
 
-def compute_batch_super_resolution_metadata(lr_metadata, scale_factor):
-    batch_sr_metadata = {
-        'affine': [],
-        'header': []
-    }
-
-    for affine, header in zip(lr_metadata['affine'], lr_metadata['header']):
-        sr_metadata = compute_super_resolution_metadata({'affine': affine, 'header': header}, scale_factor)
-
-        batch_sr_metadata['affine'].append(sr_metadata['affine'])
-        batch_sr_metadata['header'].append(sr_metadata['header'])
-
-    return batch_sr_metadata
-
-
 def denormalize(volume, mean, std):
     return transforms.NormalizeIntensity(subtrahend=-mean/std, divisor=1/std)(volume)
 

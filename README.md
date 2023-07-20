@@ -11,15 +11,16 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 ### Quick Inference
 
-- Using your own dataset
-  * Make sure your dataset is aligned with **[Dataset Structure]()** section.
+1) ....
+   * Using your own dataset
+     * Make sure your dataset is aligned with **[Data Requirements]()** section.
 
-- Using NLST Dataset
-  * Follow Download **[NLST Dataset]()** and **[Data Preparation]()** sections.
+   * Using LDCT Dataset
+     * Follow **[Download LDCT Dataset]()** and **[Prepare LDCT Dataset]()** sections.
 
-1) Setup Environment...
+2) Follow **[Setup Environment]()** section.
 
-2) Run ...
+3) Run the following command:
    ```
     python src/scripts/srmediff/inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--num-workers=<num_workers>]
    ```
@@ -61,7 +62,19 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 <hr style="border:2px solid gray">
 
-# Download NLST Dataset
+# Data Requirements
+
+IMPORTANT: BE SURE THAT FILE FORMAT SHOULD BE NIFTI AND ??RANGE IN HU SCALE??!!!! ????CURRENTLY DATA FILES SHOULD NOT HAVE THE CHANNEL DIM... accepted data shape: (H, W, D), WHERE H, W, D can interchange...???
+
+every low-resolution image should have a corresponding high-resolution image. The pair of low-res and high-res images should have the same filename
+
+Supported files: NifTI...
+
+<hr style="border:2px solid gray">
+
+# Download LDCT Dataset
+
+Follow this steps in case you want to use the LDCT dataset.
 
 1) Download requires the [NBIA Data Retriever](https://wiki.cancerimagingarchive.net/display/NBIA/Downloading+TCIA+Images).
 
@@ -85,18 +98,29 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 <hr style="border:2px solid gray">
 
-# Data Preparation
-
-**LDCT and Projection Data Dataset**
+# Prepare LDCT Dataset
 
 0) Navigate to `preprocessing` directory:
    ```
    cd src/preprocessing
    ```
+   
+1) Run data cleaning script:
+   ```
+   python clean_ldct.py
+   ```
+   
+2) Run data formatting script:
+   ```
+   python format_ldct.py
+   ```
+   
+3) Run data splitting script:
+   ```
+   python split_data.py
+   ```
 
-...
-
-**LIDC-IDRI Dataset** ???maybe apago isto qd meter o LDST a funcionar???
+(DELETE FROM HERE WHEN LDCT IS WORKING!!!) **LIDC-IDRI Dataset**
 
 0) Navigate to `preprocessing` directory:
    ```
@@ -113,37 +137,57 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
    python format_lidc_idri.py
    ```
 
-3) Run data downsampling script:
-   ```
-   python downsample_data.py
-   ```
-
-4) Run data splitting script:
+3) Run data splitting script:
    ```
    python split_data.py
    ```
 
----
+4) Run data downsampling script:
+   ```
+   python downsample_data.py
+   ```
 
-**Using Alternative Dataset**
+<hr style="border:2px solid gray">
 
-1) VALIDATION DATA IS OPTIONAL... BUT YOU CAN RUN SPLIT SCRIPT [OPTIONAL] IF YOU WANT TO SPLIT YOUR TRAINING DATA (USE --DIR FLAG TO SPECIFY DIRECTORY PATH)...
+# Prepare Alternative Dataset
 
-2) BE SURE THAT FILE FORMAT SHOULD BE NIFTI... IF DICOM THEN CONVERT BEFORE ??RANGE IN HU SCALE??!!!! ????CURRENTLY DATA FILES SHOULD NOT HAVE THE CHANNEL DIM... accepted data shape: (H, W, D), WHERE H, W, D can interchange...???
+In case you want to use your own dataset:
+
+1) VALIDATION DATA IS OPTIONAL... BUT YOU CAN RUN SPLIT SCRIPT [OPTIONAL] IF YOU WANT TO SPLIT YOUR TRAINING DATA (USE --DIR FLAG TO SPECIFY DIRECTORY PATH)... validation and testing splits are not MANDATORY.
+
+2) BE SURE DATA FILE FORMAT IS NIFTI... IF DICOM THEN CONVERT BEFORE ????CURRENTLY DATA FILES SHOULD NOT HAVE THE CHANNEL DIM... accepted data shape: (H, W, D), WHERE H, W, D can interchange...???
 
 3) UPDATE CONFIG FILE WITH DATA PATHS
 
 4) YOU CAN SIMULATE THE DEGRADATIONS WITH DOWNSAMPLE_DATA SCRIPT... [OPTIONAL]
 
-<hr style="border:2px solid gray">
+---
 
-# Data Structure
+The following illustrates a valid directory structure:
 
-dsdsasa
+```
+├───data
+      ├───training
+      │      ├────LR
+      │      │      └──example-0001.nii.gz
+      │      │      └──example-0002.nii.gz
+      │      ...    └──...
+      │      │
+      │      └───HR
+      │      │      └──example-0001.nii.gz
+      │      │      └──example-0002.nii.gz
+      │      ...    └──...
+      │
+      ├───validation
+      │      ├───LR
+      │      └───HR
+      ├───testing
+      │      ├───LR
+      │      └───HR
+      └──
+```
 
-IMPORTANT: BE SURE THAT FILE FORMAT SHOULD BE NIFTI AND ??RANGE IN HU SCALE??!!!! ????CURRENTLY DATA FILES SHOULD NOT HAVE THE CHANNEL DIM... accepted data shape: (H, W, D), WHERE H, W, D can interchange...???
-
-Supported files: NifTI...
+Note: This aforementioned structure is not mandatory. Also, the validation and testing splits are not MANDATORY.
 
 <hr style="border:2px solid gray">
 
@@ -288,7 +332,7 @@ Note: If `patch_size="[-1, -1, -1]"` then no cropping is employed (more computat
 
 # Visualize Results
 
-CT scan visualization file... scans are expected to be in HU scale...
+Image visualization file...
 
 0) Navigate to `visualization` directory:
    ```
@@ -297,18 +341,8 @@ CT scan visualization file... scans are expected to be in HU scale...
 
 1) Run visualization script:
    ```
-   python visualization.py --data-dir=<data_dir> --mode=<mode> [--checkpoint=<checkpoint>] [--scale-factor=<scale_factor>] [--plane=<plane>] [--dim=<dimension>] [--volume=<volume_index>] [--slice=<slice_index>] [--batch-size=<batch_size>]
+   python visualization.py --mode=<mode> --lr-dir=<lr_dir> --hr-dir=<hr_dir> [--checkpoint=<checkpoint>] [--augmentation=<bool>] [--plane=<plane>] [--dim=<dimension>] [--volume=<volume_index>] [--slice=<slice_index>] [--batch-size=<batch_size>] [--num-workers=<num_workers>] [--labels=<bool>]
    ```
-   
----
-
-#### Data Directory
-
-`--data-dir`
-
-| Option | Description                                                                |
-|--------|----------------------------------------------------------------------------|
-| `str`  | Path to data directory                                   |
 
 ---
 
@@ -316,16 +350,41 @@ CT scan visualization file... scans are expected to be in HU scale...
 
 `--mode`
 
-| Option           | Description                                                                |
-|------------------|----------------------------------------------------------------------------|
-| `'gt_scans'`       | Display ground-truth CT scan counterpart                                   |
-| `'lr_scans'`       | Display low-resolution CT scan counterpart                                 |
-| `'sr_scans'`       | Display super-resolution CT scancounterpart                                |
-| `'compare_scans'`  | Display low-resolution, super-resolution and ground truth CT scans jointly |
+| Option            | Description                                                             |
+|-------------------|-------------------------------------------------------------------------|
+| `'gt_scans'`      | Display ground-truth scan counterpart                                   |
+| `'lr_scans'`      | Display low-resolution scan counterpart                                 |
+| `'sr_scans'`      | Display super-resolution scan counterpart                               |
+| `'lr_gt_scans'`   | Display low-resolution and ground truth scans jointly |
+| `'compare_scans'` | Display low-resolution, super-resolution and ground truth scans jointly |
 
 ---
 
-#### Model Checkpoint *[OPTIONAL]*
+#### Low-Resolution Data Directory <span style="color: orange">[SEMI-OPTIONAL]</span>
+
+`--lr-dir`
+
+| Option | Description                                                                |
+|--------|----------------------------------------------------------------------------|
+| `str`  | Path to low-resolution data directory                                   |
+
+Required when mode is `lr_scans`, `sr_scans`, `lr_gt_scans` or `compare_scans`
+
+---
+
+#### High-Resolution Data Directory <span style="color: orange">[SEMI-OPTIONAL]</span>
+
+`--hr-dir`
+
+| Option | Description                                                                |
+|--------|----------------------------------------------------------------------------|
+| `str`  | Path to high-resolution data directory                                   |
+
+Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
+
+---
+
+#### Model Checkpoint <span style="color: orange">[OPTIONAL]</span>
 
 `--checkpoint`
 
@@ -335,17 +394,17 @@ CT scan visualization file... scans are expected to be in HU scale...
 
 ---
 
-#### Scale Factor *[OPTIONAL]*
+#### Data Augmentation <span style="color: orange">[OPTIONAL]</span>
 
-`--scale-factor`
+`--augmentation`
 
-| Option | Description                                                                | Default |
-|--------|----------------------------------------------------------------------------|:-------:|
-| `int`  | Downsample factor                                   |  None   |
+| Option | Description                                                 | Default |
+|--------|-------------------------------------------------------------|:-------:|
+| `bool` | Apply augmentation techniques to the visualization data |  False  |
 
 ---
 
-#### Target Tissue for Visualization *[OPTIONAL]*
+#### Target Tissue for Visualization <span style="color: orange">[OPTIONAL]</span>
 
 `--tissue`
 
@@ -359,7 +418,7 @@ CT scan visualization file... scans are expected to be in HU scale...
 
 ---
 
-#### View Plane *[OPTIONAL]*
+#### View Plane <span style="color: orange">[OPTIONAL]</span>
 
 `--plane`
 
@@ -371,7 +430,7 @@ CT scan visualization file... scans are expected to be in HU scale...
 
 ---
 
-#### Visualization Spacial Dimension *[OPTIONAL]*
+#### Visualization Spacial Dimension <span style="color: orange">[OPTIONAL]</span>
 
 `--dim`
 
@@ -382,7 +441,7 @@ CT scan visualization file... scans are expected to be in HU scale...
 
 ---
 
-#### Volume Index *[OPTIONAL]*
+#### Volume Index <span style="color: orange">[OPTIONAL]</span>
 
 `--volume`
 
@@ -392,7 +451,7 @@ CT scan visualization file... scans are expected to be in HU scale...
 
 ---
 
-#### Slice Index *[OPTIONAL]*
+#### Slice Index <span style="color: orange">[OPTIONAL]</span>
 
 `--slice`
 
@@ -402,7 +461,7 @@ CT scan visualization file... scans are expected to be in HU scale...
 
 ---
 
-#### Batch Size *[OPTIONAL]*
+#### Batch Size <span style="color: orange">[OPTIONAL]</span>
 
 `--batch-size`
 
@@ -412,7 +471,7 @@ CT scan visualization file... scans are expected to be in HU scale...
 
 ---
 
-#### Data Loading Subprocesses *[OPTIONAL]*
+#### Data Loading Subprocesses <span style="color: orange">[OPTIONAL]</span>
 
 `--num-workers`
 
@@ -422,7 +481,7 @@ CT scan visualization file... scans are expected to be in HU scale...
 
 ---
 
-#### Image Labels *[OPTIONAL]*
+#### Image Labels <span style="color: orange">[OPTIONAL]</span>
 
 `--labels`
 

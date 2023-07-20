@@ -21,7 +21,7 @@ def main():
         dataset_files = sorted(glob(os.path.join(args.dir, '*')))
 
         # Split dataset
-        train, val = train_test_split(dataset_files, test_size=(0.20 if args.val else 0.10), shuffle=True, random_state=20)
+        train, val = train_test_split(dataset_files, test_size=(0.10 if args.val else 0.05), shuffle=True, random_state=20)
         val, test = train_test_split(val, test_size=0.5, shuffle=True, random_state=20) if args.val else ([], val)
 
         for (split, directory) in [(train, args.train_dir), (val, args.val_dir), (test, args.test_dir)]:
@@ -34,7 +34,7 @@ def main():
 
 if __name__ == '__main__':
     # Define argument parser
-    parser = argparse.ArgumentParser(description='Split training data')
+    parser = argparse.ArgumentParser(description='Split data')
     parser.add_argument('--val', default=True, help='Build validation split', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--dir', default=os.path.join('..', '..', 'data', 'LIDC-IDRI'), help='Path to directory with data', type=str)
     parser.add_argument('--train-dir', default=os.path.join('..', '..', 'data', 'training'), help='Path to destination training directory', type=str)

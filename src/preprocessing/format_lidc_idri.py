@@ -125,6 +125,8 @@ def main():
             transforms.CenterSpatialCrop(roi_size=args.uniform_shape),
             transforms.Zoom(zoom=(1 / args.scale_factor), mode="trilinear", keep_size=False),
             transforms.NormalizeIntensity(subtrahend=-_min/(_max-_min), divisor=1/(_max-_min)),
+            transforms.ThresholdIntensity(threshold=(args.min - 1), above=True, cval=args.min),
+            transforms.ThresholdIntensity(threshold=(args.max + 1), above=False, cval=args.max),
             transforms.SqueezeDim(),
             transforms.ToNumpy()
         ])
@@ -170,6 +172,8 @@ if __name__ == '__main__':
     parser.add_argument('--min-slice-thick', default=1.25, help='Minimum slice thickness per volume', type=float)
     parser.add_argument('--uniform-shape', default=(512, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
     parser.add_argument('--scale-factor', default=2, help='Scale factor to reduce data resolution and alleviate computation', type=int)
+    parser.add_argument('--min', default=-1000, help='Minimum HU scale value', type=int)
+    parser.add_argument('--max', default=1000, help='Maximum HU scale value', type=int)
     args = parser.parse_args()
 
     main()
