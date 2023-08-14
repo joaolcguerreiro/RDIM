@@ -151,7 +151,7 @@ if __name__ == '__main__':
     parser.add_argument('--hr-dir', help='Path to high-resolution data directory', type=str)
     parser.add_argument('--checkpoint', default=None, help='Path to model checkpoint', type=str)
     parser.add_argument('--augmentation', default=False, help='Apply augmentation techniques to the visualization data', type=(lambda arg: (str(arg).lower() == 'true')))
-    parser.add_argument('--pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((min...), (max...))', type=ast.literal_eval)
+    parser.add_argument('--pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=ast.literal_eval)
     parser.add_argument('--plane', default='axial', help='Anatomical planes {}'.format(planes), type=str)
     parser.add_argument('--dim', default='2D', help='Visualization dimension {}'.format(dimensions), type=str)
     parser.add_argument('--volume', default=-1, help='Volume index (-1 for all)', type=int)

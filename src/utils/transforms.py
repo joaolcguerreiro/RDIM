@@ -50,7 +50,7 @@ class EnsureExactChannels(Transform):
 
     Args:
         num_channels: the exact number of channels the input tensor should have after applying the transform.
-        strict_check: whether to raise an error when the input is not a 4D tensor.
+        strict_check: whether to raise an error when the input is not a 4D tensor or flexibility is not intended while the input size is invalid for an integral reshape.
         flexible_reshape: whether to allow flexible reshaping when the number of channels is not a multiple or divisor of the current number of channels in the volume.
     """
 
