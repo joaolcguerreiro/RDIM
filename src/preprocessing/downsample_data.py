@@ -7,18 +7,17 @@ import nibabel as nib
 import monai.transforms as transforms
 from glob import glob
 sys.path.append(os.path.join('..', '..'))
-from src.utils.transforms import RandGaussianSmooth, RandForegroundGaussianNoise, RandForegroundStreakNoise
+from src.utils.transforms import EnsureChannelExists, RandGaussianSmooth, RandForegroundGaussianNoise, RandForegroundStreakNoise
 
 
 def main():
     try:
         # Common transforms
         initial_transforms = transforms.Compose([
-            transforms.EnsureChannelFirst(channel_dim='no_channel'),
+            EnsureChannelExists(),
         ])
 
         final_transforms = transforms.Compose([
-            transforms.SqueezeDim(),
             transforms.ToNumpy()
         ])
 

@@ -119,15 +119,14 @@ def main():
 
         # Uniform shape transforms
         uniform_transforms = transforms.Compose([
-            transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max-_min)),
             transforms.EnsureChannelFirst(channel_dim='no_channel'),
+            transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max-_min)),
             transforms.SpatialPad(spatial_size=args.uniform_shape),
             transforms.CenterSpatialCrop(roi_size=args.uniform_shape),
             transforms.Zoom(zoom=(1 / args.scale_factor), mode="trilinear", keep_size=False),
             transforms.NormalizeIntensity(subtrahend=-_min/(_max-_min), divisor=1/(_max-_min)),
-            transforms.ThresholdIntensity(threshold=(args.min - 1), above=True, cval=args.min),
-            transforms.ThresholdIntensity(threshold=(args.max + 1), above=False, cval=args.max),
-            transforms.SqueezeDim(),
+            transforms.ThresholdIntensity(threshold=args.min, above=True, cval=args.min),
+            transforms.ThresholdIntensity(threshold=args.max, above=False, cval=args.max),
             transforms.ToNumpy()
         ])
 

@@ -155,7 +155,7 @@ In case you want to use your own dataset:
 
 1) VALIDATION DATA IS OPTIONAL... BUT YOU CAN RUN SPLIT SCRIPT [OPTIONAL] IF YOU WANT TO SPLIT YOUR TRAINING DATA (USE --DIR FLAG TO SPECIFY DIRECTORY PATH)... validation and testing splits are not MANDATORY.
 
-2) BE SURE DATA FILE FORMAT IS NIFTI... IF DICOM THEN CONVERT BEFORE ????CURRENTLY DATA FILES SHOULD NOT HAVE THE CHANNEL DIM... accepted data shape: (H, W, D), WHERE H, W, D can interchange...???
+2) BE SURE DATA FILE FORMAT IS NIFTI... IF DICOM THEN CONVERT BEFORE ????... channel dim required to be first... accepted data shapes: (W, H, D) or (C, W, H, D) (WHERE H, W, D can interchange and C>0)... (for video super-resolution a valid shape is (C, T, W, H)... where T, W, H can interchange)
 
 3) UPDATE CONFIG FILE WITH DATA PATHS
 
@@ -404,17 +404,13 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
 
 ---
 
-#### Target Tissue for Visualization <span style="color: orange">[OPTIONAL]</span>
+#### Target Pixel Window for Visualization <span style="color: orange">[OPTIONAL]</span>
 
-`--tissue`
+`--pixel-range`
 
-| Option     | Description                                             | Default |
-|------------|---------------------------------------------------------|:-------:|
-| `'full'`   | Sets Hounsfield Unit (HU) window range to (-1000, 3000) |    ✓     |
-| `'lung'`   | Sets Hounsfield Unit (HU) window range to (-900, -500)  |         |
-| `'fat'`    | Sets Hounsfield Unit (HU) window range to (-200, -50)   |         |
-| `'muscle'` | Sets Hounsfield Unit (HU) window range to (-50, 50)     |         |
-| `'bone'`   | Sets Hounsfield Unit (HU) window range to (50, 1000)    |         |
+| Option     | Description                                                                |   Default    |
+|------------|----------------------------------------------------------------------------|:------------:|
+| `sequence` | Window range of pixel values (min, max). For multi-channel scaling provide ((min...), (max...))                                   | (None, None) |
 
 ---
 

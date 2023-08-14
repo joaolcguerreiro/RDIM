@@ -133,16 +133,16 @@ def display_volumes(volumes, plane, dimension, n_rows, n_cols, volume_indexes=No
         raise NotImplementedError('Invalid dimension')
 
 
-def compute_data_statistics(data_dir):
+def compute_data_statistics(data_dir, num_channels):
     print_divisor()
-
-    _min = float('+inf')
-    _max = float('-inf')
-    mean = np.zeros(1)
-    std = np.zeros(1)
 
     # Fetch all data file paths
     dataset_files = sorted(glob(os.path.join(data_dir, '*')))
+
+    _min = np.full(num_channels, float('+inf'))
+    _max = np.full(num_channels, float('-inf'))
+    mean = np.zeros(num_channels)
+    std = np.zeros(num_channels)
 
     # Define progress bar
     pbar = tqdm(dataset_files, desc="Computing Data Statistics")
@@ -151,15 +151,25 @@ def compute_data_statistics(data_dir):
         # Load file
         volume = get_volume_data(file)
 
-        _min = min(_min, np.min(volume))
-        _max = max(_max, np.max(volume))
-        mean += np.mean(volume)
-        std += np.std(volume)
+        # Ensure multichannel data
+        if volume.ndim == 3:
+            volume = np.expand_dims(volume, axis=0)
+
+        for channel in range(num_channels):
+            _min[channel] = min(_min[channel], np.min(volume[channel]))
+            _max[channel] = max(_max[channel], np.max(volume[channel]))
+            mean[channel] += np.mean(volume[channel])
+            std[channel] += np.std(volume[channel])
 
         if index == len(pbar) - 1:
-            mean = mean.item() / len(dataset_files)
-            std = std.item() / len(dataset_files)
-            pbar.set_postfix({"Min": f"{_min:.4f}", "Max": f"{_max:.4f}", "Mean": f"{mean:.4f}", "STD": f"{std:.4f}"})
+            mean /= len(dataset_files)
+            std /= len(dataset_files)
+            pbar.set_postfix({
+                "Min": str(np.squeeze(np.around(_min, 2)).tolist()),
+                "Max": str(np.squeeze(np.around(_max, 2)).tolist()),
+                "Mean": str(np.squeeze(np.around(mean, 2)).tolist()),
+                "STD": str(np.squeeze(np.around(std, 2)).tolist())
+            })
 
     # Logging the progress bar
     logging.info(pbar)
@@ -186,7 +196,7 @@ def compute_super_resolution_metadata(lr_metadata, scale_factor):
 
 
 def denormalize(volume, mean, std):
-    return transforms.NormalizeIntensity(subtrahend=-mean/std, divisor=1/std)(volume)
+    return transforms.NormalizeIntensity(subtrahend=-mean/std, divisor=1/std, channel_wise=True)(volume)
 
 
 def upsample(volume, scale_factor):

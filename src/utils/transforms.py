@@ -1,4 +1,5 @@
 import torch
+import warnings
 import numpy as np
 import monai.transforms as transforms
 from typing import Any, Optional, Tuple, Sequence, Union
@@ -10,6 +11,231 @@ from monai.utils.enums import TransformBackends
 from monai.config.type_definitions import NdarrayOrTensor
 from monai.transforms.transform import Transform, RandomizableTransform
 from monai.utils.type_conversion import convert_data_type, convert_to_dst_type, convert_to_tensor
+from monai.transforms.utils_pytorch_numpy_unification import where
+
+
+class EnsureChannelExists(Transform):
+    """
+    Adds a channel dimension to a 3D input tensor if it does not exist.
+
+    Args:
+        strict_check: whether to raise an error when the input is not a 3D or 4D tensor.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, strict_check: bool = True):
+        self.strict_check = strict_check
+
+    def __call__(self, volume: torch.Tensor) -> torch.Tensor:
+        if len(volume.shape) not in [3, 4]:
+            msg = "Input tensor is not 3D or 4D. EnsureChannelExists may not be applied correctly."
+
+            if self.strict_check:
+                raise ValueError(msg)
+            else:
+                warnings.warn(msg)
+                return volume
+
+        # Add the channel dimension if it does not exist
+        if len(volume.shape) == 3:
+            volume = volume.unsqueeze(dim=0)
+
+        return volume
+
+
+class EnsureExactChannels(Transform):
+    """
+    Ensures a 4D input tensor has exactly `num_channels` channels. If it does not, it either repeats or reshapes the channels.
+
+    Args:
+        num_channels: the exact number of channels the input tensor should have after applying the transform.
+        strict_check: whether to raise an error when the input is not a 4D tensor.
+        flexible_reshape: whether to allow flexible reshaping when the number of channels is not a multiple or divisor of the current number of channels in the volume.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, num_channels: int, flexible_reshape: bool = True, strict_check: bool = True):
+        self.num_channels = num_channels
+        self.strict_check = strict_check
+        self.flexible_reshape = flexible_reshape
+
+    def __call__(self, volume: torch.Tensor) -> torch.Tensor:
+        if len(volume.shape) != 4:
+            msg = "Input tensor is not 4D. EnsureExactChannels may not be applied correctly."
+
+            if self.strict_check:
+                raise ValueError(msg)
+            else:
+                warnings.warn(msg)
+                return volume
+
+        # Get number of channels
+        num_volume_channels = volume.shape[0]
+
+        if num_volume_channels < self.num_channels:
+            if self.num_channels % num_volume_channels != 0 and not self.flexible_reshape:
+                msg = f"The number of channels ({self.num_channels}) must be a multiple of the current number of channels in the volume ({num_volume_channels}). EnsureExactChannels may not be applied correctly."
+
+                if self.strict_check:
+                    raise ValueError(msg)
+                else:
+                    warnings.warn(msg)
+                    return volume
+
+            repeats = (self.num_channels + num_volume_channels - 1) // num_volume_channels
+            volume = volume.repeat(repeats, 1, 1, 1)
+            volume = volume[:self.num_channels, :, :, :]
+
+        elif num_volume_channels > self.num_channels:
+            if num_volume_channels % self.num_channels != 0 and not self.flexible_reshape:
+                msg = f"The number of channels ({self.num_channels}) must be a divisor of the current number of channels in the volume ({num_volume_channels}). EnsureExactChannels may not be applied correctly."
+
+                if self.strict_check:
+                    raise ValueError(msg)
+                else:
+                    warnings.warn(msg)
+                    return volume
+
+            # Flatten the tensor
+            flattened_volume = volume.view(-1)
+
+            # Compute target elements excluding last dimension
+            target_elements = self.num_channels * volume.shape[-3] * volume.shape[-2]
+
+            # Compute the number of elements in the last dimension based on total elements
+            num_last_dim_elements = len(flattened_volume) // target_elements
+
+            # Trim the excess and reshape to the desired shape
+            volume = flattened_volume[:self.num_channels * volume.shape[-3] * volume.shape[-2] * num_last_dim_elements].view(
+                self.num_channels, volume.shape[-3], volume.shape[-2], num_last_dim_elements
+            )
+
+        return volume
+
+
+class NormalizeIntensity(Transform):
+    """
+    Normalize the input image by subtracting the mean and dividing by the standard deviation.
+
+    Args:
+        mean: mean value(s) for normalization. If grayscale, provide a single float value. If RGB, provide a sequence of three floats.
+        std: standard deviation value(s) for normalization. Same format as `mean`.
+        channel_wise: if True, normalize each channel separately. Please ensure that the first dimension represents the channel of the image if True.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(
+        self,
+        mean: Union[float, Sequence[float], NdarrayOrTensor],
+        std: Union[float, Sequence[float], NdarrayOrTensor],
+        channel_wise: bool = False,
+    ) -> None:
+        self.mean = mean
+        self.std = std
+        self.channel_wise = channel_wise
+
+    def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+        normalized_volume = convert_to_tensor(volume, track_meta=False)
+        ret: NdarrayOrTensor
+
+        if self.channel_wise:
+            if isinstance(self.mean, float):
+                mean = [self.mean] * normalized_volume.shape[0]
+            else:
+                mean = self.mean
+
+            if isinstance(self.std, float):
+                std = [self.std] * normalized_volume.shape[0]
+            else:
+                std = self.std
+
+            mean = torch.tensor(mean)
+            std = torch.tensor(std)
+            normalized_volume = self._channel_wise_normalize(normalized_volume, mean, std)
+            ret = normalized_volume
+        else:
+            mean = torch.tensor(self.mean)
+            std = torch.tensor(self.std)
+            normalized_volume = self._normalize(normalized_volume, mean, std)
+            ret = normalized_volume
+
+        ret = convert_to_dst_type(ret, dst=volume, dtype=normalized_volume.dtype)[0]
+
+        return ret
+
+    def _normalize(self, normalized_volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+        normalized_volume = (normalized_volume - mean) / std
+
+        return normalized_volume
+
+    def _channel_wise_normalize(
+        self, normalized_volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor
+    ) -> torch.Tensor:
+        for i in range(normalized_volume.shape[0]):
+            normalized_volume[i] = (normalized_volume[i] - mean[i]) / std[i]
+
+        return normalized_volume
+
+
+class ThresholdIntensity(Transform):
+    """
+    Filter the intensity values of whole image to below threshold or above threshold.
+    And fill the remaining parts of the image to the `cval` value.
+
+    Args:
+        threshold: the threshold to filter intensity values.
+        above: filter values above the threshold or below the threshold, default is True.
+        cval: value to fill the remaining parts of the image, default is 0.
+        channel_wise: if True, apply the threshold to each channel separately. Default is False.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, threshold: Union[float, Sequence[float], NdarrayOrTensor], above: bool = True, cval: float = 0.0, channel_wise: bool = False) -> None:
+        if isinstance(threshold, (float, NdarrayOrTensor, Sequence)):
+            self.threshold = threshold
+        else:
+            raise ValueError(
+                f"threshold must be a float, float sequence, numpy array or torch tensor, got {type(threshold)} {threshold}.")
+
+        self.above = above
+        self.cval = cval
+        self.channel_wise = channel_wise
+
+    def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if self.channel_wise:
+            if isinstance(self.threshold, float):
+                threshold = [self.threshold] * volume.shape[0]
+            else:
+                threshold = self.threshold
+
+            threshold = torch.tensor(threshold)
+            res = self._channel_wise_threshold(volume, threshold)
+        else:
+            threshold = torch.tensor(self.threshold)
+            res = self._apply_threshold(volume, threshold)
+
+        res, *_ = convert_data_type(res, dtype=volume.dtype)
+
+        return res
+
+    def _apply_threshold(self, volume: torch.Tensor, threshold: torch.Tensor) -> torch.Tensor:
+        mask = volume > threshold if self.above else volume < threshold
+        res = where(mask, volume, self.cval)
+        return res
+
+    def _channel_wise_threshold(self, volume: torch.Tensor, threshold: torch.Tensor) -> torch.Tensor:
+        for i in range(volume.shape[0]):
+            mask = volume[i] > threshold[i] if self.above else volume[i] < threshold[i]
+            volume[i] = where(mask, volume[i], self.cval)
+
+        return volume
 
 
 class RandGaussianSmooth(RandomizableTransform):
@@ -38,18 +264,18 @@ class RandGaussianSmooth(RandomizableTransform):
 
         self.rand_sigma = self.R.uniform(low=self.sigma[0], high=self.sigma[1])
 
-    def __call__(self, img: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
-        img = convert_to_tensor(img, track_meta=get_track_meta())
+    def __call__(self, volume: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
         if randomize:
             self.randomize()
 
         if not self._do_transform:
-            return img
+            return volume
 
-        sigma = ensure_tuple_size(vals=(self.rand_sigma, self.rand_sigma, self.rand_sigma), dim=img.ndim - 1)
+        sigma = ensure_tuple_size(vals=(self.rand_sigma, self.rand_sigma, self.rand_sigma), dim=volume.ndim - 1)
 
-        return transforms.GaussianSmooth(sigma=sigma, approx=self.approx)(img)
+        return transforms.GaussianSmooth(sigma=sigma, approx=self.approx)(volume)
 
 
 class RandForegroundGaussianNoise(RandomizableTransform):
@@ -242,71 +468,6 @@ class RandForegroundStreakNoise(RandomizableTransform):
         volume = torch.clamp(volume, self.min, self.max)
 
         return volume
-
-
-class NormalizeIntensity(Transform):
-    """
-    Normalize the input image by subtracting the mean and dividing by the standard deviation.
-    Supports both 2D and 3D images, grayscale and RGB channels.
-
-    Args:
-        mean: mean value(s) for normalization. If grayscale, provide a single float value. If RGB, provide a sequence of three floats.
-        std: standard deviation value(s) for normalization. Same format as `mean`.
-        channel_wise: if True, normalize each channel separately. Please ensure that the first dimension represents the channel of the image if True.
-    """
-
-    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
-
-    def __init__(
-        self,
-        mean: Union[Sequence[float], float],
-        std: Union[Sequence[float], float],
-        channel_wise: bool = False,
-    ) -> None:
-        self.mean = mean
-        self.std = std
-        self.channel_wise = channel_wise
-
-    def __call__(self, img: NdarrayOrTensor) -> NdarrayOrTensor:
-        img = convert_to_tensor(img, track_meta=get_track_meta())
-        normalized_img = convert_to_tensor(img, track_meta=False)
-        ret: NdarrayOrTensor
-
-        if self.channel_wise:
-            if isinstance(self.mean, float):
-                mean = [self.mean] * normalized_img.shape[0]
-            else:
-                mean = self.mean
-
-            if isinstance(self.std, float):
-                std = [self.std] * normalized_img.shape[0]
-            else:
-                std = self.std
-
-            normalized_img = self._channel_wise_normalize(normalized_img, mean, std)
-            ret = normalized_img
-        else:
-            mean = torch.tensor(self.mean)
-            std = torch.tensor(self.std)
-            normalized_img = self._normalize(normalized_img, mean, std)
-            ret = normalized_img
-
-        ret = convert_to_dst_type(ret, dst=img, dtype=normalized_img.dtype)[0]
-
-        return ret
-
-    def _normalize(self, normalized_img: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
-        normalized_img = (normalized_img - mean) / std
-
-        return normalized_img
-
-    def _channel_wise_normalize(
-        self, normalized_img: torch.Tensor, mean: Sequence[float], std: Sequence[float]
-    ) -> torch.Tensor:
-        for i in range(normalized_img.shape[0]):
-            normalized_img[i] = (normalized_img[i] - mean[i]) / std[i]
-
-        return normalized_img
 
 
 class RandSpatialCrop(RandomizableTransform):

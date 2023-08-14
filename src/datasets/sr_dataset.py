@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import Dataset
 sys.path.append(os.path.join('..', '..'))
 from src.utils.utils import get_volume_data, get_metadata, compute_super_resolution_metadata
-from src.utils.transforms import RandSpatialCrop
+from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, RandSpatialCrop
 
 
 class SuperResolutionDataset(Dataset):
@@ -28,26 +28,26 @@ class SuperResolutionDataset(Dataset):
 
         # Common Transforms
         self.initial_transforms = transforms.Compose([
-            transforms.EnsureChannelFirst(channel_dim='no_channel'),    # TODO MAKE MY OWN TRANSFORM? GUARANTEE CHANNEL DIM
-            transforms.ThresholdIntensity(threshold=(_min-1), above=True, cval=_min) if _min is not None else transforms.Identity(),
-            transforms.ThresholdIntensity(threshold=(_max+1), above=False, cval=_max) if _max is not None else transforms.Identity(),
+            EnsureChannelExists(),
+            ThresholdIntensity(threshold=_min, above=True, cval=_min, channel_wise=True) if _min is not None else transforms.Identity(),
+            ThresholdIntensity(threshold=_max, above=False, cval=_max, channel_wise=True) if _max is not None else transforms.Identity(),
         ])
 
         self.final_transforms = transforms.Compose([
             transforms.ToTensor(),
-            transforms.NormalizeIntensity(subtrahend=mean, divisor=std) if (mean is not None and std is not None) else transforms.Identity(),
+            transforms.NormalizeIntensity(subtrahend=mean, divisor=std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
         ])
 
         # Data Augmentation Transforms
         self.augmentation_transforms = transforms.Compose([
-            transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max-_min)) if (_min is not None and _max is not None) else transforms.Identity(),
+            transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max-_min), channel_wise=True) if (_min is not None and _max is not None) else transforms.Identity(),
             transforms.RandFlip(prob=0.5),
             transforms.RandRotate(prob=0.5, range_x=180, range_y=180, range_z=180, padding_mode="zeros"),
             transforms.RandGridDistortion(prob=0.5, num_cells=5, distort_limit=0.15, padding_mode="zeros"),
             transforms.RandZoom(prob=0.5, min_zoom=0.75, max_zoom=1.5, mode="trilinear", padding_mode="constant", value=0),
             transforms.RandAffine(prob=0.5, shear_range=0.5, padding_mode="zeros"),
             # TODO transforms.RandAffine(prob=0.5, translate_range=0.5, padding_mode="zeros"),
-            transforms.NormalizeIntensity(subtrahend=-_min/(_max-_min), divisor=1/(_max-_min)) if (_min is not None and _max is not None) else transforms.Identity(),
+            transforms.NormalizeIntensity(subtrahend=-_min/(_max-_min), divisor=1/(_max-_min), channel_wise=True) if (_min is not None and _max is not None) else transforms.Identity(),
         ]) if augmentation else transforms.Compose([])
 
         # Patch-based computation transform
