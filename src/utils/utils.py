@@ -263,13 +263,13 @@ def flatten_batch(batch, mean=None, std=None):
 
 
 def save_sample(gen_volume, gt_volume, save_dir_path, mean=None, std=None, plane='axial', fig_size=(6, 6), theme='light'):
-    # Reorient volume for visualization
-    gen_volume = adjust_volume_orientation(gen_volume.to('cpu'))
-    gt_volume = adjust_volume_orientation(gt_volume.to('cpu'))
-
     # Denormalize volumes
     gen_volume = gen_volume if (mean is None or std is None) else denormalize(gen_volume, mean=mean, std=std)
     gt_volume = gt_volume if (mean is None or std is None) else denormalize(gt_volume, mean=mean, std=std)
+
+    # Reorient volume for visualization
+    gen_volume = adjust_volume_orientation(gen_volume.to('cpu'))
+    gt_volume = adjust_volume_orientation(gt_volume.to('cpu'))
 
     # Define slice index
     slice_index = count_volume_slices(plane=plane, volume=gt_volume) // 2

@@ -28,6 +28,8 @@ class EnsureChannelExists(Transform):
         self.strict_check = strict_check
 
     def __call__(self, volume: torch.Tensor) -> torch.Tensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
         if len(volume.shape) not in [3, 4]:
             msg = "Input tensor is not 3D or 4D. EnsureChannelExists may not be applied correctly."
 
@@ -168,6 +170,15 @@ class NormalizeIntensity(Transform):
         return ret
 
     def _normalize(self, normalized_volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+        # Get device and dtype of the input
+        device = normalized_volume.device
+        dtype = normalized_volume.dtype
+
+        # Move to device and dtype of the input
+        mean = mean.to(device, dtype)
+        std = std.to(device, dtype)
+
+        # Normalize
         normalized_volume = (normalized_volume - mean) / std
 
         return normalized_volume
@@ -175,8 +186,16 @@ class NormalizeIntensity(Transform):
     def _channel_wise_normalize(
         self, normalized_volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor
     ) -> torch.Tensor:
-        for i in range(normalized_volume.shape[0]):
-            normalized_volume[i] = (normalized_volume[i] - mean[i]) / std[i]
+        # Get device and dtype of the input
+        device = normalized_volume.device
+        dtype = normalized_volume.dtype
+
+        # Reshape and move to same device and dtype
+        mean = mean.view(-1, 1, 1, 1).to(device, dtype)
+        std = std.view(-1, 1, 1, 1).to(device, dtype)
+
+        # Normalize channel-wise
+        normalized_volume = (normalized_volume - mean) / std
 
         return normalized_volume
 
