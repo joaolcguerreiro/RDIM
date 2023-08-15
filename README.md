@@ -64,7 +64,7 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 # Data Requirements
 
-IMPORTANT: BE SURE THAT FILE FORMAT SHOULD BE NIFTI AND ??RANGE IN HU SCALE??!!!! ????CURRENTLY DATA FILES SHOULD NOT HAVE THE CHANNEL DIM... accepted data shape: (H, W, D), WHERE H, W, D can interchange...???
+BE SURE DATA FILE FORMAT IS NIFTI... IF DICOM THEN CONVERT BEFORE ????... channel dim required to be first... accepted data shapes: (W, H, D) or (C, W, H, D) (WHERE H, W, D can interchange and C>0)... (for video super-resolution a valid shape is (C, T, W, H)... where T, W, H can interchange)
 
 every low-resolution image should have a corresponding high-resolution image. The pair of low-res and high-res images should have the same filename
 
