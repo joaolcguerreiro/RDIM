@@ -64,6 +64,8 @@ class EnsureExactChannels(Transform):
         self.flexible_reshape = flexible_reshape
 
     def __call__(self, volume: torch.Tensor) -> torch.Tensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
         if len(volume.shape) != 4:
             msg = "Input tensor is not 4D. EnsureExactChannels may not be applied correctly."
 
@@ -141,7 +143,7 @@ class NormalizeIntensity(Transform):
 
     def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
-        normalized_volume = convert_to_tensor(volume, track_meta=False)
+        normalized_volume = convert_to_tensor(volume, track_meta=get_track_meta())
         ret: NdarrayOrTensor
 
         if self.channel_wise:
@@ -528,6 +530,8 @@ class RandSpatialCrop(RandomizableTransform):
         self._start_pos = tuple(start_pos)
 
     def __call__(self, volume: torch.Tensor, scale_factor: int = 1, randomize: bool = True) -> torch.Tensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
         if randomize:
             lr_shape = tuple(dim // scale_factor for dim in volume.shape[-3:]) if scale_factor > 1 else volume.shape[-3:]
             self.randomize(lr_shape=lr_shape)
