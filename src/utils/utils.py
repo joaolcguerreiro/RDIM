@@ -15,6 +15,7 @@ from tqdm import tqdm
 from matplotlib.patches import Patch
 sys.path.append(os.path.join('..', '..'))
 from src.utils.logger import print_divisor
+from src.utils.transforms import NormalizeIntensity
 
 
 # Load CT Scan Volume
@@ -196,7 +197,7 @@ def compute_super_resolution_metadata(lr_metadata, scale_factor):
 
 
 def denormalize(volume, mean, std):
-    return transforms.NormalizeIntensity(subtrahend=-mean/std, divisor=1/std, channel_wise=True)(volume)
+    return NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True)(volume)
 
 
 def upsample(volume, scale_factor):

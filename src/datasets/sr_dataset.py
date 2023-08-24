@@ -1,11 +1,12 @@
 import os
 import sys
+import math
 import monai.transforms as transforms
 import torch
 from torch.utils.data import Dataset
 sys.path.append(os.path.join('..', '..'))
 from src.utils.utils import get_volume_data, get_metadata, compute_super_resolution_metadata
-from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, RandSpatialCrop
+from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, NormalizeIntensity, RandSpatialCrop, RandTranslate
 
 
 class SuperResolutionDataset(Dataset):
@@ -35,19 +36,19 @@ class SuperResolutionDataset(Dataset):
 
         self.final_transforms = transforms.Compose([
             transforms.ToTensor(),
-            transforms.NormalizeIntensity(subtrahend=mean, divisor=std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
+            NormalizeIntensity(mean=mean, std=std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
         ])
 
         # Data Augmentation Transforms
         self.augmentation_transforms = transforms.Compose([
-            transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max-_min), channel_wise=True) if (_min is not None and _max is not None) else transforms.Identity(),
-            transforms.RandFlip(prob=0.5),
-            transforms.RandRotate(prob=0.5, range_x=180, range_y=180, range_z=180, padding_mode="zeros"),
-            transforms.RandGridDistortion(prob=0.5, num_cells=5, distort_limit=0.15, padding_mode="zeros"),
-            transforms.RandZoom(prob=0.5, min_zoom=0.75, max_zoom=1.5, mode="trilinear", padding_mode="constant", value=0),
-            transforms.RandAffine(prob=0.5, shear_range=0.5, padding_mode="zeros"),
-            # TODO transforms.RandAffine(prob=0.5, translate_range=0.5, padding_mode="zeros"),
-            transforms.NormalizeIntensity(subtrahend=-_min/(_max-_min), divisor=1/(_max-_min), channel_wise=True) if (_min is not None and _max is not None) else transforms.Identity(),
+            NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True) if (_min is not None and _max is not None) else transforms.Identity(),
+            transforms.RandFlip(prob=0.25),
+            transforms.RandRotate(prob=0.25, range_x=math.radians(30), range_y=math.radians(30), range_z=math.radians(30), padding_mode="zeros"),
+            transforms.RandGridDistortion(prob=0.25, num_cells=5, distort_limit=0.15, padding_mode="zeros"),
+            transforms.RandZoom(prob=0.25, min_zoom=0.85, max_zoom=1.15, mode="trilinear", padding_mode="constant", value=0),
+            transforms.RandAffine(prob=0.25, shear_range=0.5, padding_mode="zeros"),
+            RandTranslate(prob=0.25, translate_range=0.15, padding_mode="zeros"),
+            NormalizeIntensity(mean=-_min/(_max-_min), std=1/(_max-_min), channel_wise=True) if (_min is not None and _max is not None) else transforms.Identity(),
         ]) if augmentation else transforms.Compose([])
 
         # Patch-based computation transform

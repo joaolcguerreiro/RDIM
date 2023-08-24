@@ -2,6 +2,7 @@ import torch
 import warnings
 import numpy as np
 import monai.transforms as transforms
+import torch.nn.functional as F
 from typing import Any, Optional, Tuple, Sequence, Union
 from monai.config import DtypeLike
 from monai.utils import ensure_tuple, ensure_tuple_rep
@@ -147,12 +148,12 @@ class NormalizeIntensity(Transform):
         ret: NdarrayOrTensor
 
         if self.channel_wise:
-            if isinstance(self.mean, float):
+            if isinstance(self.mean, (float, int, np.integer, np.floating)):
                 mean = [self.mean] * normalized_volume.shape[0]
             else:
                 mean = self.mean
 
-            if isinstance(self.std, float):
+            if isinstance(self.std, (float, int, np.integer, np.floating)):
                 std = [self.std] * normalized_volume.shape[0]
             else:
                 std = self.std
@@ -172,6 +173,12 @@ class NormalizeIntensity(Transform):
         return ret
 
     def _normalize(self, normalized_volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+        if not mean.numel() == 1:
+            raise ValueError(f"Mean must be a singleton or scalar tensor, got {type(mean)} {mean}.")
+
+        if not std.numel() == 1:
+            raise ValueError(f"STD must be a singleton or scalar tensor, got {type(std)} {std}.")
+
         # Get device and dtype of the input
         device = normalized_volume.device
         dtype = normalized_volume.dtype
@@ -185,9 +192,19 @@ class NormalizeIntensity(Transform):
 
         return normalized_volume
 
-    def _channel_wise_normalize(
-        self, normalized_volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor
-    ) -> torch.Tensor:
+    def _channel_wise_normalize(self, normalized_volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+        if normalized_volume.shape[0] != mean.numel():
+            raise ValueError(f"Mean must match number of volume channels, got {mean.numel()} instead of {normalized_volume.shape[0]}.")
+
+        if not mean.dim() == 1 and mean.numel() > 1:
+            raise ValueError(f"Mean must be one-dimensional, got {mean.dim()} instead of 1 dimension.")
+
+        if normalized_volume.shape[0] != std.numel():
+            raise ValueError(f"STD must match number of volume channels, got {std.numel()} instead of {normalized_volume.shape[0]}.")
+
+        if not std.dim() == 1 and std.numel() > 1:
+            raise ValueError(f"STD must be one-dimensional, got {std.dim()} instead of 1 dimension.")
+
         # Get device and dtype of the input
         device = normalized_volume.device
         dtype = normalized_volume.dtype
@@ -217,11 +234,13 @@ class ThresholdIntensity(Transform):
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
     def __init__(self, threshold: Union[float, Sequence[float], NdarrayOrTensor], above: bool = True, cval: float = 0.0, channel_wise: bool = False) -> None:
-        if isinstance(threshold, (float, NdarrayOrTensor, Sequence)):
+        if isinstance(threshold, (float, int, np.integer, np.floating, NdarrayOrTensor)):
+            self.threshold = threshold
+        elif isinstance(threshold, Sequence) and all(isinstance(t, (float, int)) for t in threshold):
             self.threshold = threshold
         else:
             raise ValueError(
-                f"threshold must be a float, float sequence, numpy array or torch tensor, got {type(threshold)} {threshold}.")
+                f"Threshold must be an int, float, sequence of ints or floats, numpy array or torch tensor, got {type(threshold)} {threshold}.")
 
         self.above = above
         self.cval = cval
@@ -231,7 +250,7 @@ class ThresholdIntensity(Transform):
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
         if self.channel_wise:
-            if isinstance(self.threshold, float):
+            if isinstance(self.threshold, (float, int, np.integer, np.floating)):
                 threshold = [self.threshold] * volume.shape[0]
             else:
                 threshold = self.threshold
@@ -247,14 +266,23 @@ class ThresholdIntensity(Transform):
         return res
 
     def _apply_threshold(self, volume: torch.Tensor, threshold: torch.Tensor) -> torch.Tensor:
+        if not threshold.numel() == 1:
+            raise ValueError(f"Threshold must be a singleton or scalar tensor, got {type(threshold)} {threshold}.")
+
         mask = volume > threshold if self.above else volume < threshold
         res = where(mask, volume, self.cval)
         return res
 
     def _channel_wise_threshold(self, volume: torch.Tensor, threshold: torch.Tensor) -> torch.Tensor:
-        for i in range(volume.shape[0]):
-            mask = volume[i] > threshold[i] if self.above else volume[i] < threshold[i]
-            volume[i] = where(mask, volume[i], self.cval)
+        if volume.shape[0] != threshold.numel():
+            raise ValueError(f"Threshold must match number of volume channels, got {threshold.numel()} instead of {volume.shape[0]}.")
+
+        if not threshold.dim() == 1 and threshold.numel() > 1:
+            raise ValueError(f"Threshold must be one-dimensional, got {threshold.dim()} instead of 1 dimension.")
+
+        for channel in range(volume.shape[0]):
+            mask = volume[channel] > threshold[channel] if self.above else volume[channel] < threshold[channel]
+            volume[channel] = where(mask, volume[channel], self.cval)
 
         return volume
 
@@ -489,6 +517,67 @@ class RandForegroundStreakNoise(RandomizableTransform):
         volume = torch.clamp(volume, self.min, self.max)
 
         return volume
+
+
+class RandTranslate(RandomizableTransform):
+    """
+    Apply a random translation to the input volume based on specified `translate_range`.
+
+    Args:
+        translate_range: The range for each dimension within which to apply translation.
+                         Can be a single float, tuple of floats, or tuple of tuple of floats.
+        prob: probability of translation.
+        padding_mode: Padding mode for grid sampling ('zeros', 'border', or 'reflection').
+    """
+
+    backend = [TransformBackends.TORCH]
+
+    def __init__(self, prob: float = 0.1, translate_range: Union[float, Sequence[float], Sequence[Sequence[float]]] = 0.5, padding_mode: str = 'zeros') -> None:
+        RandomizableTransform.__init__(self, prob)
+        self.translate_range = translate_range
+        self.rand_translate = [0, 0, 0]
+        self.padding_mode = padding_mode
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        super().randomize(None)
+
+        if not self._do_transform:
+            return None
+
+        self.rand_translate = [self.R.uniform(low=low, high=high) * 2 for low, high in self.translate_range]
+
+    def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        # Determine the number of spatial dimensions
+        num_spatial_dims = len(self.rand_translate)
+
+        # Process translate_range based on volume dimensions
+        if isinstance(self.translate_range, (float, int)):
+            self.translate_range = ((-self.translate_range, self.translate_range),) * num_spatial_dims
+        elif isinstance(self.translate_range, (list, tuple)) and all(
+                isinstance(item, (float, int)) for item in self.translate_range):
+            self.translate_range = tuple((-val, val) for val in self.translate_range)
+        else:
+            self.translate_range = self.translate_range
+
+        self.randomize()
+
+        if not self._do_transform:
+            return volume
+
+        # Create an affine translation matrix
+        theta = torch.eye(3, 4, device=volume.device).unsqueeze(0)
+        theta[..., :3, -1] = torch.tensor(self.rand_translate, device=volume.device)
+
+        # Add batch dimension temporarily
+        volume = volume.unsqueeze(0)
+
+        # Create an affine grid and apply the translation using grid sampling
+        grid = F.affine_grid(theta, volume.size(), align_corners=False)
+        volume = F.grid_sample(volume, grid, padding_mode=self.padding_mode, align_corners=False)
+
+        return volume.squeeze(0)
 
 
 class RandSpatialCrop(RandomizableTransform):
