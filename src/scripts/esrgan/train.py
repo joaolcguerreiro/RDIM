@@ -193,7 +193,6 @@ def main():
             # Backward pass
             generator_total_loss.backward()
             generator_optimizer.step()
-            generator_scheduler.step()
 
             #=========================#
             #   Train Discriminator   #
@@ -216,7 +215,6 @@ def main():
             # Backward pass
             discriminator_total_loss.backward()
             discriminator_optimizer.step()
-            discriminator_scheduler.step()
 
             # Update the training loss
             generator_train_loss += generator_total_loss.item()
@@ -318,6 +316,10 @@ def main():
 
             # Logging the validation progress bar
             logging.info(val_pbar)
+
+        # Adjust learning rate
+        generator_scheduler.step()
+        discriminator_scheduler.step()
 
         # Increment epoch count
         train_dataset.increment_epoch()
