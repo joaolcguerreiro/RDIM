@@ -188,7 +188,7 @@ def main():
             content_loss = content_criterion(gen_volumes, hr_volumes)
 
             # Generator Total loss
-            generator_total_loss = perceptual_loss + config['LOSS_WEIGHTS']['GENERATOR']['ADVERSARIAL_LOSS'] * adversarial_loss + config['LOSS_WEIGHTS']['GENERATOR']['CONTENT_LOSS'] * content_loss
+            generator_total_loss = config['LOSS_WEIGHTS']['GENERATOR']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['GENERATOR']['ADVERSARIAL_LOSS'] * adversarial_loss + config['LOSS_WEIGHTS']['GENERATOR']['CONTENT_LOSS'] * content_loss
 
             # Backward pass
             generator_total_loss.backward()
@@ -278,7 +278,7 @@ def main():
                     content_loss = content_criterion(gen_volumes, hr_volumes)
 
                     # Generator Total loss
-                    generator_total_loss = perceptual_loss + config['LOSS_WEIGHTS']['GENERATOR']['ADVERSARIAL_LOSS'] * adversarial_loss + config['LOSS_WEIGHTS']['GENERATOR']['CONTENT_LOSS'] * content_loss
+                    generator_total_loss = config['LOSS_WEIGHTS']['GENERATOR']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['GENERATOR']['ADVERSARIAL_LOSS'] * adversarial_loss + config['LOSS_WEIGHTS']['GENERATOR']['CONTENT_LOSS'] * content_loss
 
                     #=========================#
                     #  Validate Discriminator #
