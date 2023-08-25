@@ -325,6 +325,16 @@ def main():
         train_dataset.increment_epoch()
         val_dataset.increment_epoch() if args.val else None
 
+        # Plot reference sample figure
+        if epoch == 0:
+            save_sample(
+                gen_volume=lr_volumes[-1],
+                gt_volume=hr_volumes[-1],
+                mean=mean, std=std,
+                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),
+                fig_size=(6, 6.5)
+            ) if args.val else None
+
         # Save checkpoint
         if (epoch + 1) % config["TRAINING"]["SAVE_INTERVAL"] == 0:
             torch.save({
