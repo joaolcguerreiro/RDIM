@@ -244,8 +244,6 @@ In the following instructions, replace `<model>` by one of the options below:
 
 * `esrgan`
 
-* `srdiff`
-
 * `srmediff`
 
 ---
