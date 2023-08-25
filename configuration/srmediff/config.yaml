@@ -3,9 +3,15 @@
 #=================================================================================================================#
 
 DATA:
-  TRAIN_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training
-  VAL_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation
-  TEST_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing
+  TRAINING:
+    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training/LR
+    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training/HR
+  VALIDATION:
+    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation/LR
+    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation/HR
+  TESTING:
+    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing/LR
+    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing/HR
   NUM_WORKERS: 4
 
 
@@ -14,8 +20,14 @@ DATA:
 #=================================================================================================================#
 
 MODEL:
-  ...
-  PRE_TRAINED_PATH:
+  NOISE_PREDICTOR:
+    ...
+    PRE_TRAINED_PATH:
+  LR_ENCODER:
+    PRE_TRAINED_PATH:
+  FEATURE_EXTRACTOR:
+    PRE_TRAINED_PATH:
+  PRE_TRAINED_PATH:     # Whole Network Weights
 
 
 #=================================================================================================================#
@@ -23,24 +35,27 @@ MODEL:
 #=================================================================================================================#
 
 TRAINING:
-  EPOCHS: 5000
+  EPOCHS: 500
   BATCH_SIZE: 8
+  RESIDUAL_PREDICTION: True
   GRADIENT_ACCUMULATION_STEPS: 1
-  WARMUP_STEPS: 0
   AUGMENTATION: True
-  SAVE_INTERVAL: 50
+  SAVE_INTERVAL: 5
 
 OPTIMIZER:
-  LEARNING_RATE:
-  WEIGHT_DECAY:
+  LEARNING_RATE: 1.0e-4
+  WEIGHT_DECAY: 0
+  BETA_1: 0.9
+  BETA_2: 0.999
 
 SCHEDULER:
-  STEP_SIZE: 2000
+  STEP_SIZE: 50
   GAMMA: 0.5
 
 LOSS_WEIGHTS:
-  CONTENT_LOSS:
-  PERCEPTUAL_LOSS:
+  PERCEPTUAL_LOSS: 1.0
+  DIFFUSION_LOSS: 1.0
+  CONTENT_LOSS: 1.0e-2
 
 
 #=================================================================================================================#
