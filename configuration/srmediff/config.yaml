@@ -20,7 +20,19 @@ DATA:
 #=================================================================================================================#
 
 MODEL:
+  NUM_STEPS: 1000
+  BETA_SCHEDULE: 'COSINE'
+  RESIDUAL_PREDICTION: True
+  SCALE_FACTOR: 2
+  BETA_SCHEDULE_PARAMETERS:
+    COSINE:
+      BETA_OFFSET: 8.0e-3
+      BETA_MAX: 9.99e-1
+    LINEAR:
+      BETA_START: 1.0e-4
+      BETA_END: 2.0e-2
   NOISE_PREDICTOR:
+    IN_CHANNEL:
     ...
     PRE_TRAINED_PATH:
   LR_ENCODER:
@@ -37,8 +49,8 @@ MODEL:
 TRAINING:
   EPOCHS: 500
   BATCH_SIZE: 8
-  RESIDUAL_PREDICTION: True
-  GRADIENT_ACCUMULATION_STEPS: 1
+  WARMUP_STEPS: 5 # TODO
+  GRADIENT_ACCUMULATION_STEPS: 1 # TODO
   AUGMENTATION: True
   SAVE_INTERVAL: 5
 

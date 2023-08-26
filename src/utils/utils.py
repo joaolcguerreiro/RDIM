@@ -70,7 +70,7 @@ def slice_volume(slice_index, plane, volume):
         # 3D volume (Y, X, Z, C) => Slice along x-axis => 2D image (Y, Z, C) => For display purposes interchange axis => 2D image (Z, Y, C)
         return volume[:, slice_index, :, :].swapaxes(0, 1)  # We get 2d plane (Z, Y, C)
     else:
-        return NotImplementedError('Invalid plane')
+        raise NotImplementedError('Invalid plane')
 
 
 # Get Number of Slices in CT Scan Volume Plane
@@ -82,7 +82,7 @@ def count_volume_slices(plane, volume):
     elif plane == 'coronal':
         return volume.shape[1]
     else:
-        return NotImplementedError('Invalid plane')
+        raise NotImplementedError('Invalid plane')
 
 
 def adjust_volume_orientation(volume):
