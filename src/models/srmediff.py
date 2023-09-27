@@ -1,62 +1,685 @@
+import os
+import sys
 import torch
 import torch.nn as nn
+sys.path.append(os.path.join('..', '..'))
+from src.utils.utils import upsample
 
 
-class NoisePredictor:
-    pass
+class SinusoidalPositionalEncoding(nn.Module):
+    def __init__(self, num_embedding_dims):
+        super().__init__()
+
+        self.num_embedding_dims = num_embedding_dims
+
+    def forward(self, timestep):
+        # Get indexes from even embedding dimensions
+        even_indexes = torch.arange(0, self.num_embedding_dims, 2)
+
+        # Compute positional embedding
+        log_term = torch.tensor(1e4).log() / self.num_embedding_dims
+        div_term = torch.exp(even_indexes * -log_term)
+
+        timestep = timestep.unsqueeze(-1)
+        sin_emb = torch.sin(timestep * div_term)
+        cos_emb = torch.cos(timestep * div_term)
+
+        # Interleave sine and cosine embeddings
+        embedding = torch.stack([sin_emb, cos_emb], dim=-1).view(-1, 2 * ((self.num_embedding_dims + 1) // 2))
+
+        # Slice out last dimension when the number of dimensions is uneven
+        embedding = embedding[..., :self.num_embedding_dims]
+
+        return embedding
 
 
-class Diffusion(nn.Module):
-    def __init__(self, num_steps=1000, beta_schedule='COSINE', residual_prediction=True, scale_factor=2, **kwargs):
+class ConvolutionalBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, num_groups=32, activation=True, max_pool=False, **kwargs):
+        super().__init__()
+
+        # Convolutional Layer
+        self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
+
+        # Group Normalization Layer
+        self.gn = nn.GroupNorm(num_groups, out_channels) if num_groups > 0 else nn.Identity()
+
+        # Activation Function
+        self.act = nn.Mish() if activation else nn.Identity()
+
+        # Max Polling Layer
+        self.pool = nn.MaxPool3d(kernel_size=2) if max_pool else nn.Identity()
+
+    def forward(self, x):
+        return self.pool(self.act(self.gn(self.conv(x))))
+
+
+class DownsampleBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, scale_factor=2, activation=False, **kwargs):
+        super().__init__()
+
+        # Convolutional Layer
+        self.conv = nn.Conv3d(in_channels, out_channels, stride=scale_factor, padding_mode='reflect', **kwargs)
+
+        # Activation Function
+        self.act = nn.Mish() if activation else nn.Identity()
+
+    def forward(self, x):
+        return self.act(self.conv(x))
+
+
+class UpsampleBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, scale_factor=2, mode='trilinear', activation=False, **kwargs):
+        super().__init__()
+
+        # Upsample Layer
+        self.upsample = nn.Upsample(scale_factor=scale_factor, mode=mode, align_corners=True)
+
+        # Convolutional Layer
+        self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
+
+        # Activation Function
+        self.act = nn.Mish() if activation else nn.Identity()
+
+    def forward(self, x):
+        return self.act(self.conv(self.upsample(x)))
+
+
+class ResidualDenseBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_growth_features=32, num_conv_blocks=5, num_groups=32, beta=0.2, **kwargs):
+        super().__init__()
+        assert num_conv_blocks > 0 if in_channels != out_channels else True, f'Number of convolutional blocks ({num_conv_blocks}) must be greater than 0'
+
+        # Residual Scale Factor
+        self.beta = beta
+
+        # Time embedding projection layer
+        self.time_proj = nn.Sequential(
+            nn.Mish(),
+            nn.Linear(num_time_embedding_dims, num_growth_features)
+        )
+
+        # Convolutional Blocks
+        self.conv_blocks = nn.ModuleList()
+
+        for block_index in range(num_conv_blocks):
+            self.conv_blocks.append(
+                ConvolutionalBlock(
+                    in_channels + block_index * num_growth_features,
+                    num_growth_features if block_index != (num_conv_blocks - 1) else out_channels,
+                    num_groups=(num_groups if block_index != (num_conv_blocks - 1) else 0),
+                    activation=(True if block_index != (num_conv_blocks - 1) else False),
+                    max_pool=False,
+                    **(kwargs if block_index != (num_conv_blocks - 1) else {'kernel_size': 1, 'stride': 1, 'padding': 0})
+                )
+            )
+
+        # Skip connection Layer
+        self.residual_conv = nn.Conv3d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
+
+
+    def forward(self, x, t_cond):
+        # Apply time embedding projection
+        t_cond = self.time_proj(t_cond)
+
+        # Count dimension mismatch between input tensor and timestep embedding
+        num_diff_dims = x.dim() - t_cond.dim()
+
+        # Reshape time embedding to match input tensor dimensions
+        t_cond = t_cond.view(*t_cond.shape, *([1] * num_diff_dims))
+
+        out = skip_connection = skip_connections = x
+
+        for index, conv_block in enumerate(self.conv_blocks):
+            out = conv_block(skip_connections)
+
+            if index < len(self.conv_blocks) - 1:
+                out = out + t_cond
+
+            skip_connections = torch.cat([skip_connections, out], dim=1)
+
+        return out * self.beta + self.residual_conv(skip_connection)
+
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, num_embedding_dims, num_heads=8):
+        super().__init__()
+        assert num_embedding_dims % num_heads != 0, f'Number of embedding dimensions ({num_embedding_dims}) must be divisible by the number of attention heads ({num_heads})'
+
+        self.num_heads = num_heads
+        self.num_head_dims = num_embedding_dims // num_heads
+
+        # Linear projections for queries (Q), keys (K), and values (V)
+        self.query_proj = nn.Linear(num_embedding_dims, num_embedding_dims)
+        self.key_proj = nn.Linear(num_embedding_dims, num_embedding_dims)
+        self.value_proj = nn.Linear(num_embedding_dims, num_embedding_dims)
+
+        # Linear projection for the output after head concatenation
+        self.output_proj = nn.Linear(num_embedding_dims, num_embedding_dims)
+
+
+    def forward(self, x):
+        # Get linear projections of queries (Q), keys (K), and values (V)
+        # [batch, sequence_len, num_embedding_dims] => [batch, sequence_len, num_embedding_dims]
+        queries = self.query_proj(x)
+        keys = self.key_proj(x)
+        values = self.value_proj(x)
+
+        # Split queries (Q), keys (K), and values (V) between attention heads
+        # [batch, sequence_len, num_embedding_dims] => [batch, num_heads, sequence_len, num_head_dims]
+        queries = torch.stack(torch.split(queries, split_size_or_sections=self.num_head_dims, dim=-1), dim=1)
+        keys = torch.stack(torch.split(keys, split_size_or_sections=self.num_head_dims, dim=-1), dim=1)
+        values = torch.stack(torch.split(values, split_size_or_sections=self.num_head_dims, dim=-1), dim=1)
+
+        # Compute Scaled Dot-Product Attention
+        # Eq. 1 from Transformer paper (https://arxiv.org/pdf/1706.03762.pdf)
+        scale_factor = 1 / torch.tensor(self.num_head_dims).sqrt()
+        transposed_keys = keys.transpose(-2, -1).contiguous()
+        attention_scores = torch.matmul(torch.softmax(torch.matmul(queries, transposed_keys) * scale_factor, dim=-1), values)
+
+        # Permute dimensions of Attention Scores
+        # [batch, num_heads, sequence_len, num_head_dims] => [batch, sequence_len, num_heads, num_head_dims]
+        attention_scores = attention_scores.permute(0, 2, 1, 3).contiguous()
+
+        # Concatenate heads
+        # [batch, sequence_len, num_heads, num_head_dims] => [batch, sequence_len, num_embedding_dims]
+        concatenated_heads_attention_scores = attention_scores.view(*x.shape)
+
+        # Get output linear projection
+        out = self.output_proj(concatenated_heads_attention_scores)
+
+        return out
+
+
+class SelfAttentionBlock(nn.Module):
+    def __init__(self, in_channels, num_heads=8, num_groups=32):
+        super().__init__()
+
+        # Multi-Head Attention Mechanism
+        self.attention = MultiHeadAttention(
+            num_embedding_dims=in_channels,
+            num_heads=num_heads
+        )
+
+        # Group Normalization Layer
+        self.gn = nn.GroupNorm(num_groups, in_channels) if num_groups > 0 else nn.Identity()
+
+
+    def forward(self, x):
+        skip_connection = x
+
+        # Reshape and transpose input tensor to process depth feature maps rather than spatial maps
+        batch, in_channels, *spatial_shape = x.shape
+
+        # [batch, in_channels, W, H, D] => [batch, W*H*D, in_channels] = [batch, sequence_len, num_embedding_dims]
+        x = x.view(batch, in_channels, torch.prod(spatial_shape)).transpose(-2, -1).contiguous()
+
+        # Apply Attention Mechanism
+        out = self.attention(x)
+
+        # Transpose and reshape output tensor to match input shape
+        # [batch, W*H*D, in_channels] => [batch, in_channels, W, H, D]
+        out = out.transpose(-2, -1).contiguous().view(batch, in_channels, *spatial_shape)
+
+        # Add skip-connection and apply normalization
+        out = self.gn(out + skip_connection)
+
+        return out
+
+
+class ResidualDenseAttentionBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_conv_blocks=5, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+        super().__init__()
+
+        # Residual Dense Block
+        self.time_res_dense_block = ResidualDenseBlock(
+            in_channels,
+            out_channels,
+            num_time_embedding_dims=num_time_embedding_dims,
+            num_growth_features=num_rdb_growth_features,
+            num_conv_blocks=num_rdb_conv_blocks,
+            num_groups=num_groups,
+            **kwargs
+        )
+
+        # Optional Self-Attention Block
+        self.att_block = SelfAttentionBlock(
+            out_channels,
+            num_heads=num_attention_heads,
+            num_groups=num_groups
+        ) if self_attention else nn.Identity()
+
+    def forward(self, x, t_cond):
+        x = self.time_res_dense_block(x, t_cond)
+
+        x = self.att_block(x)
+
+        return x
+
+
+class EncoderBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=2, num_rdb_conv_blocks=5, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+        super().__init__()
+
+        # Residual Dense Blocks with Optional Self-Attention Blocks
+        self.res_dense_att_blocks = nn.ModuleList()
+
+        for block_index in range(num_rdb_blocks):
+            self.res_dense_att_blocks.append(
+                ResidualDenseAttentionBlock(
+                    out_channels if block_index != 0 else in_channels,
+                    out_channels,
+                    num_time_embedding_dims=num_time_embedding_dims,
+                    num_rdb_growth_features=num_rdb_growth_features,
+                    num_rdb_conv_blocks=num_rdb_conv_blocks,
+                    self_attention=self_attention,
+                    num_attention_heads=num_attention_heads,
+                    num_groups=num_groups,
+                    **kwargs
+                )
+            )
+
+        # Downsampling Layer
+        self.downsample_layer = DownsampleBlock(
+            out_channels,
+            out_channels,
+            scale_factor=2,
+            activation=False,
+            kernel_size=kwargs.get('kernel_size', 3), padding=kwargs.get('padding', 1)
+        )
+
+    def forward(self, x, t_cond):
+        out = x
+
+        for res_dense_att_block in self.res_dense_att_blocks:
+            out = res_dense_att_block(out, t_cond)
+
+        out = self.downsample_layer(out)
+
+        return out
+
+
+class DecoderBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=2, num_rdb_conv_blocks=5, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+        super().__init__()
+
+        # Residual Dense Blocks with Optional Self-Attention Blocks
+        self.res_dense_att_blocks = nn.ModuleList()
+
+        for block_index in range(num_rdb_blocks):
+            self.res_dense_att_blocks.append(
+                ResidualDenseAttentionBlock(
+                    out_channels if block_index != 0 else in_channels,
+                    out_channels,
+                    num_time_embedding_dims=num_time_embedding_dims,
+                    num_rdb_growth_features=num_rdb_growth_features,
+                    num_rdb_conv_blocks=num_rdb_conv_blocks,
+                    self_attention=self_attention,
+                    num_attention_heads=num_attention_heads,
+                    num_groups=num_groups,
+                    **kwargs
+                )
+            )
+
+        # Upsampling Layer
+        self.upsample_layer = UpsampleBlock(
+            out_channels,
+            out_channels,
+            scale_factor=2,
+            mode='trilinear',
+            activation=False,
+            **kwargs
+        )
+
+    def forward(self, x, t_cond):
+        out = x
+
+        for res_dense_att_block in self.res_dense_att_blocks:
+            out = res_dense_att_block(out, t_cond)
+
+        out = self.upsample_layer(out)
+
+        return out
+
+
+class BottleneckBlock(nn.Module):
+    def __init__(self, in_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=2, num_rdb_conv_blocks=5, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+        super().__init__()
+
+        # Residual Dense Blocks with Optional Self-Attention Blocks
+        self.res_dense_att_blocks = nn.ModuleList()
+
+        for _ in range(num_rdb_blocks):
+            self.res_dense_att_blocks.append(
+                ResidualDenseAttentionBlock(
+                    in_channels,
+                    in_channels,
+                    num_time_embedding_dims=num_time_embedding_dims,
+                    num_rdb_growth_features=num_rdb_growth_features,
+                    num_rdb_conv_blocks=num_rdb_conv_blocks,
+                    self_attention=self_attention,
+                    num_attention_heads=num_attention_heads,
+                    num_groups=num_groups,
+                    **kwargs
+                )
+            )
+
+    def forward(self, x, t_cond):
+        out = x
+
+        for res_dense_att_block in self.res_dense_att_blocks:
+            out = res_dense_att_block(out, t_cond)
+
+        return out
+
+
+class NoisePredictor(nn.Module):
+    def __init__(self, in_channels=1, out_channels=1, cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rdb_blocks=2, num_rdb_conv_blocks=5, num_rdb_growth_features=32, attention_layers=((True,) * 4), num_attention_heads=8, num_groups=32, scale_factor=2, raw_lr_condition=False):
+        super().__init__()
+        assert len(feature_multipliers) == len(attention_layers), f'Array size of attention layers ({len(attention_layers)}) must match array size of feature multipliers ({len(feature_multipliers)})'
+
+        # Positional Encoding
+        self.time_positional_encoding = SinusoidalPositionalEncoding(num_inner_features)
+
+        # Multilayer Perceptron for time embedding
+        self.time_mlp = nn.Sequential(
+            nn.Linear(num_inner_features, num_inner_features * 4),
+            nn.Mish(),
+            nn.Linear(num_inner_features * 4, num_inner_features)
+        )
+
+        # Upsample/Projection block for condition
+        self.upsample_cond = UpsampleBlock(
+            cond_features,
+            num_inner_features,
+            scale_factor=scale_factor,
+            mode='trilinear',
+            activation=False,
+            kernel_size=3, stride=1, padding=1
+        ) if scale_factor > 1 or cond_features != num_inner_features else nn.Identity()
+
+        # Upsample/Projection block for raw condition
+        self.upsample_raw_cond = UpsampleBlock(
+            in_channels,
+            num_inner_features,
+            scale_factor=scale_factor,
+            mode='trilinear',
+            activation=False,
+            kernel_size=3, stride=1, padding=1
+        ) if (scale_factor > 1 or in_channels != num_inner_features) and raw_lr_condition else None
+
+        # Input Layer
+        self.input = ConvolutionalBlock(
+            in_channels,
+            num_inner_features,
+            num_groups=0,
+            activation=False,
+            max_pool=False,
+            kernel_size=3, stride=1, padding=1
+        )
+
+        # Encoder blocks for contracting/downsampling path
+        self.encoder_blocks = nn.ModuleList()
+
+        for block_index in range(len(feature_multipliers)):
+            # Determine feature multipliers for current and previous layers
+            multiplier = feature_multipliers[block_index]
+            prev_multiplier = feature_multipliers[block_index - 1] if block_index != 0 else None
+
+            self.encoder_blocks.append(
+                EncoderBlock(
+                    num_inner_features * prev_multiplier if prev_multiplier is not None else num_inner_features,
+                    num_inner_features * multiplier,
+                    num_time_embedding_dims=num_inner_features,
+                    num_rdb_growth_features=num_rdb_growth_features,
+                    num_rdb_blocks=num_rdb_blocks,
+                    num_rdb_conv_blocks=num_rdb_conv_blocks,
+                    self_attention=attention_layers[block_index],
+                    num_attention_heads=num_attention_heads,
+                    num_groups=num_groups,
+                    kernel_size= 3, stride = 1, padding=1
+                )
+            )
+
+        # Bottleneck block
+        self.bottleneck_block = BottleneckBlock(
+            num_inner_features * feature_multipliers[-1],
+            num_time_embedding_dims=num_inner_features,
+            num_rdb_growth_features=num_rdb_growth_features,
+            num_rdb_blocks=num_rdb_blocks,
+            num_rdb_conv_blocks=num_rdb_conv_blocks,
+            self_attention=True,
+            num_attention_heads=num_attention_heads,
+            num_groups=num_groups,
+            kernel_size=3, stride=1, padding=1
+        )
+
+        # Decoder blocks for expanding/upsampling path
+        self.decoder_blocks = nn.ModuleList()
+
+        # Get reversed feature multipliers and attention layers
+        reversed_feature_multipliers = list(reversed(feature_multipliers))
+        reversed_attention_layers = list(reversed(attention_layers))
+
+        for block_index in range(len(reversed_feature_multipliers)):
+            # Determine the feature multipliers for current and previous layers
+            multiplier = reversed_feature_multipliers[block_index]
+            prev_multiplier = reversed_feature_multipliers[block_index - 1] if block_index != 0 else None
+
+            self.decoder_blocks.append(
+                DecoderBlock(
+                    num_inner_features * multiplier + (num_inner_features * prev_multiplier if prev_multiplier is not None else num_inner_features * multiplier),
+                    num_inner_features * multiplier,
+                    num_time_embedding_dims=num_inner_features,
+                    num_rdb_growth_features=num_rdb_growth_features,
+                    num_rdb_blocks=num_rdb_blocks,
+                    num_rdb_conv_blocks=num_rdb_conv_blocks,
+                    self_attention=reversed_attention_layers[block_index],
+                    num_attention_heads=num_attention_heads,
+                    num_groups=num_groups,
+                    kernel_size= 3, stride = 1, padding=1
+                )
+            )
+
+        # Output Block
+        self.output = nn.Sequential(
+            ConvolutionalBlock(
+                num_inner_features + num_inner_features * reversed_feature_multipliers[-1],
+                num_inner_features,
+                num_groups=num_groups,
+                activation=True,
+                max_pool=False,
+                kernel_size=3, stride=1, padding=1
+            ),
+            ConvolutionalBlock(
+                num_inner_features,
+                out_channels,
+                num_groups=0,
+                activation=False,
+                max_pool=False,
+                kernel_size=1, stride=1, padding=0
+            )
+        )
+
+    def initialize_weights(self, scale=1.0):
+        for module in self.modules():
+            if isinstance(module, (nn.Conv3d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight.data)
+                module.weight.data *= scale
+                if module.bias is not None:
+                    nn.init.constant_(module.bias.data, 0)
+            elif isinstance(module, nn.GroupNorm):
+                nn.init.constant_(module.weight.data, 1)
+                nn.init.constant_(module.bias.data, 0)
+
+    def forward(self, x, x_cond, timestep, x_lr):
+        # Compute timestep embedding using sinusoidal positional encoding
+        t_cond = self.time_positional_encoding(timestep)
+
+        # Apply multilayer perceptron
+        t_cond = self.time_mlp(t_cond)
+
+        # Upscale conditioning variable
+        x_cond_up = self.upsample_cond(x_cond)
+
+        # Upscale raw lr input
+        x_lr_up = self.upsample_raw_cond(x_lr)
+
+        # Apply input layer transformation
+        x = self.input(x)
+
+        # Add conditioning variable
+        x = x + x_cond_up
+
+        # Exploit raw lr input as condition
+        if self.upsample_raw_cond:
+            x = x + x_lr_up
+
+        out = skip_connection = x
+        skip_connections = []
+
+        # Contracting Path
+        for encoder_block in self.encoder_blocks:
+            out = encoder_block(out, t_cond)
+
+            skip_connections.append(out)
+
+        # Bottleneck
+        out = self.bottleneck_block(out, t_cond)
+
+        # Expanding Path
+        for encoder_block_out, decoder_block in zip(reversed(skip_connections), self.decoder_blocks):
+            out = torch.cat([out, encoder_block_out])
+            out = decoder_block(out, t_cond)
+
+        # Concat skip-connection and apply output layer
+        out = torch.cat([out, skip_connection], dim=1)
+        out = self.output(out)
+
+        return out
+
+
+class GaussianDiffusion(nn.Module):
+    def __init__(self, num_steps=1000, beta_schedule='COSINE', residual_prediction=True, condition_encoding=True, scale_factor=2, **kwargs):
         super().__init__()
 
         self.num_steps = num_steps
-        self.betas = self.compute_betas_schedule(beta_schedule, **kwargs)
+        self.betas = self.compute_beta_schedule(beta_schedule=beta_schedule, num_steps=num_steps, **kwargs)
         self.alphas = 1.0 - self.betas
         self.alphas_cum_prod = torch.cumprod(self.alphas, dim=0)
         self.residual_prediction = residual_prediction
+        self.condition_encoding = condition_encoding
         self.scale_factor = scale_factor
 
-    def compute_betas_schedule(self, beta_schedule='COSINE', beta_offset=8e-3, beta_max=9.99e-1, beta_start=1e-4, beta_end=2e-2):
-        if beta_schedule == 'LINEAR':
-            return torch.linspace(start=beta_start, end=beta_end, steps=self.num_steps)
-        elif beta_schedule == 'COSINE':
-            num_steps = self.num_steps + 1
-            steps = torch.linspace(start=0, end=num_steps, steps=num_steps)
-            cosine_function = torch.cos((steps / num_steps + beta_offset) / (1 + beta_offset) * (torch.pi / 2)) ** 2
-            alphas_cum_prod = cosine_function / cosine_function[0]
-            betas = 1 - (alphas_cum_prod[1:] / alphas_cum_prod[:-1])
+    @staticmethod
+    def linear_beta_schedule(num_steps=1000, beta_start=1e-4, beta_end=2e-2):
+        """
+        Linear schedule, proposed in original DDPM paper (https://proceedings.neurips.cc/paper/2020/file/4c5bcfec8584af0d967f1ab10179ca4b-Paper.pdf)
+        """
 
-            return torch.clamp(betas, min=0.0, max=beta_max)
+        return torch.linspace(start=beta_start, end=beta_end, steps=num_steps)
+
+    @staticmethod
+    def cosine_beta_schedule(num_steps=1000, beta_offset=8e-3, beta_min=0.0, beta_max=9.99e-1):
+        """
+        Cosine schedule, proposed in improved DDPM paper (https://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf)
+        """
+
+        steps = torch.linspace(start=0, end=num_steps, steps=(num_steps + 1))
+        cosine_function = torch.cos((steps / num_steps + beta_offset) / (1 + beta_offset) * (torch.pi / 2)) ** 2
+        alphas_cum_prod = cosine_function / cosine_function[0]
+        betas = 1 - (alphas_cum_prod[1:] / alphas_cum_prod[:-1])
+
+        return torch.clip(betas, min=beta_min, max=beta_max)
+
+    @staticmethod
+    def sigmoid_beta_schedule(num_steps=1000, start=-3, end=3, tau=1, beta_min=0.0, beta_max=9.99e-1):
+        """
+        Sigmoid schedule, proposed in improved DDPM paper (https://arxiv.org/pdf/2212.11972.pdf)
+        """
+
+        steps = torch.linspace(start=0, end=num_steps, steps=(num_steps + 1))
+        v_start = torch.tensor(start / tau).sigmoid()
+        v_end = torch.tensor(end / tau).sigmoid()
+        sigmoid_function = (-(((steps / num_steps) * (end - start) + start) / tau).sigmoid() + v_end) / (v_end - v_start)
+        alphas_cum_prod = sigmoid_function / sigmoid_function[0]
+        betas = 1 - (alphas_cum_prod[1:] / alphas_cum_prod[:-1])
+
+        return torch.clip(betas, min=beta_min, max=beta_max)
+
+
+    def compute_beta_schedule(self, beta_schedule='COSINE', num_steps=1000, **kwargs):
+        if beta_schedule == 'LINEAR':
+            return self.linear_beta_schedule(num_steps=num_steps, **kwargs)
+        elif beta_schedule == 'COSINE':
+            return self.cosine_beta_schedule(num_steps=num_steps, **kwargs)
         else:
             raise NotImplementedError(f'Beta schedule {beta_schedule} not implemented.')
 
-    def compute_volume_at_timestep(self, x_0, timestep):
-        # Get number of volume dimensions
-        num_dims = x_0.dim()
+    def compute_volume_at_timestep_given_initial(self, x_0, timestep):
+        # Count dimension mismatch between volume and timestep
+        num_diff_dims = x_0.dim() - timestep.dim()
 
-        # Reshape to match volume dimensions
-        alpha_cum_prod = self.alphas_cum_prod[timestep].view(*([1] * num_dims))
+        # Compute alpha cumulative product at given timestep and match volume dimensions
+        alpha_cum_prod_t = self.alphas_cum_prod[timestep].view(*timestep.shape, *([1] * num_diff_dims))
 
         # Compute random noise
         eps = torch.rand_like(x_0)
 
-        return torch.sqrt(alpha_cum_prod) * x_0 + torch.sqrt(1 - alpha_cum_prod) * eps
+        return torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps
 
-    def compute_volume_at_next_timestep(self, x_t):
-        pass
+    def compute_volume_at_next_timestep_given_prev(self, x_t_m1, timestep):
+        # Count dimension mismatch between volume and timestep
+        num_diff_dims = x_t_m1.dim() - timestep.dim()
 
+        # Compute beta at given timestep and match volume dimensions
+        beta_t = self.betas[timestep].view(*timestep.shape, *([1] * num_diff_dims))
 
+        # Compute random noise
+        eps_t_m1 = torch.rand_like(x_t_m1)
 
+        return torch.sqrt(1 - beta_t) * x_t_m1 + torch.sqrt(beta_t) * eps_t_m1, eps_t_m1
 
+    def sample_timesteps(self, num_samples):
+        return torch.randint(low=0, high=self.num_steps, size=(num_samples,), dtype=torch.long)
 
+    @torch.no_grad()
+    def sample(self, x_lr, noise_predictor, lr_encoder=None, noise_predictor_inferer=None, lr_encoder_inferer=None):
+        # Set the model to evaluation mode
+        noise_predictor.eval()
+        lr_encoder.eval() if lr_encoder else None
 
+        # Get number of samples (batch size)
+        num_samples = x_lr.shape[0]
 
+        # Upsample volume
+        x_lr_up = upsample(x_lr, self.scale_factor)
 
+        # Prepare conditioning variable
+        if self.condition_encoding:
+            _, x_cond = lr_encoder_inferer(inputs=x_lr, network=lr_encoder) if lr_encoder_inferer else lr_encoder(x_lr)
+        else:
+            x_cond = x_lr
 
+        # Compute random noise
+        x_t = torch.rand_like(x_lr_up)
 
+        for timestep in reversed(range(0, self.num_steps)):
+            # Adapt timestep for batch processing
+            t = torch.full((num_samples,), timestep, dtype=torch.long)
 
+            # Predict noise
+            noise_pred = noise_predictor_inferer(inputs=x_t, network=noise_predictor, x_cond=x_cond, timestep=t) if noise_predictor_inferer else noise_predictor(x_t, x_cond, t)
 
+            # Compute diffusion parameters
+            beta_t = self.betas[timestep]
+            alpha_t = self.alphas[timestep]
+            alpha_cum_prod_t = self.alphas_cum_prod[timestep]
 
+            # Compute random noise
+            noise = torch.rand_like(x_lr_up) if timestep > 0 else torch.zeros_like(x_lr_up)
 
+            x_t = (1 / torch.sqrt(alpha_t)) * (x_t - (beta_t / (torch.sqrt(1 - alpha_cum_prod_t))) * noise_pred) + torch.sqrt(beta_t) * noise
 
+            # TODO check this https://github.com/mattroz/diffusion-ddpm/blob/main/src/scheduler/ddpm.py... temos bem feito!!! checkar paper SRDiff
+
+        return x_t + x_lr_up if self.residual_prediction else x_t
