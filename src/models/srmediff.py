@@ -12,7 +12,7 @@ class SinusoidalPositionalEncoding(nn.Module):
 
         self.num_embedding_dims = num_embedding_dims
 
-    def forward(self, timestep):
+    def forward(self, position):
         # Get indexes from even embedding dimensions
         even_indexes = torch.arange(0, self.num_embedding_dims, 2)
 
@@ -20,9 +20,9 @@ class SinusoidalPositionalEncoding(nn.Module):
         log_term = torch.tensor(1e4).log() / self.num_embedding_dims
         div_term = torch.exp(even_indexes * -log_term)
 
-        timestep = timestep.unsqueeze(-1)
-        sin_emb = torch.sin(timestep * div_term)
-        cos_emb = torch.cos(timestep * div_term)
+        position = position.unsqueeze(-1)
+        sin_emb = torch.sin(position * div_term)
+        cos_emb = torch.cos(position * div_term)
 
         # Interleave sine and cosine embeddings
         embedding = torch.stack([sin_emb, cos_emb], dim=-1).view(-1, 2 * ((self.num_embedding_dims + 1) // 2))
@@ -116,7 +116,6 @@ class ResidualDenseBlock(nn.Module):
         # Skip connection Layer
         self.residual_conv = nn.Conv3d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
 
-
     def forward(self, x, t_cond):
         # Apply time embedding projection
         t_cond = self.time_proj(t_cond)
@@ -155,7 +154,6 @@ class MultiHeadAttention(nn.Module):
 
         # Linear projection for the output after head concatenation
         self.output_proj = nn.Linear(num_embedding_dims, num_embedding_dims)
-
 
     def forward(self, x):
         # Get linear projections of queries (Q), keys (K), and values (V)
@@ -202,7 +200,6 @@ class SelfAttentionBlock(nn.Module):
 
         # Group Normalization Layer
         self.gn = nn.GroupNorm(num_groups, in_channels) if num_groups > 0 else nn.Identity()
-
 
     def forward(self, x):
         skip_connection = x
@@ -373,7 +370,7 @@ class BottleneckBlock(nn.Module):
 
 
 class NoisePredictor(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rdb_blocks=2, num_rdb_conv_blocks=5, num_rdb_growth_features=32, attention_layers=((True,) * 4), num_attention_heads=8, num_groups=32, scale_factor=2, raw_lr_condition=False):
+    def __init__(self, in_channels=1, out_channels=1, cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rdb_blocks=2, num_rdb_conv_blocks=5, num_rdb_growth_features=32, attention_layers=((True,) * 4), num_attention_heads=8, num_groups=32, scale_factor=2):
         super().__init__()
         assert len(feature_multipliers) == len(attention_layers), f'Array size of attention layers ({len(attention_layers)}) must match array size of feature multipliers ({len(feature_multipliers)})'
 
@@ -396,16 +393,6 @@ class NoisePredictor(nn.Module):
             activation=False,
             kernel_size=3, stride=1, padding=1
         ) if scale_factor > 1 or cond_features != num_inner_features else nn.Identity()
-
-        # Upsample/Projection block for raw condition
-        self.upsample_raw_cond = UpsampleBlock(
-            in_channels,
-            num_inner_features,
-            scale_factor=scale_factor,
-            mode='trilinear',
-            activation=False,
-            kernel_size=3, stride=1, padding=1
-        ) if (scale_factor > 1 or in_channels != num_inner_features) and raw_lr_condition else None
 
         # Input Layer
         self.input = ConvolutionalBlock(
@@ -436,7 +423,7 @@ class NoisePredictor(nn.Module):
                     self_attention=attention_layers[block_index],
                     num_attention_heads=num_attention_heads,
                     num_groups=num_groups,
-                    kernel_size= 3, stride = 1, padding=1
+                    kernel_size=3, stride=1, padding=1
                 )
             )
 
@@ -476,7 +463,7 @@ class NoisePredictor(nn.Module):
                     self_attention=reversed_attention_layers[block_index],
                     num_attention_heads=num_attention_heads,
                     num_groups=num_groups,
-                    kernel_size= 3, stride = 1, padding=1
+                    kernel_size=3, stride=1, padding=1
                 )
             )
 
@@ -511,7 +498,7 @@ class NoisePredictor(nn.Module):
                 nn.init.constant_(module.weight.data, 1)
                 nn.init.constant_(module.bias.data, 0)
 
-    def forward(self, x, x_cond, timestep, x_lr):
+    def forward(self, x, x_cond, timestep):
         # Compute timestep embedding using sinusoidal positional encoding
         t_cond = self.time_positional_encoding(timestep)
 
@@ -521,18 +508,11 @@ class NoisePredictor(nn.Module):
         # Upscale conditioning variable
         x_cond_up = self.upsample_cond(x_cond)
 
-        # Upscale raw lr input
-        x_lr_up = self.upsample_raw_cond(x_lr)
-
         # Apply input layer transformation
         x = self.input(x)
 
         # Add conditioning variable
         x = x + x_cond_up
-
-        # Exploit raw lr input as condition
-        if self.upsample_raw_cond:
-            x = x + x_lr_up
 
         out = skip_connection = x
         skip_connections = []
@@ -559,11 +539,11 @@ class NoisePredictor(nn.Module):
 
 
 class GaussianDiffusion(nn.Module):
-    def __init__(self, num_steps=1000, beta_schedule='COSINE', residual_prediction=True, condition_encoding=True, scale_factor=2, **kwargs):
+    def __init__(self, num_timesteps=1000, beta_schedule='COSINE', residual_prediction=True, condition_encoding=True, scale_factor=2, **kwargs):
         super().__init__()
 
-        self.num_steps = num_steps
-        self.betas = self.compute_beta_schedule(beta_schedule=beta_schedule, num_steps=num_steps, **kwargs)
+        self.num_timesteps = num_timesteps
+        self.betas = self.compute_beta_schedule(beta_schedule=beta_schedule, num_timesteps=num_timesteps, **kwargs)
         self.alphas = 1.0 - self.betas
         self.alphas_cum_prod = torch.cumprod(self.alphas, dim=0)
         self.residual_prediction = residual_prediction
@@ -571,76 +551,144 @@ class GaussianDiffusion(nn.Module):
         self.scale_factor = scale_factor
 
     @staticmethod
-    def linear_beta_schedule(num_steps=1000, beta_start=1e-4, beta_end=2e-2):
+    def linear_beta_schedule(num_timesteps=1000, beta_start=1e-4, beta_end=2e-2):
         """
         Linear schedule, proposed in original DDPM paper (https://proceedings.neurips.cc/paper/2020/file/4c5bcfec8584af0d967f1ab10179ca4b-Paper.pdf)
         """
 
-        return torch.linspace(start=beta_start, end=beta_end, steps=num_steps)
+        return torch.linspace(start=beta_start, end=beta_end, steps=num_timesteps)
 
     @staticmethod
-    def cosine_beta_schedule(num_steps=1000, beta_offset=8e-3, beta_min=0.0, beta_max=9.99e-1):
+    def cosine_beta_schedule(num_timesteps=1000, beta_offset=8e-3, beta_min=0.0, beta_max=9.99e-1):
         """
         Cosine schedule, proposed in improved DDPM paper (https://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf)
         """
 
-        steps = torch.linspace(start=0, end=num_steps, steps=(num_steps + 1))
-        cosine_function = torch.cos((steps / num_steps + beta_offset) / (1 + beta_offset) * (torch.pi / 2)) ** 2
+        steps = torch.linspace(start=0, end=num_timesteps, steps=(num_timesteps + 1))
+        cosine_function = torch.cos((steps / num_timesteps + beta_offset) / (1 + beta_offset) * (torch.pi / 2)) ** 2
         alphas_cum_prod = cosine_function / cosine_function[0]
         betas = 1 - (alphas_cum_prod[1:] / alphas_cum_prod[:-1])
 
         return torch.clip(betas, min=beta_min, max=beta_max)
 
     @staticmethod
-    def sigmoid_beta_schedule(num_steps=1000, start=-3, end=3, tau=1, beta_min=0.0, beta_max=9.99e-1):
+    def sigmoid_beta_schedule(num_timesteps=1000, start=-3, end=3, tau=1, beta_min=0.0, beta_max=9.99e-1):
         """
         Sigmoid schedule, proposed in improved DDPM paper (https://arxiv.org/pdf/2212.11972.pdf)
         """
 
-        steps = torch.linspace(start=0, end=num_steps, steps=(num_steps + 1))
+        steps = torch.linspace(start=0, end=num_timesteps, steps=(num_timesteps + 1))
         v_start = torch.tensor(start / tau).sigmoid()
         v_end = torch.tensor(end / tau).sigmoid()
-        sigmoid_function = (-(((steps / num_steps) * (end - start) + start) / tau).sigmoid() + v_end) / (v_end - v_start)
+        sigmoid_function = (-(((steps / num_timesteps) * (end - start) + start) / tau).sigmoid() + v_end) / (v_end - v_start)
         alphas_cum_prod = sigmoid_function / sigmoid_function[0]
         betas = 1 - (alphas_cum_prod[1:] / alphas_cum_prod[:-1])
 
         return torch.clip(betas, min=beta_min, max=beta_max)
 
-
-    def compute_beta_schedule(self, beta_schedule='COSINE', num_steps=1000, **kwargs):
+    def compute_beta_schedule(self, beta_schedule='COSINE', num_timesteps=1000, **kwargs):
         if beta_schedule == 'LINEAR':
-            return self.linear_beta_schedule(num_steps=num_steps, **kwargs)
+            return self.linear_beta_schedule(num_timesteps=num_timesteps, **kwargs)
         elif beta_schedule == 'COSINE':
-            return self.cosine_beta_schedule(num_steps=num_steps, **kwargs)
+            return self.cosine_beta_schedule(num_timesteps=num_timesteps, **kwargs)
+        elif beta_schedule == 'SIGMOID':
+            return self.sigmoid_beta_schedule(num_timesteps=num_timesteps, **kwargs)
         else:
             raise NotImplementedError(f'Beta schedule {beta_schedule} not implemented.')
 
     def compute_volume_at_timestep_given_initial(self, x_0, timestep):
+        assert torch.all((timestep >= 0) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 0 and (b) less than or equal to ({self.num_timesteps})'
+
+        # Define condition to check if timestep is greater than 0
+        condition = timestep > 0
+
+        # Get timestep index, which equals to -1 when timestep is 0 (initial), thus index errors are absent
+        timestep_index = timestep - 1
+
         # Count dimension mismatch between volume and timestep
         num_diff_dims = x_0.dim() - timestep.dim()
 
         # Compute alpha cumulative product at given timestep and match volume dimensions
-        alpha_cum_prod_t = self.alphas_cum_prod[timestep].view(*timestep.shape, *([1] * num_diff_dims))
+        alpha_cum_prod_t = torch.where(condition, self.alphas_cum_prod[timestep_index], float('nan')).view(*timestep.shape, *([1] * num_diff_dims))
+
+        condition = condition.view(*timestep.shape, *([1] * num_diff_dims))
 
         # Compute random noise
         eps = torch.rand_like(x_0)
 
-        return torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps
+        x_t = torch.where(condition, torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps, x_0)
+
+        return x_t
 
     def compute_volume_at_next_timestep_given_prev(self, x_t_m1, timestep):
+        assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
+
+        # Get timestep index
+        timestep_index = timestep - 1
+
         # Count dimension mismatch between volume and timestep
         num_diff_dims = x_t_m1.dim() - timestep.dim()
 
         # Compute beta at given timestep and match volume dimensions
-        beta_t = self.betas[timestep].view(*timestep.shape, *([1] * num_diff_dims))
+        beta_t = self.betas[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
 
         # Compute random noise
-        eps_t_m1 = torch.rand_like(x_t_m1)
+        eps_t = torch.rand_like(x_t_m1)
 
-        return torch.sqrt(1 - beta_t) * x_t_m1 + torch.sqrt(beta_t) * eps_t_m1, eps_t_m1
+        x_t = torch.sqrt(1 - beta_t) * x_t_m1 + torch.sqrt(beta_t) * eps_t
+
+        return x_t, eps_t
+
+    def compute_volume_at_prev_timestep_given_current(self, x_t, eps_theta, timestep):
+        assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
+
+        # Define condition to check if timestep is greater than 1
+        condition = timestep > 1
+
+        # Get timestep index
+        timestep_index = timestep - 1
+
+        # Count dimension mismatch between volume and timestep
+        num_diff_dims = x_t.dim() - timestep.dim()
+
+        # Compute diffusion parameters and match volume dimensions
+        beta_t = self.betas[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
+        alpha_t = self.alphas[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
+        alpha_cum_prod_t = self.alphas_cum_prod[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
+
+        condition = condition.view(*timestep.shape, *([1] * num_diff_dims))
+
+        # Compute random noise
+        eps = torch.where(condition, torch.rand_like(x_t), torch.zeros_like(x_t))
+
+        x_t_m1 = (1 / torch.sqrt(alpha_t)) * (x_t - (beta_t / (torch.sqrt(1 - alpha_cum_prod_t))) * eps_theta) + torch.sqrt(beta_t) * eps
+
+        return x_t_m1
 
     def sample_timesteps(self, num_samples):
-        return torch.randint(low=0, high=self.num_steps, size=(num_samples,), dtype=torch.long)
+        return torch.randint(low=1, high=self.num_timesteps + 1, size=(num_samples,), dtype=torch.long)
+
+    def forward_diffusion(self, x_0, timestep):
+        assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
+
+        # Get second to last timestep (timestep_m1)
+        timestep_m1 = timestep - 1
+
+        # Compute second to last timestep volume
+        x_t_m1 = self.compute_volume_at_timestep_given_initial(x_0, timestep_m1)
+
+        # Compute last timestep volume
+        x_t, eps_t = self.compute_volume_at_next_timestep_given_prev(x_t_m1, timestep)
+
+        return x_t, x_t_m1, eps_t
+
+    def reverse_diffusion(self, x_t, eps_theta, timestep):
+        assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
+
+        # Predict previous timestep volume
+        x_t_m1_pred = self.compute_volume_at_prev_timestep_given_current(x_t, eps_theta, timestep)
+
+        return x_t_m1_pred
 
     @torch.no_grad()
     def sample(self, x_lr, noise_predictor, lr_encoder=None, noise_predictor_inferer=None, lr_encoder_inferer=None):
@@ -663,23 +711,14 @@ class GaussianDiffusion(nn.Module):
         # Compute random noise
         x_t = torch.rand_like(x_lr_up)
 
-        for timestep in reversed(range(0, self.num_steps)):
+        for timestep in reversed(range(1, self.num_timesteps + 1)):
             # Adapt timestep for batch processing
-            t = torch.full((num_samples,), timestep, dtype=torch.long)
+            timestep = torch.full((num_samples,), timestep, dtype=torch.long)
 
             # Predict noise
-            noise_pred = noise_predictor_inferer(inputs=x_t, network=noise_predictor, x_cond=x_cond, timestep=t) if noise_predictor_inferer else noise_predictor(x_t, x_cond, t)
+            eps_theta = noise_predictor_inferer(inputs=x_t, network=noise_predictor, x_cond=x_cond, timestep=timestep) if noise_predictor_inferer else noise_predictor(x_t, x_cond, timestep)
 
-            # Compute diffusion parameters
-            beta_t = self.betas[timestep]
-            alpha_t = self.alphas[timestep]
-            alpha_cum_prod_t = self.alphas_cum_prod[timestep]
-
-            # Compute random noise
-            noise = torch.rand_like(x_lr_up) if timestep > 0 else torch.zeros_like(x_lr_up)
-
-            x_t = (1 / torch.sqrt(alpha_t)) * (x_t - (beta_t / (torch.sqrt(1 - alpha_cum_prod_t))) * noise_pred) + torch.sqrt(beta_t) * noise
-
-            # TODO check this https://github.com/mattroz/diffusion-ddpm/blob/main/src/scheduler/ddpm.py... temos bem feito!!! checkar paper SRDiff
+            # Reverse diffusion to compute volume at previous timestep
+            x_t = self.reverse_diffusion(x_t, eps_theta, timestep)
 
         return x_t + x_lr_up if self.residual_prediction else x_t

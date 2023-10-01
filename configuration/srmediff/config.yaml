@@ -20,7 +20,7 @@ DATA:
 #=================================================================================================================#
 
 MODEL:
-  NUM_STEPS: 1000
+  NUM_TIMESTEPS: 1000
   BETA_SCHEDULE: 'COSINE'
   RESIDUAL_PREDICTION: True
   CONDITION_ENCODING: True
@@ -36,7 +36,6 @@ MODEL:
     NUM_GROUPS: 32
     ATTENTION_LAYERS: [False, False, True, True]
     NUM_ATTENTION_HEADS: 8
-    RAW_LR_CONDITION: False
     PRE_TRAINED_PATH:
   LR_ENCODER:
     PRE_TRAINED_PATH:
