@@ -613,14 +613,14 @@ class GaussianDiffusion(nn.Module):
 
         condition = condition.view(*timestep.shape, *([1] * num_diff_dims))
 
-        # Compute random noise
+        # Sample random noise
         eps = torch.rand_like(x_0)
 
         x_t = torch.where(condition, torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps, x_0)
 
-        return x_t
+        return x_t, eps
 
-    def compute_volume_at_next_timestep_given_prev(self, x_t_m1, timestep):
+    def compute_volume_at_next_timestep_given_prev(self, x_t_m1, eps, timestep):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
 
         # Get timestep index
@@ -632,12 +632,9 @@ class GaussianDiffusion(nn.Module):
         # Compute beta at given timestep and match volume dimensions
         beta_t = self.betas[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
 
-        # Compute random noise
-        eps_t = torch.rand_like(x_t_m1)
+        x_t = torch.sqrt(1 - beta_t) * x_t_m1 + torch.sqrt(beta_t) * eps
 
-        x_t = torch.sqrt(1 - beta_t) * x_t_m1 + torch.sqrt(beta_t) * eps_t
-
-        return x_t, eps_t
+        return x_t
 
     def compute_volume_at_prev_timestep_given_current(self, x_t, eps_theta, timestep):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
@@ -658,10 +655,10 @@ class GaussianDiffusion(nn.Module):
 
         condition = condition.view(*timestep.shape, *([1] * num_diff_dims))
 
-        # Compute random noise
-        eps = torch.where(condition, torch.rand_like(x_t), torch.zeros_like(x_t))
+        # Sample random noise
+        z = torch.where(condition, torch.rand_like(x_t), torch.zeros_like(x_t))
 
-        x_t_m1 = (1 / torch.sqrt(alpha_t)) * (x_t - (beta_t / (torch.sqrt(1 - alpha_cum_prod_t))) * eps_theta) + torch.sqrt(beta_t) * eps
+        x_t_m1 = (1 / torch.sqrt(alpha_t)) * (x_t - (beta_t / (torch.sqrt(1 - alpha_cum_prod_t))) * eps_theta) + torch.sqrt(beta_t) * z
 
         return x_t_m1
 
@@ -675,12 +672,12 @@ class GaussianDiffusion(nn.Module):
         timestep_m1 = timestep - 1
 
         # Compute second to last timestep volume
-        x_t_m1 = self.compute_volume_at_timestep_given_initial(x_0, timestep_m1)
+        x_t_m1, eps = self.compute_volume_at_timestep_given_initial(x_0, timestep_m1)
 
         # Compute last timestep volume
-        x_t, eps_t = self.compute_volume_at_next_timestep_given_prev(x_t_m1, timestep)
+        x_t = self.compute_volume_at_next_timestep_given_prev(x_t_m1, eps, timestep)
 
-        return x_t, x_t_m1, eps_t
+        return x_t, x_t_m1, eps
 
     def reverse_diffusion(self, x_t, eps_theta, timestep):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
@@ -716,9 +713,9 @@ class GaussianDiffusion(nn.Module):
             timestep = torch.full((num_samples,), timestep, dtype=torch.long)
 
             # Predict noise
-            eps_theta = noise_predictor_inferer(inputs=x_t, network=noise_predictor, x_cond=x_cond, timestep=timestep) if noise_predictor_inferer else noise_predictor(x_t, x_cond, timestep)
+            eps_pred = noise_predictor_inferer(inputs=x_t, network=noise_predictor, x_cond=x_cond, timestep=timestep) if noise_predictor_inferer else noise_predictor(x_t, x_cond, timestep)
 
             # Reverse diffusion to compute volume at previous timestep
-            x_t = self.reverse_diffusion(x_t, eps_theta, timestep)
+            x_t = self.reverse_diffusion(x_t, eps_pred, timestep)
 
         return x_t + x_lr_up if self.residual_prediction else x_t
