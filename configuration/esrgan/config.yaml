@@ -29,14 +29,13 @@ MODEL:
     NUM_RDB_BLOCKS: 3
     NUM_RDB_CONV_BLOCKS: 5
     SCALE_FACTOR: 2
-    PRE_TRAINED_PATH:   # Only Generator Weights
+    PRE_TRAINED_PATH:
   DISCRIMINATOR:
     IN_CHANNEL: 1
     NUM_FEATURES: 64
     NUM_CONV_BLOCKS: 8
     CONV_BLOCKS_OUTPUT_SIZE: 6
-    PRE_TRAINED_PATH:   # Only Discriminator Weights
-  PRE_TRAINED_PATH:     # Whole Network Weights
+    PRE_TRAINED_PATH:
 
 
 #=================================================================================================================#

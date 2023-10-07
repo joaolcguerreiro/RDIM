@@ -95,26 +95,18 @@ def main():
     content_criterion = nn.L1Loss().to(device)
 
     # Load pre-trained model
-    if config['MODEL']['PRE_TRAINED_PATH']:
+    if config['MODEL']['GENERATOR']['PRE_TRAINED_PATH']:
         # Load the pre-trained checkpoint
-        checkpoint = torch.load(config['MODEL']['PRE_TRAINED_PATH'])
+        checkpoint = torch.load(config['MODEL']['GENERATOR']['PRE_TRAINED_PATH'])
 
-        # Initialize generator and discriminator weights
+        # Initialize generator weights
         generator.load_state_dict(checkpoint['generator_state_dict'])
+    if config['MODEL']['DISCRIMINATOR']['PRE_TRAINED_PATH']:
+        # Load the pre-trained checkpoint
+        checkpoint = torch.load(config['MODEL']['DISCRIMINATOR']['PRE_TRAINED_PATH'])
+
+        # Initialize discriminator weights
         discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
-    else:
-        if config['MODEL']['GENERATOR']['PRE_TRAINED_PATH']:
-            # Load the pre-trained checkpoint
-            checkpoint = torch.load(config['MODEL']['GENERATOR']['PRE_TRAINED_PATH'])
-
-            # Initialize generator weights
-            generator.load_state_dict(checkpoint['generator_state_dict'])
-        if config['MODEL']['DISCRIMINATOR']['PRE_TRAINED_PATH']:
-            # Load the pre-trained checkpoint
-            checkpoint = torch.load(config['MODEL']['DISCRIMINATOR']['PRE_TRAINED_PATH'])
-
-            # Initialize discriminator weights
-            discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
 
     # Define number of epochs and resume training if applicable
     if args.resume:
