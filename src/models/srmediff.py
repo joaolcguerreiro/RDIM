@@ -370,7 +370,7 @@ class BottleneckBlock(nn.Module):
 
 
 class NoisePredictor(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rdb_blocks=2, num_rdb_conv_blocks=5, num_rdb_growth_features=32, attention_layers=((True,) * 4), num_attention_heads=8, num_groups=32, scale_factor=2):
+    def __init__(self, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rdb_blocks=2, num_rdb_conv_blocks=5, num_rdb_growth_features=32, attention_layers=((True,) * 4), num_attention_heads=8, num_groups=32, scale_factor=2):
         super().__init__()
         assert len(feature_multipliers) == len(attention_layers), f'Array size of attention layers ({len(attention_layers)}) must match array size of feature multipliers ({len(feature_multipliers)})'
 
@@ -386,13 +386,13 @@ class NoisePredictor(nn.Module):
 
         # Upsample/Projection block for condition
         self.upsample_cond = UpsampleBlock(
-            cond_features,
+            num_cond_features,
             num_inner_features,
             scale_factor=scale_factor,
             mode='trilinear',
             activation=False,
             kernel_size=3, stride=1, padding=1
-        ) if scale_factor > 1 or cond_features != num_inner_features else nn.Identity()
+        ) if scale_factor > 1 or num_cond_features != num_inner_features else nn.Identity()
 
         # Input Layer
         self.input = ConvolutionalBlock(
@@ -574,7 +574,7 @@ class GaussianDiffusion(nn.Module):
     @staticmethod
     def sigmoid_beta_schedule(num_timesteps=1000, start=-3, end=3, tau=1, beta_min=0.0, beta_max=9.99e-1):
         """
-        Sigmoid schedule, proposed in improved DDPM paper (https://arxiv.org/pdf/2212.11972.pdf)
+        Sigmoid schedule, proposed in RINs paper (https://arxiv.org/pdf/2212.11972.pdf)
         """
 
         steps = torch.linspace(start=0, end=num_timesteps, steps=(num_timesteps + 1))
@@ -599,7 +599,7 @@ class GaussianDiffusion(nn.Module):
     def compute_volume_at_timestep(self, x_0, timestep):
         """
         Compute the volume at a specific timestep given the initial volume
-        Equation (9) in improved DDPM paper (https://arxiv.org/pdf/2212.11972.pdf)
+        Equation (9) in improved DDPM paper (https://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf)
         """
 
         assert torch.all((timestep >= 0) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 0 and (b) less than or equal to ({self.num_timesteps})'
@@ -628,6 +628,7 @@ class GaussianDiffusion(nn.Module):
     def compute_volume_at_next_timestep(self, x_t_m1, timestep):
         """
         Compute the volume at the next timestep given the volume at the previous timestep
+        Equation (2) in original DDPM paper (https://arxiv.org/pdf/2006.11239.pdf) with reparameterization trick
         """
 
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
@@ -651,6 +652,7 @@ class GaussianDiffusion(nn.Module):
     def compute_volume_at_prev_timestep(self, x_t, eps_t, timestep):
         """
         Compute the volume at the previous timestep given the volume at the precedent timestep
+        Line (4) in Sampling algorithm of original DDPM paper (https://arxiv.org/pdf/2006.11239.pdf)
         """
 
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
