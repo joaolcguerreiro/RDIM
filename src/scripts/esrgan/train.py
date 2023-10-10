@@ -45,10 +45,10 @@ def main():
         in_channels=config["MODEL"]["GENERATOR"]["IN_CHANNEL"],
         out_channels=config["MODEL"]["GENERATOR"]["OUT_CHANNEL"],
         num_features=config["MODEL"]["GENERATOR"]["NUM_FEATURES"],
-        num_growth_features=config["MODEL"]["GENERATOR"]["NUM_GROWTH_FEATURES"],
         num_rrdb_blocks=config["MODEL"]["GENERATOR"]["NUM_RRDB_BLOCKS"],
-        num_rdb_blocks=config["MODEL"]["GENERATOR"]["NUM_RDB_BLOCKS"],
-        num_rdb_conv_blocks=config["MODEL"]["GENERATOR"]["NUM_RDB_CONV_BLOCKS"],
+        num_rrdb_db_blocks=config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_BLOCKS"],
+        num_rrdb_db_conv_blocks=config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_CONV_BLOCKS"],
+        num_rrdb_db_growth_features=config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_GROWTH_FEATURES"],
         scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"],
     ).to(device)
 
@@ -94,7 +94,7 @@ def main():
     adversarial_criterion = nn.BCEWithLogitsLoss().to(device)
     content_criterion = nn.L1Loss().to(device)
 
-    # Load pre-trained model
+    # Load pre-trained models
     if config['MODEL']['GENERATOR']['PRE_TRAINED_PATH']:
         # Load the pre-trained checkpoint
         checkpoint = torch.load(config['MODEL']['GENERATOR']['PRE_TRAINED_PATH'])
@@ -340,10 +340,10 @@ def main():
                 'generator_in_channels': config["MODEL"]["GENERATOR"]["IN_CHANNEL"],
                 'generator_out_channels': config["MODEL"]["GENERATOR"]["OUT_CHANNEL"],
                 'generator_num_features': config["MODEL"]["GENERATOR"]["NUM_FEATURES"],
-                'generator_num_growth_features': config["MODEL"]["GENERATOR"]["NUM_GROWTH_FEATURES"],
                 'generator_num_rrdb_blocks': config["MODEL"]["GENERATOR"]["NUM_RRDB_BLOCKS"],
-                'generator_num_rdb_blocks': config["MODEL"]["GENERATOR"]["NUM_RDB_BLOCKS"],
-                'generator_num_rdb_conv_blocks': config["MODEL"]["GENERATOR"]["NUM_RDB_CONV_BLOCKS"],
+                'generator_num_rrdb_db_blocks': config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_BLOCKS"],
+                'generator_num_rrdb_db_conv_blocks': config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_CONV_BLOCKS"],
+                'generator_num_rrdb_db_growth_features': config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_GROWTH_FEATURES"],
                 'generator_scale_factor': config["MODEL"]["GENERATOR"]["SCALE_FACTOR"],
                 'generator_train_losses': generator_train_losses,
                 'generator_val_losses': generator_val_losses,

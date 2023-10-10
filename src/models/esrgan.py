@@ -44,7 +44,7 @@ class UpsampleBlock(nn.Module):
         return self.conv(self.upsample(x))
 
 
-class ResidualDenseBlock(nn.Module):
+class DenseBlock(nn.Module):
     def __init__(self, in_channels, num_growth_features, num_conv_blocks=5):
         super().__init__()
 
@@ -62,7 +62,7 @@ class ResidualDenseBlock(nn.Module):
             )
 
     def forward(self, x):
-        skip_connections = x
+        out = skip_connections = x
 
         for conv_block in self.conv_blocks:
             out = conv_block(skip_connections)
@@ -73,37 +73,37 @@ class ResidualDenseBlock(nn.Module):
 
 
 class ResidualInResidualDenseBlock(nn.Module):
-    def __init__(self, in_channels, num_growth_features, num_rdb_blocks=3, num_rdb_conv_blocks=5, beta=0.2):
+    def __init__(self, in_channels, num_db_growth_features, num_db_blocks=3, num_db_conv_blocks=5, beta=0.2):
         super().__init__()
 
         # Residual Scale Factor
         self.beta = beta
 
-        # Residual Dense Blocks
-        self.res_blocks = nn.ModuleList()
+        # Dense Blocks
+        self.dense_blocks = nn.ModuleList()
 
-        for _ in range(num_rdb_blocks):
-            self.res_blocks.append(
-                ResidualDenseBlock(
+        for _ in range(num_db_blocks):
+            self.dense_blocks.append(
+                DenseBlock(
                     in_channels,
-                    num_growth_features,
-                    num_rdb_conv_blocks
+                    num_growth_features=num_db_growth_features,
+                    num_conv_blocks=num_db_conv_blocks
                 )
             )
 
     def forward(self, x):
-        skip_connection = x
+        out = skip_connection = x
 
-        for res_block in self.res_blocks:
-            out = res_block(skip_connection)
+        for dense_block in self.dense_blocks:
+            dense_out = dense_block(out)
 
-            skip_connection = skip_connection + out * self.beta
+            out = out + dense_out * self.beta
 
-        return skip_connection * self.beta + x
+        return out * self.beta + skip_connection
 
 
 class Generator(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, num_features=64, num_growth_features=32, num_rrdb_blocks=23, num_rdb_blocks=3, num_rdb_conv_blocks=5, scale_factor=2):
+    def __init__(self, in_channels=1, out_channels=1, num_features=64, num_rrdb_blocks=23, num_rrdb_db_blocks=3, num_rrdb_db_conv_blocks=5, num_rrdb_db_growth_features=32, scale_factor=2):
         super().__init__()
 
         # Input Layer
@@ -119,9 +119,9 @@ class Generator(nn.Module):
         # Residual in Residual Dense Blocks
         self.res_in_res_blocks = nn.Sequential(*[ResidualInResidualDenseBlock(
             num_features,
-            num_growth_features,
-            num_rdb_blocks,
-            num_rdb_conv_blocks
+            num_db_growth_features=num_rrdb_db_growth_features,
+            num_db_blocks=num_rrdb_db_blocks,
+            num_db_conv_blocks=num_rrdb_db_conv_blocks
         ) for _ in range(num_rrdb_blocks)])
 
         # Convolutional Layer

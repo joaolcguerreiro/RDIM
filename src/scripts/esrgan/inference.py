@@ -36,10 +36,10 @@ def main():
         in_channels=checkpoint['generator_in_channels'],
         out_channels=checkpoint['generator_out_channels'],
         num_features=checkpoint['generator_num_features'],
-        num_growth_features=checkpoint['generator_num_growth_features'],
         num_rrdb_blocks=checkpoint['generator_num_rrdb_blocks'],
-        num_rdb_blocks=checkpoint['generator_num_rdb_blocks'],
-        num_rdb_conv_blocks=checkpoint['generator_num_rdb_conv_blocks'],
+        num_rrdb_db_blocks=checkpoint['generator_num_rrdb_db_blocks'],
+        num_rrdb_db_conv_blocks=checkpoint['generator_num_rrdb_db_conv_blocks'],
+        num_rrdb_db_growth_features=checkpoint['generator_num_rrdb_db_growth_features'],
         scale_factor=checkpoint['generator_scale_factor'],
     ).to(device)
 
