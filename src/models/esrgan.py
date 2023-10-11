@@ -98,7 +98,9 @@ class ResidualInResidualDenseBlock(nn.Module):
 
             out = out + dense_out * self.beta
 
-        return out * self.beta + skip_connection
+        out = out * self.beta + skip_connection
+
+        return out
 
 
 class Generator(nn.Module):
@@ -172,16 +174,27 @@ class Generator(nn.Module):
                 if module.bias is not None:
                     nn.init.constant_(module.bias.data, 0)
 
+    def extract_features(self, x):
+        out = skip_connection = self.input(x)
+
+        out = self.res_in_res_blocks(out)
+
+        features = self.conv(out) + skip_connection
+
+        return features
+
     def forward(self, x):
-        x = skip_connection = self.input(x)
+        out = skip_connection = self.input(x)
 
-        x = self.res_in_res_blocks(x)
+        out = self.res_in_res_blocks(out)
 
-        x = self.conv(x) + skip_connection
+        out = self.conv(out) + skip_connection
 
-        x = self.upsample_blocks(x)
+        out = self.upsample_blocks(out)
 
-        return self.output(x)
+        out = self.output(out)
+
+        return out
 
 
 class Discriminator(nn.Module):
@@ -218,10 +231,17 @@ class Discriminator(nn.Module):
                 nn.init.constant_(module.weight.data, 1)
                 nn.init.constant_(module.bias.data, 0)
 
-    def forward(self, x):
-        x = self.conv_blocks(x)
+    def extract_features(self, x):
+        features = self.conv_blocks(x)
 
-        return self.output(x)
+        return features
+
+    def forward(self, x):
+        out = self.conv_blocks(x)
+
+        out = self.output(out)
+
+        return out
 
 
 if __name__ == '__main__':
