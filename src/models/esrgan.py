@@ -24,28 +24,24 @@ class ConvolutionalBlock(nn.Module):
 
 
 class UpsampleBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, mode='nearest', activation=True, **kwargs):
+    def __init__(self, in_channels, out_channels, scale_factor=2, mode='nearest', activation=True, **kwargs):
         super().__init__()
 
         # Upsample Layer
-        self.upsample = nn.Upsample(scale_factor=2, mode=mode)
+        self.upsample = nn.Upsample(scale_factor=scale_factor, mode=mode)
 
-        # Convolutional Block
-        self.conv = ConvolutionalBlock(
-            in_channels,
-            out_channels,
-            batch_norm=False,
-            activation=activation,
-            max_pool=False,
-            **kwargs
-        )
+        # Convolutional Layer
+        self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
+
+        # Activation Function
+        self.act = nn.LeakyReLU(negative_slope=0.2) if activation else nn.Identity()
 
     def forward(self, x):
-        return self.conv(self.upsample(x))
+        return self.act(self.conv(self.upsample(x)))
 
 
 class DenseBlock(nn.Module):
-    def __init__(self, in_channels, num_growth_features, num_conv_blocks=5):
+    def __init__(self, in_channels, num_growth_features=32, num_conv_blocks=5, **kwargs):
         super().__init__()
 
         # Convolutional Blocks
@@ -56,8 +52,10 @@ class DenseBlock(nn.Module):
                 ConvolutionalBlock(
                     in_channels + block_index * num_growth_features,
                     num_growth_features if block_index != (num_conv_blocks - 1) else in_channels,
-                    batch_norm=False, activation=(True if block_index != (num_conv_blocks - 1) else False), max_pool=False,
-                    kernel_size=3, stride=1, padding=1
+                    batch_norm=False,
+                    activation=(True if block_index != (num_conv_blocks - 1) else False),
+                    max_pool=False,
+                    **kwargs
                 )
             )
 
@@ -73,7 +71,7 @@ class DenseBlock(nn.Module):
 
 
 class ResidualInResidualDenseBlock(nn.Module):
-    def __init__(self, in_channels, num_db_growth_features, num_db_blocks=3, num_db_conv_blocks=5, beta=0.2):
+    def __init__(self, in_channels, num_db_growth_features=32, num_db_blocks=3, num_db_conv_blocks=5, beta=0.2, **kwargs):
         super().__init__()
 
         # Residual Scale Factor
@@ -87,7 +85,8 @@ class ResidualInResidualDenseBlock(nn.Module):
                 DenseBlock(
                     in_channels,
                     num_growth_features=num_db_growth_features,
-                    num_conv_blocks=num_db_conv_blocks
+                    num_conv_blocks=num_db_conv_blocks,
+                    **kwargs
                 )
             )
 
@@ -121,7 +120,8 @@ class Generator(nn.Module):
             num_features,
             num_db_growth_features=num_rrdb_db_growth_features,
             num_db_blocks=num_rrdb_db_blocks,
-            num_db_conv_blocks=num_rrdb_db_conv_blocks
+            num_db_conv_blocks=num_rrdb_db_conv_blocks,
+            kernel_size=3, stride=1, padding=1
         ) for _ in range(num_rrdb_blocks)])
 
         # Convolutional Layer
@@ -134,10 +134,11 @@ class Generator(nn.Module):
             kernel_size=3, stride=1, padding=1
         )
 
-        # Upsampling Block
+        # Upsampling Blocks
         self.upsample_blocks = nn.Sequential(*[UpsampleBlock(
             num_features,
             num_features,
+            scale_factor=2,
             mode='nearest',
             activation=True,
             kernel_size=3, stride=1, padding=1
@@ -163,11 +164,13 @@ class Generator(nn.Module):
             )
         )
 
-        # Initialize weights
+    def initialize_weights(self, scale=1.0):
         for module in self.modules():
-            if isinstance(module, nn.Conv3d):
+            if isinstance(module, (nn.Conv3d, nn.Linear)):
                 nn.init.kaiming_normal_(module.weight.data)
-                module.weight.data *= 0.1
+                module.weight.data *= scale
+                if module.bias is not None:
+                    nn.init.constant_(module.bias.data, 0)
 
     def forward(self, x):
         x = skip_connection = self.input(x)
@@ -189,7 +192,9 @@ class Discriminator(nn.Module):
         self.conv_blocks = nn.Sequential(*[ConvolutionalBlock(
             num_features * 2 ** ((block_index - 1) // 2) if block_index != 0 else in_channels,
             num_features * 2 ** (block_index // 2),
-            batch_norm=(True if block_index != 0 else False), activation=True, max_pool=False,
+            batch_norm=(True if block_index != 0 else False),
+            activation=True,
+            max_pool=False,
             kernel_size=3, stride=(1 + block_index % 2), padding=1
         ) for block_index in range(num_conv_blocks)])
 
@@ -201,6 +206,17 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(negative_slope=0.2),
             nn.Linear(1024, 1)
         )
+
+    def initialize_weights(self, scale=1.0):
+        for module in self.modules():
+            if isinstance(module, (nn.Conv3d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight.data)
+                module.weight.data *= scale
+                if module.bias is not None:
+                    nn.init.constant_(module.bias.data, 0)
+            elif isinstance(module, nn.BatchNorm3d):
+                nn.init.constant_(module.weight.data, 1)
+                nn.init.constant_(module.bias.data, 0)
 
     def forward(self, x):
         x = self.conv_blocks(x)

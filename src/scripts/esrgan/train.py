@@ -59,6 +59,10 @@ def main():
         conv_blocks_output_size=config["MODEL"]["DISCRIMINATOR"]["CONV_BLOCKS_OUTPUT_SIZE"],
     ).to(device)
 
+    # Initialize weights
+    generator.initialize_weights(scale=0.1)
+    discriminator.initialize_weights()
+
     # Log Generator and Discriminator
     summary(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     draw_graph(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=3, expand_nested=True, filename='generator_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
