@@ -73,8 +73,8 @@ def main():
     print_divisor(width=0, last=True)
 
     # Define patch-based inferers
-    generator_inferer = SlidingWindowInferer(roi_size=args.lr_patch_size, overlap=0.25, mode='gaussian', cval=_min, sw_device=device, device=device)
-    discriminator_inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], args.lr_patch_size)), overlap=0.25, pad_value=_min, device=device), match_spatial_shape=False, device=device)
+    generator_inferer = SlidingWindowInferer(roi_size=args.lr_patch_size, overlap=0.25, mode='gaussian', sw_device=device, device=device)
+    discriminator_inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], args.lr_patch_size)), overlap=0.25, device=device), match_spatial_shape=False, device=device)
 
     # Define optimizers and schedulers
     generator_optimizer = optim.Adam(

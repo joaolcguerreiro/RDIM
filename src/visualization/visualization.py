@@ -77,7 +77,7 @@ def main():
         ).to(device)
 
         # Define patch-based inferer
-        generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', cval=_min, sw_device=device, device=device)
+        generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
 
         # Initialize generator weights
         generator.load_state_dict(checkpoint['generator_state_dict'])
