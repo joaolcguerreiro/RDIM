@@ -144,7 +144,7 @@ def main():
     print_divisor()
 
     for epoch in range(start_epoch, end_epoch):
-        # Set the model to train mode
+        # Set models to train mode
         generator.train()
         discriminator.train()
         generator_train_loss = 0.0
@@ -236,7 +236,7 @@ def main():
         logging.info(train_pbar)
 
         if args.val:
-            # Set the model to evaluation mode
+            # Set models to evaluation mode
             generator.eval()
             discriminator.eval()
             generator_val_loss = 0.0
@@ -349,6 +349,10 @@ def main():
                 'generator_num_rrdb_db_conv_blocks': config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_CONV_BLOCKS"],
                 'generator_num_rrdb_db_growth_features': config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_GROWTH_FEATURES"],
                 'generator_scale_factor': config["MODEL"]["GENERATOR"]["SCALE_FACTOR"],
+                'discriminator_in_channels': config["MODEL"]["DISCRIMINATOR"]["IN_CHANNEL"],
+                'discriminator_num_features': config["MODEL"]["DISCRIMINATOR"]["NUM_FEATURES"],
+                'discriminator_num_conv_blocks': config["MODEL"]["DISCRIMINATOR"]["NUM_CONV_BLOCKS"],
+                'discriminator_conv_blocks_output_size': config["MODEL"]["DISCRIMINATOR"]["CONV_BLOCKS_OUTPUT_SIZE"],
                 'generator_train_losses': generator_train_losses,
                 'generator_val_losses': generator_val_losses,
                 'discriminator_train_losses': discriminator_train_losses,
