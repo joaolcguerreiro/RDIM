@@ -35,6 +35,7 @@ class AdaptiveConditionalSlidingWindowInferer(Inferer):
             if the components of the `roi_size` are non-positive values, the transform will use the
             corresponding components of img size. For example, `roi_size=(32, -1)` will be adapted
             to `(32, 64)` if the second spatial dimension size of img is `64`.
+        scale_factor: the dimension ratio between inputs and conditions.
         sw_batch_size: the batch size to run window slices.
         overlap: Amount of overlap between scans along each spatial dimension, defaults to ``0.25``.
         mode: {``"constant"``, ``"gaussian"``}
@@ -80,6 +81,7 @@ class AdaptiveConditionalSlidingWindowInferer(Inferer):
     def __init__(
         self,
         roi_size: Sequence[int] | int,
+        scale_factor: int = 1,
         sw_batch_size: int = 1,
         overlap: Sequence[float] | float = 0.25,
         mode: BlendMode | str = BlendMode.CONSTANT,
@@ -97,6 +99,7 @@ class AdaptiveConditionalSlidingWindowInferer(Inferer):
     ) -> None:
         super().__init__()
         self.roi_size = roi_size
+        self.scale_factor = scale_factor
         self.sw_batch_size = sw_batch_size
         self.overlap = overlap
         self.mode: BlendMode = BlendMode(mode)
@@ -223,6 +226,8 @@ class AdaptiveConditionalSlidingWindowInferer(Inferer):
     def __call__(
         self,
         inputs: torch.Tensor,
+        conditions: torch.Tensor,
+        timesteps: torch.Tensor,
         network: Callable[..., torch.Tensor | Sequence[torch.Tensor] | dict[Any, torch.Tensor]],
         process_fn: Callable | None = None,
         *args: Any,
@@ -231,6 +236,8 @@ class AdaptiveConditionalSlidingWindowInferer(Inferer):
         """
         Args:
             inputs: input image to be processed (assuming NCHW[D])
+            conditions: condition image to be processes (assuming NCH/sW/s[D/s])
+            timesteps: steps used to condition the inputs (assuming N)
             network: target model to execute inference.
                 supports callables such as ``lambda x: my_torch_model(x, additional_config)``
             process_fn: process inference output and adjust the importance map per window
@@ -277,8 +284,15 @@ class AdaptiveConditionalSlidingWindowInferer(Inferer):
             diff = max(roi_size[k - 2] - inputs.shape[k], 0)
             half = diff // 2
             pad_size.extend([half, diff - half])
+        conditions_pad_size = []
+        for idx in range(0, len(pad_size), 2):
+            total_pad = pad_size[idx] + pad_size[idx + 1]
+            pad_front = total_pad // (2 * self.scale_factor)
+            pad_back = total_pad // self.scale_factor - pad_front
+            conditions_pad_size.extend([pad_front, pad_back])
         if any(pad_size):
             inputs = F.pad(inputs, pad=pad_size, mode=look_up_option(self.padding_mode, PytorchPadMode), value=self.cval)
+            conditions = F.pad(conditions, pad=conditions_pad_size, mode=look_up_option(self.padding_mode, PytorchPadMode), value=self.cval)
 
         # Store all slices
         scan_interval = self._get_scan_interval(image_size, roi_size, num_spatial_dims, overlap)
@@ -340,12 +354,16 @@ class AdaptiveConditionalSlidingWindowInferer(Inferer):
             ]
             if self.sw_batch_size > 1:
                 win_data = torch.cat([inputs[win_slice] for win_slice in unravel_slice]).to(sw_device)
+                win_cond_data = torch.cat([conditions[win_cond_slice] for win_cond_slice in conditions_unravel_slice]).to(sw_device)
+                time_data = torch.cat([timesteps[time_slice] for time_slice in time_unravel_slice]).to(sw_device)
             else:
                 win_data = inputs[unravel_slice[0]].to(sw_device)
+                win_cond_data = conditions[conditions_unravel_slice[0]].to(sw_device)
+                time_data = timesteps[time_unravel_slice[0]].to(sw_device)
             if self.with_coord:
-                seg_prob_out = network(win_data, unravel_slice, *args, **kwargs)  # batched patch
+                seg_prob_out = network(win_data, win_cond_data, time_data, unravel_slice, *args, **kwargs)  # batched patch
             else:
-                seg_prob_out = network(win_data, *args, **kwargs)  # batched patch
+                seg_prob_out = network(win_data, win_cond_data, time_data, *args, **kwargs)  # batched patch
 
             # convert seg_prob_out to tuple seg_tuple, this does not allocate new memory.
             dict_keys, seg_tuple = self._flatten_struct(seg_prob_out)
