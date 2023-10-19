@@ -20,7 +20,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
 from src.utils.losses import VGGLoss
-from src.utils.utils import create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
+from src.utils.utils import upsample, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logger, print_divisor
 
 
@@ -307,12 +307,12 @@ def main():
                         discriminator_val_loss /= len(val_dataloader)
                         discriminator_val_losses[epoch + 1] = discriminator_val_loss
                         val_pbar.set_postfix({
-                            "Gen. Avg. Val. Loss": f"{generator_val_loss:.4f}",
-                            "Disc. Avg. Val. Loss": f"{discriminator_val_loss:.4f}"
+                            "Avg. Gen. Val. Loss": f"{generator_val_loss:.4f}",
+                            "Avg. Disc. Val. Loss": f"{discriminator_val_loss:.4f}"
                         })
 
-            # Logging the validation progress bar
-            logging.info(val_pbar)
+                # Logging the validation progress bar
+                logging.info(val_pbar)
 
         # Adjust learning rate
         generator_scheduler.step()
@@ -325,7 +325,7 @@ def main():
         # Plot reference sample figure
         if epoch == 0:
             save_sample(
-                gen_volume=lr_volumes[-1],
+                gen_volume=upsample(lr_volumes[-1], config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]),
                 gt_volume=hr_volumes[-1],
                 mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),

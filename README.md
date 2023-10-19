@@ -262,7 +262,7 @@ In the following instructions, replace `<model>` by one of the options below:
 
    ```
    # With patch-based training (Recommended)
-   python train.py --patch_size=<patch_size>
+   python train.py --lr-patch-size=<lr_patch_size>
    ```
 
    ```
@@ -270,7 +270,8 @@ In the following instructions, replace `<model>` by one of the options below:
    python train.py --val=False
    ```
 
-Note: If `patch_size="[-1, -1, -1]"` then no cropping is employed (more computationally expensive)... Also, for `patch_size` equal or smaller than `"[8, 8, 8]"` the `batch_size` is required to be greater than `1`.
+Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more computationally expensive)... Also, for `lr_patch_size` equal or smaller than `"[8, 8, 8]"` the `batch_size` is required to be greater than `1`.
+... Also, for SRMeDiff the dimensions of the `lr_patch_size` are recommended to be powers of 2...
 
 ---
 
