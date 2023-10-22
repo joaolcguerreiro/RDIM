@@ -26,8 +26,8 @@ def main():
 
         for (split, directory) in [(train, args.train_dir), (val, args.val_dir), (test, args.test_dir)]:
             for file in split:
-                _, file_name = os.path.split(file)
-                shutil.copy(file, os.path.join(directory, file_name))
+                _, filename = os.path.split(file)
+                shutil.copy(file, os.path.join(directory, filename))
     except Exception as e:
         print("Check directory paths. If error remains download data again. An error occurred: {}".format(e))
 

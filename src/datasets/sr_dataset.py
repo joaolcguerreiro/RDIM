@@ -5,7 +5,7 @@ import monai.transforms as transforms
 import torch
 from torch.utils.data import Dataset
 sys.path.append(os.path.join('..', '..'))
-from src.utils.utils import get_volume_data, get_metadata, compute_super_resolution_metadata
+from src.utils.utils import get_volume_data, get_volume_metadata, compute_super_resolution_volume_metadata
 from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, NormalizeIntensity, RandSpatialCrop, RandTranslate
 
 
@@ -65,12 +65,11 @@ class SuperResolutionDataset(Dataset):
         lr_volume_path = os.path.join(self.lr_data_dir, self.lr_files[index]) if self.lr_data_dir else None
         hr_volume_path = os.path.join(self.hr_data_dir, self.hr_files[index]) if self.hr_data_dir else None
 
-        # Load Volumes and Metadata
+        # Load Volumes and Super-Resolution Metadata
         lr_volume = self.initial_transforms(get_volume_data(lr_volume_path)) if self.lr_data_dir else None
         hr_volume = self.initial_transforms(get_volume_data(hr_volume_path)) if self.hr_data_dir else None
 
-        # Compute Super-Resolution Metadata
-        sr_metadata = compute_super_resolution_metadata(lr_metadata=get_metadata(lr_volume_path), scale_factor=self.scale_factor) if self.lr_data_dir else (get_metadata(hr_volume_path) if self.hr_data_dir else None)
+        sr_metadata = compute_super_resolution_volume_metadata(lr_metadata=get_volume_metadata(lr_volume_path), scale_factor=self.scale_factor) if self.lr_data_dir else (get_volume_metadata(hr_volume_path) if self.hr_data_dir else None)
 
         # Employ Data Augmentation
         lr_volume = self.apply_random_transform(transform=self.augmentation_transforms, volume=lr_volume, seed=seed) if self.lr_data_dir else None

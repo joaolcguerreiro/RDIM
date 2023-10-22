@@ -12,7 +12,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics
-from src.utils.utils import save_batch, flatten_batch, draw_box_plot, draw_histogram, set_seed
+from src.utils.utils import save_batch, collect_batch_pixels, draw_box_plot, draw_histogram, set_seed
 from src.utils.logger import setup_logger, print_divisor
 
 
@@ -71,7 +71,7 @@ def main():
     with torch.no_grad():
         print_divisor()
 
-        for batch_index, (lr_volumes, hr_volumes, sr_metadatas) in enumerate(test_pbar):
+        for batch_index, (lr_volumes, hr_volumes, sr_volumes_metadata) in enumerate(test_pbar):
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
             hr_volumes = hr_volumes.to(device)
@@ -84,14 +84,14 @@ def main():
             test_pbar.set_postfix(scores)
 
             # Save volumes
-            save_batch(gen_volumes, sr_metadatas, batch_index, os.path.join(experiment_path, 'results'), mean=mean, std=std)
+            save_batch(gen_volumes, sr_volumes_metadata, os.path.join(experiment_path, 'results'), mean=mean, std=std)
 
             if batch_index + 1 == len(test_pbar):
                 test_pbar.set_postfix()
 
                 # Track last batch pixel intensities
-                hr_pixel_values = flatten_batch(hr_volumes, mean=mean, std=std)
-                gen_pixel_values = flatten_batch(gen_volumes, mean=mean, std=std)
+                hr_pixel_values = collect_batch_pixels(hr_volumes, mean=mean, std=std)
+                gen_pixel_values = collect_batch_pixels(gen_volumes, mean=mean, std=std)
 
         # Logging the validation progress bar
         logging.info(test_pbar)

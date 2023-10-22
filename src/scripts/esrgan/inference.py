@@ -62,7 +62,7 @@ def main():
     with torch.no_grad():
         print_divisor()
 
-        for batch_index, (lr_volumes, _, sr_metadatas) in enumerate(inference_pbar):
+        for lr_volumes, _, sr_volumes_metadata in inference_pbar:
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
 
@@ -70,7 +70,7 @@ def main():
             gen_volumes = generator_inferer(inputs=lr_volumes, network=generator)
 
             # Save volumes
-            save_batch(gen_volumes, sr_metadatas, batch_index, os.path.join(args.save_dir, 'results'), mean=mean, std=std)
+            save_batch(gen_volumes, sr_volumes_metadata, os.path.join(args.save_dir, 'results'), mean=mean, std=std)
 
         # Logging the validation progress bar
         logging.info(inference_pbar)

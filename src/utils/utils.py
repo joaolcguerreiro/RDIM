@@ -18,48 +18,46 @@ from src.utils.logger import print_divisor
 from src.utils.transforms import NormalizeIntensity
 
 
-# Load CT Scan Volume
 def load_volume(volume_dir):
     return nib.load(volume_dir)
 
 
-# Save CT Scan Volume
-def save_volume(volume, file_name, affine, header, save_dir):
+def save_volume(volume, affine, header, filename, save_dir):
     # Create Save Directory if it does not exist
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
     nib.save(
-        nib.Nifti1Image(volume, affine, header=header),
-        os.path.join(save_dir, file_name + '.nii.gz'),
+        nib.Nifti1Image(volume, affine=affine, header=header),
+        os.path.join(save_dir, filename),
     )
 
 
-# Get CT Scan Volume Data
 def get_volume_data(volume_dir):
     return load_volume(volume_dir).get_fdata().astype(np.float32)[:, :, :]
 
 
-# Get CT Scan Volume Affine
 def get_volume_affine(volume_dir):
     return load_volume(volume_dir).affine
 
 
-# Get CT Scan Volume Header
 def get_volume_header(volume_dir):
     return load_volume(volume_dir).header
 
 
-# Get CT Scan Volume Metadata
-def get_metadata(volume_dir):
+def get_volume_metadata(volume_dir):
     return {
+        'filename': os.path.basename(volume_dir),
         'affine': get_volume_affine(volume_dir),
         'header': get_volume_header(volume_dir)
     }
 
 
-# Get CT Scan Volume Slice (2D)
 def slice_volume(slice_index, plane, volume):
+    """
+    Get Volume Slice (2D)
+    """
+
     if plane == 'axial':
         # 3D volume (Y, X, Z, C) => Slice along z-axis => 2D image (Y, X, C) => For display purposes interchange axis => 2D image (X, Y, C)
         return volume[:, :, slice_index, :].swapaxes(0, 1)  # We get 2d plane (X, Y, C)
@@ -73,8 +71,11 @@ def slice_volume(slice_index, plane, volume):
         raise NotImplementedError('Invalid plane')
 
 
-# Get Number of Slices in CT Scan Volume Plane
 def count_volume_slices(plane, volume):
+    """
+    Get Number of Slices in Volume Plane
+    """
+
     if plane == 'axial':
         return volume.shape[2]
     elif plane == 'sagittal':
@@ -179,8 +180,7 @@ def compute_data_statistics(data_dir, num_channels):
     return _min, _max, mean, std
 
 
-# Compute Super-Resolved CT Scan Volume Metadata
-def compute_super_resolution_metadata(lr_metadata, scale_factor):
+def compute_super_resolution_volume_metadata(lr_metadata, scale_factor):
     # Create a copy of the header
     super_resolution_header = lr_metadata['header'].copy()
     super_resolution_header.set_zooms(np.array(super_resolution_header.get_zooms()) / scale_factor)
@@ -191,6 +191,7 @@ def compute_super_resolution_metadata(lr_metadata, scale_factor):
     np.fill_diagonal(super_resolution_affine[:3, :3], np.diagonal(super_resolution_affine[:3, :3]) / scale_factor)
 
     return {
+        'filename': lr_metadata['filename'],
         'affine': super_resolution_affine,
         'header': super_resolution_header
     }
@@ -243,24 +244,24 @@ def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axia
     display_volumes(lr_volumes + sr_volumes + gt_volumes, plane=plane, dimension=dimension, n_rows=num_series, n_cols=batch_size, volume_indexes=volume_indexes, slice_index=slice_index, labels=_labels, theme=theme)
 
 
-def save_batch(batch, batch_metadata, batch_index, save_dir_path, mean=None, std=None):
-    for volume_index, (volume, affine, header) in enumerate(zip(batch, batch_metadata['affine'], batch_metadata['header'])):
+def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):
+    for volume, filename, affine, header in zip(volumes, volumes_metadata['filename'], volumes_metadata['affine'], volumes_metadata['header']):
         # Denormalize volume
         volume = volume if (mean is None or std is None) else denormalize(volume, mean=mean, std=std)
 
-        save_volume(volume, affine, header, str(volume_index * batch_index), save_dir_path)
+        save_volume(volume, affine, header, filename, save_dir_path)
 
 
-def flatten_batch(batch, mean=None, std=None):
-    batch_pixels = []
+def collect_batch_pixels(volumes, mean=None, std=None):
+    volumes_pixels = []
 
-    for volume in batch:
+    for volume in volumes:
         # Denormalize volume
         volume = volume if (mean is None or std is None) else denormalize(volume, mean=mean, std=std)
 
-        batch_pixels.extend(volume.to('cpu').flatten().tolist())
+        volumes_pixels.extend(volume.to('cpu').flatten().tolist())
 
-    return batch_pixels
+    return volumes_pixels
 
 
 def save_sample(gen_volume, gt_volume, save_dir_path, mean=None, std=None, plane='axial', fig_size=(6, 6), theme='light'):
