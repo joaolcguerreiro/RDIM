@@ -142,36 +142,6 @@ class NormalizeIntensity(Transform):
         self.std = std
         self.channel_wise = channel_wise
 
-    def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
-        volume = convert_to_tensor(volume, track_meta=get_track_meta())
-        normalized_volume = convert_to_tensor(volume, track_meta=get_track_meta())
-        ret: NdarrayOrTensor
-
-        if self.channel_wise:
-            if isinstance(self.mean, (float, int, np.integer, np.floating)):
-                mean = [self.mean] * normalized_volume.shape[0]
-            else:
-                mean = self.mean
-
-            if isinstance(self.std, (float, int, np.integer, np.floating)):
-                std = [self.std] * normalized_volume.shape[0]
-            else:
-                std = self.std
-
-            mean = torch.tensor(mean)
-            std = torch.tensor(std)
-            normalized_volume = self._channel_wise_normalize(normalized_volume, mean, std)
-            ret = normalized_volume
-        else:
-            mean = torch.tensor(self.mean)
-            std = torch.tensor(self.std)
-            normalized_volume = self._normalize(normalized_volume, mean, std)
-            ret = normalized_volume
-
-        ret = convert_to_dst_type(ret, dst=volume, dtype=normalized_volume.dtype)[0]
-
-        return ret
-
     def _normalize(self, normalized_volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
         if not mean.numel() == 1:
             raise ValueError(f"Mean must be a singleton or scalar tensor, got {type(mean)} {mean}.")
@@ -218,6 +188,36 @@ class NormalizeIntensity(Transform):
 
         return normalized_volume
 
+    def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+        normalized_volume = convert_to_tensor(volume, track_meta=get_track_meta())
+        ret: NdarrayOrTensor
+
+        if self.channel_wise:
+            if isinstance(self.mean, (float, int, np.integer, np.floating)):
+                mean = [self.mean] * normalized_volume.shape[0]
+            else:
+                mean = self.mean
+
+            if isinstance(self.std, (float, int, np.integer, np.floating)):
+                std = [self.std] * normalized_volume.shape[0]
+            else:
+                std = self.std
+
+            mean = torch.tensor(mean)
+            std = torch.tensor(std)
+            normalized_volume = self._channel_wise_normalize(normalized_volume, mean, std)
+            ret = normalized_volume
+        else:
+            mean = torch.tensor(self.mean)
+            std = torch.tensor(self.std)
+            normalized_volume = self._normalize(normalized_volume, mean, std)
+            ret = normalized_volume
+
+        ret = convert_to_dst_type(ret, dst=volume, dtype=normalized_volume.dtype)[0]
+
+        return ret
+
 
 class ThresholdIntensity(Transform):
     """
@@ -246,32 +246,13 @@ class ThresholdIntensity(Transform):
         self.cval = cval
         self.channel_wise = channel_wise
 
-    def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
-        volume = convert_to_tensor(volume, track_meta=get_track_meta())
-
-        if self.channel_wise:
-            if isinstance(self.threshold, (float, int, np.integer, np.floating)):
-                threshold = [self.threshold] * volume.shape[0]
-            else:
-                threshold = self.threshold
-
-            threshold = torch.tensor(threshold)
-            res = self._channel_wise_threshold(volume, threshold)
-        else:
-            threshold = torch.tensor(self.threshold)
-            res = self._apply_threshold(volume, threshold)
-
-        res, *_ = convert_data_type(res, dtype=volume.dtype)
-
-        return res
-
     def _apply_threshold(self, volume: torch.Tensor, threshold: torch.Tensor) -> torch.Tensor:
         if not threshold.numel() == 1:
             raise ValueError(f"Threshold must be a singleton or scalar tensor, got {type(threshold)} {threshold}.")
 
         mask = volume > threshold if self.above else volume < threshold
-        res = where(mask, volume, self.cval)
-        return res
+        ret = where(mask, volume, self.cval)
+        return ret
 
     def _channel_wise_threshold(self, volume: torch.Tensor, threshold: torch.Tensor) -> torch.Tensor:
         if volume.shape[0] != threshold.numel():
@@ -285,6 +266,25 @@ class ThresholdIntensity(Transform):
             volume[channel] = where(mask, volume[channel], self.cval)
 
         return volume
+
+    def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if self.channel_wise:
+            if isinstance(self.threshold, (float, int, np.integer, np.floating)):
+                threshold = [self.threshold] * volume.shape[0]
+            else:
+                threshold = self.threshold
+
+            threshold = torch.tensor(threshold)
+            ret = self._channel_wise_threshold(volume, threshold)
+        else:
+            threshold = torch.tensor(self.threshold)
+            ret = self._apply_threshold(volume, threshold)
+
+        ret, *_ = convert_data_type(ret, dtype=volume.dtype)
+
+        return ret
 
 
 class RandGaussianSmooth(RandomizableTransform):
@@ -602,15 +602,15 @@ class RandSpatialCrop(RandomizableTransform):
             return None
 
         # Ensure lr_roi_size matches with spatial dimensions
-        spatial_dims = len(lr_shape)
+        num_spatial_dims = len(lr_shape)
 
-        if len(self.lr_roi_size) < spatial_dims:
-            self.lr_roi_size = ensure_tuple_rep(self.lr_roi_size, spatial_dims)
+        if len(self.lr_roi_size) < num_spatial_dims:
+            self.lr_roi_size = ensure_tuple_rep(self.lr_roi_size, num_spatial_dims)
 
         start_pos = []
-        for i in range(spatial_dims):
+        for i in range(num_spatial_dims):
             if self.lr_roi_size[i] > 0:
-                max_val = lr_shape[-spatial_dims + i] - self.lr_roi_size[i] + 1
+                max_val = lr_shape[-num_spatial_dims + i] - self.lr_roi_size[i] + 1
                 start_pos.append(self.R.randint(max_val))
             else:
                 # Start from the beginning for negative ROI sizes

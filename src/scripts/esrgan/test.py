@@ -29,6 +29,9 @@ def main():
     # Fetch training data statistics
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
+    # Compute z-score maximum
+    z_max = (_max - mean) / std
+
     test_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TESTING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TESTING"]["HR_DIR_PATH"], scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     test_dataloader = DataLoader(test_dataset, batch_size=config["TESTING"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
@@ -52,7 +55,7 @@ def main():
     generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
 
     # Define metrics
-    metrics = SuperResolutionMetrics()
+    metrics = SuperResolutionMetrics(_max=z_max, num_spatial_dims=(len(test_dataset.get_low_resolution_shape()) - 1))
 
     # Initialize generator weights
     generator.load_state_dict(checkpoint['generator_state_dict'])
