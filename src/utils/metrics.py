@@ -33,12 +33,12 @@ class Metrics:
 
 
 class SuperResolutionMetrics(Metrics):
-    def __init__(self, _max, num_spatial_dims):
+    def __init__(self, _max, data_range, num_spatial_dims):
         super().__init__()
 
         # Define metrics
         self.metrics = [
             {'name': 'MSE', 'scores': [], 'func': MSEMetric()},
             {'name': 'PSNR', 'scores': [], 'func': PSNRMetric(max_val=_max)},
-            {'name': 'SSIM', 'scores': [], 'func': SSIMMetric(spatial_dims=num_spatial_dims)}
+            {'name': 'SSIM', 'scores': [], 'func': SSIMMetric(spatial_dims=num_spatial_dims, data_range=data_range)}
         ]

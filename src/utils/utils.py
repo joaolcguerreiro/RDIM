@@ -249,7 +249,7 @@ def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):
         # Denormalize volume
         volume = volume if (mean is None or std is None) else denormalize(volume, mean=mean, std=std)
 
-        save_volume(volume, affine, header, filename, save_dir_path)
+        save_volume(volume.to('cpu'), affine, header, filename, save_dir_path)
 
 
 def collect_batch_pixels(volumes, mean=None, std=None):
