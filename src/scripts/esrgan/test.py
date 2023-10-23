@@ -4,6 +4,7 @@ import argparse
 import logging
 import yaml
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
@@ -29,9 +30,10 @@ def main():
     # Fetch training data statistics
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
-    # Compute z-score range boundaries
+    # Compute z-score range
     z_min = (_min - mean) / std
     z_max = (_max - mean) / std
+    z_data_range = float(np.max(z_max) - np.min(z_min))
 
     test_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TESTING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TESTING"]["HR_DIR_PATH"], scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     test_dataloader = DataLoader(test_dataset, batch_size=config["TESTING"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
@@ -56,22 +58,23 @@ def main():
     generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
 
     # Define metrics
-    metrics = SuperResolutionMetrics(_max=z_max, data_range=(z_max - z_min), num_spatial_dims=(len(test_dataset.get_low_resolution_shape()) - 1))
+    metrics = SuperResolutionMetrics(_max=z_max, data_range=z_data_range, num_spatial_dims=(len(test_dataset.get_low_resolution_shape()) - 1))
 
     # Initialize generator weights
     generator.load_state_dict(checkpoint['generator_state_dict'])
+
+    # Testing loop
+    print_divisor()
 
     # Set the model to evaluation mode
     generator.eval()
     hr_pixel_values = []
     gen_pixel_values = []
 
-    # Define validation progress bar
+    # Define testing progress bar
     test_pbar = tqdm(test_dataloader, desc="Testing")
 
     with torch.no_grad():
-        print_divisor()
-
         for batch_index, (lr_volumes, hr_volumes, sr_volumes_metadata) in enumerate(test_pbar):
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
@@ -94,9 +97,10 @@ def main():
                 hr_pixel_values = collect_batch_pixels(hr_volumes, mean=mean, std=std)
                 gen_pixel_values = collect_batch_pixels(gen_volumes, mean=mean, std=std)
 
-        # Logging the validation progress bar
+        # Logging the testing progress bar
         logging.info(test_pbar)
-        print_divisor(last=True)
+
+    print_divisor(last=True)
 
     # Log metrics
     metrics.summary()
@@ -117,12 +121,14 @@ def main():
     # Plot sample pixel distribution
     draw_histogram(
         data=[
-            {'Pixel Intensity': hr_pixel_values, 'Data Type': ['Synthetic'] * len(hr_pixel_values)},
-            {'Pixel Intensity': gen_pixel_values, 'Data Type': ['Ground Truth'] * len(gen_pixel_values)},
+            {'Pixel Intensity': gen_pixel_values, 'Data Type': ['Synthetic'] * len(gen_pixel_values)},
+            {'Pixel Intensity': hr_pixel_values, 'Data Type': ['Ground Truth'] * len(hr_pixel_values)}
         ],
         title='Sample Pixel Distribution',
         x_label='Pixel Intensity',
         hue='Data Type',
+        bins=100,
+        bin_range=(_min, _max),
         element='step',
         fill=False,
         save_dir_path=os.path.join(experiment_path, 'figures', 'test', 'pixel_distribution', f'{args.epoch}')

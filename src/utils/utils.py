@@ -264,7 +264,7 @@ def collect_batch_pixels(volumes, mean=None, std=None):
     return volumes_pixels
 
 
-def save_sample(gen_volume, gt_volume, save_dir_path, mean=None, std=None, plane='axial', fig_size=(6, 6), theme='light'):
+def save_sample(gen_volume, gt_volume, save_dir_path, _min=None, _max=None, mean=None, std=None, plane='axial', fig_size=(6, 6), theme='light'):
     # Denormalize volumes
     gen_volume = gen_volume if (mean is None or std is None) else denormalize(gen_volume, mean=mean, std=std)
     gt_volume = gt_volume if (mean is None or std is None) else denormalize(gt_volume, mean=mean, std=std)
@@ -310,6 +310,8 @@ def save_sample(gen_volume, gt_volume, save_dir_path, mean=None, std=None, plane
         title='Sample Pixel Distribution',
         x_label='Pixel Intensity',
         hue='Data Type',
+        bins=100,
+        bin_range=None if (_min is None or _max is None) else (_min, _max),
         element='step',
         fill=False,
         ax=ax_hist,
@@ -344,7 +346,7 @@ def draw_line_chart(data, title, x_label, y_label, save_dir_path, ax=None, theme
         plt.savefig(save_dir_path)
 
 
-def draw_histogram(data, title, x_label, hue=None, stat='count', element='bars', fill=True, save_dir_path=None, ax=None, theme='light'):
+def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bin_range=None, element='bars', fill=True, save_dir_path=None, ax=None, theme='light'):
     # Parse data
     data = pd.DataFrame({
         key: sum((_dict[key] for _dict in data), []) for key in [x_label, hue] if key is not None
@@ -358,7 +360,7 @@ def draw_histogram(data, title, x_label, hue=None, stat='count', element='bars',
         _, ax = plt.subplots()
 
     # Chart customization
-    sns.histplot(data=data, x=x_label, hue=hue, stat=stat, element=element, fill=fill, palette="Pastel1")
+    sns.histplot(data=data, x=x_label, hue=hue, stat=stat, bins=bins, binrange=bin_range, element=element, fill=fill, palette="Pastel1")
     ax.set_title(title)
 
     # Save chart

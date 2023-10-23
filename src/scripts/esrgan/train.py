@@ -327,7 +327,7 @@ def main():
             save_sample(
                 gen_volume=upsample(lr_volumes[-1], config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]),
                 gt_volume=hr_volumes[-1],
-                mean=mean, std=std,
+                _min=_min, _max=_max, mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),
                 fig_size=(6, 6.5)
             ) if args.val else None
@@ -369,7 +369,7 @@ def main():
             save_sample(
                 gen_volume=gen_volumes[-1],
                 gt_volume=hr_volumes[-1],
-                mean=mean, std=std,
+                _min=_min, _max=_max, mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}'),
                 fig_size=(6, 6.5)
             ) if args.val else None

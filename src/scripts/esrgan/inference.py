@@ -53,15 +53,16 @@ def main():
     # Initialize generator weights
     generator.load_state_dict(checkpoint['generator_state_dict'])
 
+    # Inference loop
+    print_divisor()
+
     # Set the model to evaluation mode
     generator.eval()
 
-    # Define validation progress bar
+    # Define inference progress bar
     inference_pbar = tqdm(inference_dataloader, desc="Inferring")
 
     with torch.no_grad():
-        print_divisor()
-
         for lr_volumes, _, sr_volumes_metadata in inference_pbar:
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
@@ -72,9 +73,10 @@ def main():
             # Save volumes
             save_batch(gen_volumes, sr_volumes_metadata, os.path.join(args.save_dir, 'results'), mean=mean, std=std)
 
-        # Logging the validation progress bar
+        # Logging the inference progress bar
         logging.info(inference_pbar)
-        print_divisor(last=True)
+
+    print_divisor(last=True)
 
 
 if __name__ == '__main__':

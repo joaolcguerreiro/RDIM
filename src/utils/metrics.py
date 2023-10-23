@@ -15,7 +15,11 @@ class Metrics:
 
     def compute_scores(self, prediction, ground_truth):
         for metric in self.metrics:
-            metric['scores'].append(metric['func'](y_pred=prediction, y=ground_truth))
+            # Compute metric score
+            score = np.mean(metric['func'](y_pred=prediction, y=ground_truth).to('cpu').numpy())
+
+            # Store metric score
+            metric['scores'].append(score)
 
         return {metric['name']: metric['scores'][-1] for metric in self.metrics}
 
