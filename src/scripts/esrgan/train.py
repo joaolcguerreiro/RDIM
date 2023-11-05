@@ -21,7 +21,7 @@ from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
 from src.utils.losses import VGGLoss
 from src.utils.utils import upsample, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
-from src.utils.logger import setup_logger, print_divisor
+from src.utils.logger import setup_logging, print_divisor
 
 
 def main():
@@ -427,7 +427,7 @@ if __name__ == '__main__':
         # Create experiment folder
         create_experiment_directory(experiment_path, config_path)
 
-    # Set up logger
-    setup_logger(os.path.join(experiment_path, "logs", "train", f'{datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}.log'))
+    # Set up logging
+    setup_logging(os.path.join(experiment_path, "logs", "train", f'{datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}.log'))
 
     main()

@@ -14,7 +14,7 @@ from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics
 from src.utils.utils import save_batch, collect_batch_pixels, draw_box_plot, draw_histogram, set_seed
-from src.utils.logger import setup_logger, print_divisor
+from src.utils.logger import setup_logging, print_divisor
 
 
 def main():
@@ -151,7 +151,7 @@ if __name__ == '__main__':
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
 
-    # Set up logger
-    setup_logger(os.path.join(experiment_path, "logs", "test", f'{args.epoch}.log'))
+    # Set up logging
+    setup_logging(os.path.join(experiment_path, "logs", "test", f'{args.epoch}.log'))
 
     main()

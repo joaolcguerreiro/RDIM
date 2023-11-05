@@ -12,7 +12,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.utils import save_batch, set_seed
-from src.utils.logger import setup_logger, print_divisor
+from src.utils.logger import setup_logging, print_divisor
 
 
 def main():
@@ -93,7 +93,7 @@ if __name__ == '__main__':
     experiment_path = os.path.join(args.save_dir, datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
     checkpoint_path = args.checkpoint
 
-    # Set up logger
-    setup_logger(os.path.join(experiment_path, 'inference.log'))
+    # Set up logging
+    setup_logging(os.path.join(experiment_path, 'inference.log'))
 
     main()

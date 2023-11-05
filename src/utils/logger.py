@@ -1,8 +1,8 @@
-import logging
 import sys
+import logging
 
 
-class PrintLogger(object):
+class TeeLogger(object):
     def __init__(self, log_file_path, original_stdout):
         self.log_file_path = log_file_path
         self.original_stdout = original_stdout
@@ -22,7 +22,15 @@ class PrintLogger(object):
         self.close()
 
 
-def setup_logger(log_file_path):
+def setup_logging(log_file_path, mode='w'):
+    # Clear file content based on access mode
+    with open(log_file_path, mode):
+        pass
+
+    #=======================================#
+    #   Redirect logging messages to file   #
+    #=======================================#
+
     # Create a logger object
     logger = logging.getLogger()
 
@@ -44,8 +52,12 @@ def setup_logger(log_file_path):
     # Add the handlers to the logger
     logger.addHandler(handler)
 
-    # Replace sys.stdout with our custom PrintLogger
-    sys.stdout = PrintLogger(log_file_path, sys.stdout)
+    #=============================================#
+    #   Tee stdout messages to console and file   #
+    #=============================================#
+
+    # Replace stdout with custom teeing logger
+    sys.stdout = TeeLogger(log_file_path, sys.stdout)
 
 
 def print_divisor(width=140, last=False):
