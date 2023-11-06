@@ -327,6 +327,7 @@ def main():
             save_sample(
                 gen_volume=upsample(lr_volumes[-1], config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]),
                 gt_volume=hr_volumes[-1],
+                bins=100,
                 _min=_min, _max=_max, mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),
                 fig_size=(6, 6.5)
@@ -369,6 +370,7 @@ def main():
             save_sample(
                 gen_volume=gen_volumes[-1],
                 gt_volume=hr_volumes[-1],
+                bins=100,
                 _min=_min, _max=_max, mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}'),
                 fig_size=(6, 6.5)
@@ -425,7 +427,7 @@ if __name__ == '__main__':
         experiment_path = os.path.join('..', '..', '..', 'experiments', "esrgan", f'x{config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]}_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
 
         # Create experiment folder
-        create_experiment_directory(experiment_path, config_path)
+        create_experiment_directory(experiment_path=experiment_path, config_path=config_path)
 
     # Set up logging
     setup_logging(os.path.join(experiment_path, "logs", "train", f'{datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}.log'))

@@ -264,7 +264,7 @@ def collect_batch_pixels(volumes, mean=None, std=None):
     return volumes_pixels
 
 
-def save_sample(gen_volume, gt_volume, save_dir_path, _min=None, _max=None, mean=None, std=None, plane='axial', fig_size=(6, 6), theme='light'):
+def save_sample(gen_volume, gt_volume, save_dir_path, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', fig_size=(6, 6), theme='light'):
     # Denormalize volumes
     gen_volume = gen_volume if (mean is None or std is None) else denormalize(gen_volume, mean=mean, std=std)
     gt_volume = gt_volume if (mean is None or std is None) else denormalize(gt_volume, mean=mean, std=std)
@@ -310,7 +310,7 @@ def save_sample(gen_volume, gt_volume, save_dir_path, _min=None, _max=None, mean
         title='Sample Pixel Distribution',
         x_label='Pixel Intensity',
         hue='Data Type',
-        bins=100,
+        bins=bins,
         bin_range=None if (_min is None or _max is None) else (_min, _max),
         element='step',
         fill=False,
@@ -392,7 +392,7 @@ def draw_box_plot(data, title, x_label, y_label, hue=None, save_dir_path=None, a
         plt.savefig(save_dir_path)
 
 
-def create_experiment_directory(experiment_path, config_path):
+def create_experiment_directory(experiment_path, config_path=None, checkpoint_path=None, inference_mode=False):
     # Create experiment folder
     os.makedirs(experiment_path)
 
@@ -400,14 +400,21 @@ def create_experiment_directory(experiment_path, config_path):
     os.makedirs(os.path.join(experiment_path, 'checkpoints'))
     os.makedirs(os.path.join(experiment_path, 'results'))
 
-    for path in [os.path.join('figures', 'train'), os.path.join('figures', 'test')]:
-        os.makedirs(os.path.join(experiment_path, path))
+    if not inference_mode:
+        for path in [os.path.join('figures', 'train'), os.path.join('figures', 'test')]:
+            os.makedirs(os.path.join(experiment_path, path))
 
-    for path in [os.path.join('logs', 'train'), os.path.join('logs', 'test')]:
-        os.makedirs(os.path.join(experiment_path, path))
+        for path in [os.path.join('logs', 'train'), os.path.join('logs', 'test')]:
+            os.makedirs(os.path.join(experiment_path, path))
 
-    # Clone global config file for reproducibility
-    shutil.copy(config_path, experiment_path)
+        # Clone global config file for reproducibility
+        shutil.copy(config_path, experiment_path)
+    else:
+        os.makedirs(os.path.join(experiment_path, 'logs'))
+        os.makedirs(os.path.join(experiment_path, 'figures'))
+
+        # Clone checkpoint file for reproducibility
+        shutil.copy(checkpoint_path, os.path.join(experiment_path, 'checkpoints'))
 
 
 def set_seed(seed=20):

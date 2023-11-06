@@ -11,7 +11,7 @@ from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
-from src.utils.utils import save_batch, set_seed
+from src.utils.utils import create_experiment_directory, save_batch, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
 
@@ -71,7 +71,7 @@ def main():
             gen_volumes = generator_inferer(inputs=lr_volumes, network=generator)
 
             # Save volumes
-            save_batch(gen_volumes, sr_volumes_metadata, os.path.join(args.save_dir, 'results'), mean=mean, std=std)
+            save_batch(gen_volumes, sr_volumes_metadata, os.path.join(experiment_path, 'results'), mean=mean, std=std)
 
         # Logging the inference progress bar
         logging.info(inference_pbar)
@@ -93,7 +93,10 @@ if __name__ == '__main__':
     experiment_path = os.path.join(args.save_dir, datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
     checkpoint_path = args.checkpoint
 
+    # Create experiment folder
+    create_experiment_directory(experiment_path=experiment_path, checkpoint_path=checkpoint_path, inference_mode=True)
+
     # Set up logging
-    setup_logging(os.path.join(experiment_path, 'inference.log'))
+    setup_logging(os.path.join(experiment_path, 'logs', 'inference.log'))
 
     main()
