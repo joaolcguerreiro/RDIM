@@ -2,23 +2,22 @@ import os
 import sys
 import ast
 import argparse
-import torch
 import numpy as np
 from torch.utils.data import DataLoader
-from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.join('..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.esrgan import Generator
 from src.utils.utils import display_batch, set_seed
 
 
 # Available display modes
 modes = {
-    'gt_scans': 'Display ground-truth scan counterpart ',
     'lr_scans': 'Display low-resolution scan counterpart',
     'sr_scans': 'Display super-resolution scan counterpart',
+    'gt_scans': 'Display ground truth scan counterpart ',
+    'lr_sr_scans': 'Display low-resolution and super-resolution scans jointly',
     'lr_gt_scans': 'Display low-resolution and ground truth scans jointly',
-    'compare_scans': 'Display low-resolution, super-resolution and ground truth scans jointly',
+    'sr_gt_scans': 'Display super-resolution and ground truth scans jointly',
+    'lr_sr_gt_scans': 'Display low-resolution, super-resolution and ground truth scans jointly',
 }
 
 # Available anatomical planes
@@ -39,125 +38,68 @@ def main():
     # Set seed for reproducibility
     set_seed(20)
 
-    # Define device
-    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
+    if args.mode not in modes:
+        raise NotImplementedError(f"The mode \'{args.mode}\' is not implemented. Available modes are: {list(modes.keys())}.")
 
-    if not (args.checkpoint or args.mode in ('gt_scans', 'lr_scans', 'lr_gt_scans')):
-        raise NotImplementedError(f'Provide model checkpoint file to visualize with mode \'{args.mode}\'.')
-
-    if not args.lr_dir and args.mode in ('lr_scans', 'sr_scans', 'lr_gt_scans', 'compare_scans'):
+    if not args.lr_dir and args.mode in ('lr_scans', 'lr_sr_scans', 'lr_gt_scans', 'lr_sr_gt_scans'):
         raise NotImplementedError(f'Low-resolution data directory path is required to visualize with mode \'{args.mode}\'.')
 
-    if not args.hr_dir and args.mode in ('gt_scans', 'lr_gt_scans', 'compare_scans'):
-        raise NotImplementedError(f'High-resolution data directory path is required to visualize with mode \'{args.mode}\'.')
+    if not args.sr_dir and args.mode in ('sr_scans', 'lr_sr_scans', 'sr_gt_scans', 'lr_sr_gt_scans'):
+        raise NotImplementedError(f'Super-resolution data directory path is required to visualize with mode \'{args.mode}\'.')
 
-    if not args.checkpoint:
-        # Define Dataset
-        dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, hr_data_dir=args.hr_dir, _min=args.pixel_range[0], _max=args.pixel_range[1], augmentation=args.augmentation)
-    else:
-        # Load checkpoint
-        checkpoint = torch.load(args.checkpoint)
+    if not args.gt_dir and args.mode in ('gt_scans', 'lr_gt_scans', 'sr_gt_scans', 'lr_sr_gt_scans'):
+        raise NotImplementedError(f'Ground truth data directory path is required to visualize with mode \'{args.mode}\'.')
 
-        # Fetch training data statistics
-        _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
-
-        # Define Dataset
-        dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, hr_data_dir=args.hr_dir, _min=(args.pixel_range[0] or _min), _max=(args.pixel_range[1] or _max), mean=mean, std=std, augmentation=args.augmentation)
-
-        # Define model
-        generator = Generator(
-            in_channels=checkpoint['generator_in_channels'],
-            out_channels=checkpoint['generator_out_channels'],
-            num_features=checkpoint['generator_num_features'],
-            num_rrdb_blocks=checkpoint['generator_num_rrdb_blocks'],
-            num_rrdb_db_blocks=checkpoint['generator_num_rrdb_db_blocks'],
-            num_rrdb_db_conv_blocks=checkpoint['generator_num_rrdb_db_conv_blocks'],
-            num_rrdb_db_growth_features=checkpoint['generator_num_rrdb_db_growth_features'],
-            scale_factor=checkpoint['generator_scale_factor'],
-        ).to(device)
-
-        # Define patch-based inferer
-        generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
-
-        # Initialize generator weights
-        generator.load_state_dict(checkpoint['generator_state_dict'])
-
-        # Set the model to evaluation mode
-        generator.eval()
+    # Define Dataset
+    lr_dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, _min=args.pixel_range[0], _max=args.pixel_range[1], augmentation=args.augmentation)
+    sr_dataset = SuperResolutionDataset(hr_data_dir=args.sr_dir, _min=args.pixel_range[0], _max=args.pixel_range[1], augmentation=args.augmentation)
+    gt_dataset = SuperResolutionDataset(hr_data_dir=args.gt_dir, _min=args.pixel_range[0], _max=args.pixel_range[1], augmentation=args.augmentation)
 
     # Define Dataloader
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
+    lr_dataloader = DataLoader(lr_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
+    sr_dataloader = DataLoader(sr_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
+    gt_dataloader = DataLoader(gt_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
-    # Generate list of consecutive indexes for a given batch
-    volume_indexes = lambda _batch_index, batch_size: [index for index in range(_batch_index * batch_size, (_batch_index + 1) * batch_size)]
+    # Define display configurations by mapping each mode to its respective volume types, dataloaders, and batch data indexes
+    display_config = {
+        'lr_scans': {'volume_types': ['lr_volumes'], 'dataloaders': [lr_dataloader], 'batch_data_indexes': [0]},
+        'sr_scans': {'volume_types': ['sr_volumes'], 'dataloaders': [sr_dataloader], 'batch_data_indexes': [1]},
+        'gt_scans': {'volume_types': ['gt_volumes'], 'dataloaders': [gt_dataloader], 'batch_data_indexes': [1]},
+        'lr_sr_scans': {'volume_types': ['lr_volumes', 'sr_volumes'], 'dataloaders': [lr_dataloader, sr_dataloader], 'batch_data_indexes': [0, 1]},
+        'lr_gt_scans': {'volume_types': ['lr_volumes', 'gt_volumes'], 'dataloaders': [lr_dataloader, gt_dataloader], 'batch_data_indexes': [0, 1]},
+        'sr_gt_scans': {'volume_types': ['sr_volumes', 'gt_volumes'], 'dataloaders': [sr_dataloader, gt_dataloader], 'batch_data_indexes': [1, 1]},
+        'lr_sr_gt_scans': {'volume_types': ['lr_volumes', 'sr_volumes', 'gt_volumes'], 'dataloaders': [lr_dataloader, sr_dataloader, gt_dataloader], 'batch_data_indexes': [0, 1, 1]},
+    }
 
-    with torch.no_grad():
-        if args.mode == 'gt_scans':
-            if int(args.volume) >= 0:
-                display_batch(gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
+    if int(args.volume) >= 0:
+        # Define volumes
+        volumes = {volume_type: dataloader.dataset[args.volume][batch_data_index].unsqueeze(dim=0) for volume_type, dataloader, batch_data_index in zip(display_config.get(args.mode).get('volume_types'), display_config.get(args.mode).get('dataloaders'), display_config.get(args.mode).get('batch_data_indexes'))}
 
-            else:
-                for batch_index, (_, hr_volumes, _) in enumerate(dataloader):
-                    display_batch(gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
+        display_batch(**volumes, plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
+    else:
+        for batch_index, batch_datas in enumerate(zip(*display_config.get(args.mode).get('dataloaders'))):
+            # Define volumes
+            volumes = {volume_type: batch_data[batch_data_index] for volume_type, batch_data, batch_data_index in zip(display_config.get(args.mode).get('volume_types'), batch_datas, display_config.get(args.mode).get('batch_data_indexes'))}
 
-        elif args.mode == 'lr_scans':
-            if int(args.volume) >= 0:
-                display_batch(lr_volumes=[dataset[args.volume][0]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
+            # Generate list of consecutive indexes for a given batch
+            volume_indexes = [index for index in range(batch_index * args.batch_size, (batch_index + 1) * args.batch_size) if index < len(lr_dataset or sr_dataset or gt_dataset)]
 
-            else:
-                for batch_index, (lr_volumes, _, _) in enumerate(dataloader):
-                    display_batch(lr_volumes=lr_volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
-
-        elif args.mode == 'sr_scans':
-            if int(args.volume) >= 0:
-                # Add batch dimension and move inputs to the designated device
-                lr_volume = dataset[args.volume][0].unsqueeze(0).to(device)
-
-                display_batch(sr_volumes=generator_inferer(inputs=lr_volume, network=generator), plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
-
-            else:
-                for batch_index, (lr_volumes, _, _) in enumerate(dataloader):
-                    # Move inputs to the designated device
-                    lr_volumes = lr_volumes.to(device)
-
-                    display_batch(sr_volumes=generator_inferer(inputs=lr_volumes, network=generator), plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
-
-        elif args.mode == 'lr_gt_scans':
-            if int(args.volume) >= 0:
-                display_batch(lr_volumes=[dataset[args.volume][0]], gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
-
-            else:
-                for batch_index, (lr_volumes, hr_volumes, _) in enumerate(dataloader):
-                    display_batch(lr_volumes=lr_volumes, gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
-
-        elif args.mode == 'compare_scans':
-            if int(args.volume) >= 0:
-                # Add batch dimension and move inputs to the designated device
-                lr_volume = dataset[args.volume][0].unsqueeze(0).to(device)
-
-                display_batch(lr_volumes=lr_volume, sr_volumes=generator_inferer(inputs=lr_volume, network=generator), gt_volumes=[dataset[args.volume][1]], plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
-
-            else:
-                for batch_index, (lr_volumes, hr_volumes, _) in enumerate(dataloader):
-                    # Move inputs to the designated device
-                    lr_volumes = lr_volumes.to(device)
-
-                    display_batch(lr_volumes=lr_volumes, sr_volumes=generator_inferer(inputs=lr_volumes, network=generator), gt_volumes=hr_volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes(batch_index, args.batch_size), slice_index=args.slice, labels=args.labels)
+            display_batch(**volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes, slice_index=args.slice, labels=args.labels)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data Visualizer')
     parser.add_argument('--mode', default=None, help='Display mode {}'.format(modes), type=str)
-    parser.add_argument('--lr-dir', help='Path to low-resolution data directory', type=str)
-    parser.add_argument('--hr-dir', help='Path to high-resolution data directory', type=str)
-    parser.add_argument('--checkpoint', default=None, help='Path to model checkpoint', type=str)
+    parser.add_argument('--lr-dir', default=None, help='Path to low-resolution data directory', type=str)
+    parser.add_argument('--sr-dir', default=None, help='Path to super-resolution data directory', type=str)
+    parser.add_argument('--gt-dir', default=None, help='Path to ground truth data directory', type=str)
     parser.add_argument('--augmentation', default=False, help='Apply augmentation techniques to the visualization data', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=lambda arg: np.array(ast.literal_eval(arg)))
     parser.add_argument('--plane', default='axial', help='Anatomical planes {}'.format(planes), type=str)
     parser.add_argument('--dim', default='2D', help='Visualization dimension {}'.format(dimensions), type=str)
     parser.add_argument('--volume', default=-1, help='Volume index (-1 for all)', type=int)
     parser.add_argument('--slice', default=-1, help='Slice index (-1 for all)', type=int)
-    parser.add_argument('--batch-size', default=4, help='Number of samples to visualize'.format(dimensions), type=int)
+    parser.add_argument('--batch-size', default=2, help='Number of samples to visualize'.format(dimensions), type=int)
     parser.add_argument('--num-workers', default=4, help='Number of subprocesses used for data loading', type=int)
     parser.add_argument('--labels', default=True, help='Display image labels', type=(lambda arg: (str(arg).lower() == 'true')))
     args = parser.parse_args()

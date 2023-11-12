@@ -217,9 +217,9 @@ def compute_scale_factor(lr_volume, gt_volume):
 
 
 def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axial', dimension='2D', volume_indexes=None, slice_index=-1, labels=True, theme='light'):
-    lr_volumes = list() if lr_volumes is None else list(lr_volumes)
-    sr_volumes = list() if sr_volumes is None else list(sr_volumes)
-    gt_volumes = list() if gt_volumes is None else list(gt_volumes)
+    lr_volumes = list() if lr_volumes is None else list(lr_volumes.to('cpu'))
+    sr_volumes = list() if sr_volumes is None else list(sr_volumes.to('cpu'))
+    gt_volumes = list() if gt_volumes is None else list(gt_volumes.to('cpu'))
 
     if not all(len(_list) == 0 or len(_list) == max(len(lr_volumes), len(gt_volumes), len(sr_volumes)) for _list in [lr_volumes, gt_volumes, sr_volumes]):
         raise ValueError("The numbers of low-resolution, super-resolution and ground truth volumes do not match.")
@@ -236,12 +236,15 @@ def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axia
     sr_volumes = list(adjust_volume_orientation(sr_volume) for sr_volume in sr_volumes)
     gt_volumes = list(adjust_volume_orientation(gt_volume) for gt_volume in gt_volumes)
 
-    # Number of series and samples per series
-    num_series = sum(1 for _array in [lr_volumes, sr_volumes, gt_volumes] if _array)
-    batch_size = len(lr_volumes or sr_volumes or gt_volumes)
-    _labels = list(label for label, _array in zip(['Downsampled', 'Synthetic', 'Ground Truth'], [lr_volumes, sr_volumes, gt_volumes]) if _array for _ in range(batch_size)) if labels else None
+    # Interleave volumes for visualization
+    volumes = [volume for interleaved_volumes in zip(*list(filter(None, [lr_volumes, sr_volumes, gt_volumes]))) for volume in interleaved_volumes]
 
-    display_volumes(lr_volumes + sr_volumes + gt_volumes, plane=plane, dimension=dimension, n_rows=num_series, n_cols=batch_size, volume_indexes=volume_indexes, slice_index=slice_index, labels=_labels, theme=theme)
+    # Number of series (volume types) and samples per series (batch size)
+    num_volume_types = sum(1 for _array in [lr_volumes, sr_volumes, gt_volumes] if _array)
+    batch_size = len(lr_volumes or sr_volumes or gt_volumes)
+    _labels = list(label for label, _array in zip(['Downsampled', 'Synthetic', 'Ground Truth'], [lr_volumes, sr_volumes, gt_volumes]) if _array) * batch_size if labels else None
+
+    display_volumes(volumes, plane=plane, dimension=dimension, n_rows=batch_size, n_cols=num_volume_types, volume_indexes=volume_indexes, slice_index=slice_index, labels=_labels, theme=theme)
 
 
 def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):

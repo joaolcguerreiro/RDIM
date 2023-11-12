@@ -340,56 +340,59 @@ Image visualization file...
 
 1) Run visualization script:
    ```
-   python visualization.py --mode=<mode> --lr-dir=<lr_dir> --hr-dir=<hr_dir> [--checkpoint=<checkpoint>] [--augmentation=<bool>] [--plane=<plane>] [--dim=<dimension>] [--volume=<volume_index>] [--slice=<slice_index>] [--batch-size=<batch_size>] [--num-workers=<num_workers>] [--labels=<bool>]
+   python visualization.py --mode=<mode> --lr-dir=<lr_dir | None> --sr-dir=<sr_dir | None> --gt-dir=<gt_dir | None> [--augmentation=<bool>] [--plane=<plane>] [--dim=<dimension>] [--volume=<volume_index>] [--slice=<slice_index>] [--batch-size=<batch_size>] [--num-workers=<num_workers>] [--labels=<bool>]
    ```
 
 ---
 
-#### Visualization Mode
+#### Visualization Mode <span style="color: orange">[REQUIRED]</span>
 
 `--mode`
 
-| Option            | Description                                                             |
-|-------------------|-------------------------------------------------------------------------|
-| `'gt_scans'`      | Display ground-truth scan counterpart                                   |
-| `'lr_scans'`      | Display low-resolution scan counterpart                                 |
-| `'sr_scans'`      | Display super-resolution scan counterpart                               |
-| `'lr_gt_scans'`   | Display low-resolution and ground truth scans jointly |
-| `'compare_scans'` | Display low-resolution, super-resolution and ground truth scans jointly |
+| Option          | Description                                               |
+|-----------------|-----------------------------------------------------------|
+| `'lr_scans'`    | Display low-resolution scan counterpart                   |
+| `'sr_scans'`    | Display super-resolution scan counterpart                 |
+| `'gt_scans'`    | Display ground truth scan counterpart                     |
+| `'lr_sr_scans'` | Display low-resolution and super-resolution scans jointly |
+| `'lr_gt_scans'` | Display low-resolution and ground truth scans jointly     |
+| `'sr_gt_scans'` | Display super-resolution and ground truth scans jointly   |
 
 ---
 
-#### Low-Resolution Data Directory <span style="color: orange">[SEMI-OPTIONAL]</span>
+#### Low-Resolution Data Directory <span style="color: orange">[CONDITIONAL]</span>
 
 `--lr-dir`
 
-| Option | Description                                                                |
-|--------|----------------------------------------------------------------------------|
-| `str`  | Path to low-resolution data directory                                   |
+| Option | Description                            |
+|--------|----------------------------------------|
+| `str`  | Path to low-resolution data directory  |
 
-Required when mode is `lr_scans`, `sr_scans`, `lr_gt_scans` or `compare_scans`
-
----
-
-#### High-Resolution Data Directory <span style="color: orange">[SEMI-OPTIONAL]</span>
-
-`--hr-dir`
-
-| Option | Description                                                                |
-|--------|----------------------------------------------------------------------------|
-| `str`  | Path to high-resolution data directory                                   |
-
-Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
+Required when mode is `lr_scans`, `lr_sr_scans` or `lr_gt_scans`
 
 ---
 
-#### Model Checkpoint <span style="color: orange">[OPTIONAL]</span>
+#### Super-Resolution Data Directory <span style="color: orange">[CONDITIONAL]</span>
 
-`--checkpoint`
+`--sr-dir`
 
-| Option | Description                                                                | Default |
-|--------|----------------------------------------------------------------------------|:-------:|
-| `str`  | Path to model checkpoint file                                   |  None   |
+| Option | Description                             |
+|--------|-----------------------------------------|
+| `str`  | Path to super-resolution data directory |
+
+Required when mode is `sr_scans`, `lr_sr_scans` or `sr_gt_scans`
+
+---
+
+#### Ground Truth Data Directory <span style="color: orange">[CONDITIONAL]</span>
+
+`--gt-dir`
+
+| Option | Description                         |
+|--------|-------------------------------------|
+| `str`  | Path to ground truth data directory |
+
+Required when mode is `gt_scans`, `lr_gt_scans` or `sr_gt_scans`
 
 ---
 
@@ -397,9 +400,9 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
 
 `--augmentation`
 
-| Option | Description                                                 | Default |
-|--------|-------------------------------------------------------------|:-------:|
-| `bool` | Apply augmentation techniques to the visualization data |  False  |
+| Option | Description                                               | Default |
+|--------|-----------------------------------------------------------|:-------:|
+| `bool` | Apply augmentation techniques to the visualization data   |  False  |
 
 ---
 
@@ -407,9 +410,9 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
 
 `--pixel-range`
 
-| Option     | Description                                                                |   Default    |
-|------------|----------------------------------------------------------------------------|:------------:|
-| `sequence` | Window range of pixel values (min, max). For multi-channel scaling provide ((min...), (max...))                                   | (None, None) |
+| Option     | Description                                                                                     |   Default    |
+|------------|-------------------------------------------------------------------------------------------------|:------------:|
+| `sequence` | Window range of pixel values (min, max). For multi-channel scaling provide ((min...), (max...)) | (None, None) |
 
 ---
 
@@ -417,11 +420,11 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
 
 `--plane`
 
-| Option          | Description | Default |
-|-----------------| --- |:-------:|
-| `'axial'` | Your description here |    ✓     |
+| Option       | Description           | Default |
+|--------------|-----------------------|:-------:|
+| `'axial'`    | Your description here |    ✓    |
 | `'sagittal'` | Your description here |         |
-| `'coronal'` | Your description here |         |
+| `'coronal'`  | Your description here |         |
 
 ---
 
@@ -429,10 +432,10 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
 
 `--dim`
 
-| Option          | Description | Default |
-|-----------------| --- |:-------:|
-| `'2D'` | Your description here |    ✓     |
-| `'3D'` | Your description here |         |
+| Option   | Description           | Default |
+|----------|-----------------------|:-------:|
+| `'2D'`   | Your description here |    ✓    |
+| `'3D'`   | Your description here |         |
 
 ---
 
@@ -451,8 +454,8 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
 `--slice`
 
 | Option | Description | Default |
-|--------| --- |:-------:|
-| `int`  | ... |   -1    |
+|--------|-------------|:-------:|
+| `int`  | ...         |   -1    |
 
 ---
 
@@ -461,8 +464,8 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
 `--batch-size`
 
 | Option | Description | Default |
-|--------| --- |:-------:|
-| `int`  | ... |    4    |
+|--------|-------------|:-------:|
+| `int`  | ...         |    2    |
 
 ---
 
@@ -471,8 +474,8 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
 `--num-workers`
 
 | Option | Description | Default |
-|--------| --- |:-------:|
-| `int`  | ... |    4    |
+|--------|-------------|:-------:|
+| `int`  | ...         |    4    |
 
 ---
 
@@ -481,7 +484,7 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `compare_scans`
 `--labels`
 
 | Option | Description | Default |
-|--------| --- |:-------:|
-| `bool` | ... |  True   |
+|--------|-------------|:-------:|
+| `bool` | ...         |  True   |
 
 <hr style="border:2px solid gray">
