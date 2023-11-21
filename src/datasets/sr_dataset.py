@@ -10,7 +10,7 @@ from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, Normal
 
 
 class SuperResolutionDataset(Dataset):
-    def __init__(self, lr_data_dir=None, hr_data_dir=None, scale_factor=1, lr_patch_size=(-1, -1, -1), _min=None, _max=None, mean=None, std=None, augmentation=False):
+    def __init__(self, lr_data_dir=None, hr_data_dir=None, scale_factor=None, lr_patch_size=(-1, -1, -1), _min=None, _max=None, mean=None, std=None, augmentation=False):
         super().__init__()
 
         # Data Directory Paths
@@ -69,7 +69,7 @@ class SuperResolutionDataset(Dataset):
         lr_volume = self.initial_transforms(get_volume_data(lr_volume_path)) if self.lr_data_dir else None
         hr_volume = self.initial_transforms(get_volume_data(hr_volume_path)) if self.hr_data_dir else None
 
-        sr_metadata = compute_super_resolution_volume_metadata(lr_metadata=get_volume_metadata(lr_volume_path), scale_factor=self.scale_factor) if self.lr_data_dir else (get_volume_metadata(hr_volume_path) if self.hr_data_dir else None)
+        sr_metadata = compute_super_resolution_volume_metadata(lr_metadata=get_volume_metadata(lr_volume_path), scale_factor=self.scale_factor) if (self.lr_data_dir and self.scale_factor) else (get_volume_metadata(hr_volume_path) if self.hr_data_dir else None)
 
         # Employ Data Augmentation
         lr_volume = self.apply_random_transform(transform=self.augmentation_transforms, volume=lr_volume, seed=seed) if self.lr_data_dir else None
