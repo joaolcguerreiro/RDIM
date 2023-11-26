@@ -66,11 +66,11 @@ def main():
     # Log Generator and Discriminator
     summary(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     draw_graph(generator, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=3, expand_nested=True, filename='generator_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
-    print_divisor(width=0, last=True)
+    print_divisor(width=0, last=True, new_lines_offset=-1)
 
     summary(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     draw_graph(discriminator, input_size=(1, *train_dataset.get_high_resolution_shape()), depth=3, expand_nested=True, filename='discriminator_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
-    print_divisor(width=0, last=True)
+    print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferers
     generator_inferer = SlidingWindowInferer(roi_size=args.lr_patch_size, overlap=0.25, mode='gaussian', sw_device=device, device=device)

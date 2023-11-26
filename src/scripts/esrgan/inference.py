@@ -45,7 +45,7 @@ def main():
 
     # Log Generator
     summary(generator, input_size=(1, *inference_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
-    print_divisor(width=0, last=True)
+    print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferer
     generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
