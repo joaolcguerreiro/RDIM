@@ -60,5 +60,5 @@ def setup_logging(log_file_path, mode='w'):
     sys.stdout = TeeLogger(log_file_path, sys.stdout)
 
 
-def print_divisor(width=140, new_lines=3, last=False):
+def print_divisor(width=140, new_lines=1, last=False):
     print('=' * width + ('\n' * new_lines if last else ''))

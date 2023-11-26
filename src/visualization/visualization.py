@@ -106,7 +106,7 @@ def main():
 
             display_batch(**volumes, plane=args.plane, dimension=args.dim, volume_filenames=volume_filenames, slice_index=args.slice, labels=args.labels)
 
-            print_divisor(width=0, new_lines=2, last=True) if batch_index + 1 != len(random.choice(display_config.get(args.mode).get('dataloaders'))) else None
+            print_divisor(width=0, last=True) if batch_index + 1 != len(random.choice(display_config.get(args.mode).get('dataloaders'))) else None
 
 
 if __name__ == '__main__':
