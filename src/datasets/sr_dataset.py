@@ -18,8 +18,8 @@ class SuperResolutionDataset(Dataset):
         self.hr_data_dir = hr_data_dir
 
         # Files
-        self.lr_files = os.listdir(lr_data_dir) if lr_data_dir else None
-        self.hr_files = os.listdir(hr_data_dir) if hr_data_dir else None
+        self.lr_files = sorted(os.listdir(lr_data_dir)) if lr_data_dir else None
+        self.hr_files = sorted(os.listdir(hr_data_dir)) if hr_data_dir else None
 
         # Resolution ratio between LR and HR
         self.scale_factor = scale_factor
@@ -69,7 +69,7 @@ class SuperResolutionDataset(Dataset):
         lr_volume = self.initial_transforms(get_volume_data(lr_volume_path)) if self.lr_data_dir else None
         hr_volume = self.initial_transforms(get_volume_data(hr_volume_path)) if self.hr_data_dir else None
 
-        sr_metadata = compute_super_resolution_volume_metadata(lr_metadata=get_volume_metadata(lr_volume_path), scale_factor=self.scale_factor) if (self.lr_data_dir and self.scale_factor) else (get_volume_metadata(hr_volume_path) if self.hr_data_dir else None)
+        sr_metadata = get_volume_metadata(hr_volume_path) if self.hr_data_dir else (compute_super_resolution_volume_metadata(lr_metadata=get_volume_metadata(lr_volume_path), scale_factor=self.scale_factor) if self.lr_data_dir else None)
 
         # Employ Data Augmentation
         lr_volume = self.apply_random_transform(transform=self.augmentation_transforms, volume=lr_volume, seed=seed) if self.lr_data_dir else None

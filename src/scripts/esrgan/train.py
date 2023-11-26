@@ -325,12 +325,13 @@ def main():
         # Plot reference sample figure
         if epoch == 0:
             save_sample(
+                lr_volume=lr_volumes[-1],
                 gen_volume=upsample(lr_volumes[-1], config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]),
                 gt_volume=hr_volumes[-1],
                 bins=100,
                 _min=_min, _max=_max, mean=mean, std=std,
-                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),
-                fig_size=(6, 6.5)
+                save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),
+                fig_size=(3, 3.25)
             ) if args.val else None
 
         # Save checkpoint
@@ -368,12 +369,13 @@ def main():
 
             # Plot sample figure
             save_sample(
+                lr_volume=lr_volumes[-1],
                 gen_volume=gen_volumes[-1],
                 gt_volume=hr_volumes[-1],
                 bins=100,
                 _min=_min, _max=_max, mean=mean, std=std,
-                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}'),
-                fig_size=(6, 6.5)
+                save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}'),
+                fig_size=(3, 3.25)
             ) if args.val else None
 
             # Plot generator loss
@@ -385,7 +387,7 @@ def main():
                 title='Generator Training and Validation Loss',
                 x_label='Epoch',
                 y_label='Loss',
-                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'generator_loss')
+                save_filename=os.path.join(experiment_path, 'figures', 'train', 'generator_loss')
             )
 
             # Plot discriminator loss
@@ -397,10 +399,10 @@ def main():
                 title='Discriminator Training and Validation Loss',
                 x_label='Epoch',
                 y_label='Loss',
-                save_dir_path=os.path.join(experiment_path, 'figures', 'train', 'discriminator_loss')
+                save_filename=os.path.join(experiment_path, 'figures', 'train', 'discriminator_loss')
             )
 
-    print_divisor(last=True)
+    print_divisor()
 
 
 if __name__ == '__main__':

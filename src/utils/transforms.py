@@ -618,9 +618,11 @@ class RandSpatialCrop(RandomizableTransform):
 
         self._start_pos = tuple(start_pos)
 
-    def __call__(self, volume: torch.Tensor, scale_factor: int = 1, randomize: bool = True) -> torch.Tensor:
-        assert True if torch.where(torch.tensor(self.lr_roi_size) <= 0, True, False).all() else scale_factor is not None, f'Scale factor is required for spatial crop with low-resolution ROI size {list(self.lr_roi_size)}'
+    def __call__(self, volume: torch.Tensor, scale_factor: int = None, randomize: bool = True) -> torch.Tensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if torch.where(torch.tensor(self.lr_roi_size) <= 0, True, False).all():
+            return volume
 
         if scale_factor is None:
             return volume

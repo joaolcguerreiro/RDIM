@@ -33,7 +33,7 @@ class Metrics:
             [metric['name'], np.mean(metric['scores'])] for metric in self.metrics
         ], headers=['Metric', 'Score']))
 
-        print_divisor(last=True)
+        print_divisor()
 
 
 class SuperResolutionMetrics(Metrics):

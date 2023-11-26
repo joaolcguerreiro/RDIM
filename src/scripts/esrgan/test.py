@@ -13,7 +13,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics
-from src.utils.utils import save_batch, collect_batch_pixels, draw_box_plot, draw_histogram, set_seed
+from src.utils.utils import save_samples, save_batch, collect_batch_pixels, draw_box_plot, draw_histogram, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
 
@@ -87,6 +87,18 @@ def main():
             scores = metrics.compute_scores(gen_volumes, hr_volumes)
             test_pbar.set_postfix(scores)
 
+            # Plot sample figures
+            save_samples(
+                lr_volumes=lr_volumes,
+                gen_volumes=gen_volumes,
+                gt_volumes=hr_volumes,
+                bins=100,
+                _min=_min, _max=_max, mean=mean, std=std,
+                save_dir_path=os.path.join(experiment_path, 'figures', 'test', 'samples'),
+                volumes_metadata=sr_volumes_metadata,
+                fig_size=(3, 3.25)
+            )
+
             # Save volumes
             save_batch(gen_volumes, sr_volumes_metadata, os.path.join(experiment_path, 'results'), mean=mean, std=std)
 
@@ -115,7 +127,7 @@ def main():
             x_label='Scale factor',
             y_label=metric_name,
             hue='Model',
-            save_dir_path=os.path.join(experiment_path, 'figures', 'test', f'{metric_name}', f'{args.epoch}')
+            save_filename=os.path.join(experiment_path, 'figures', 'test', f'{metric_name}', f'{args.epoch}')
         )
 
     # Plot sample pixel distribution
@@ -131,7 +143,7 @@ def main():
         bin_range=(_min, _max),
         element='step',
         fill=False,
-        save_dir_path=os.path.join(experiment_path, 'figures', 'test', 'pixel_distribution', f'{args.epoch}')
+        save_filename=os.path.join(experiment_path, 'figures', 'test', 'pixel_distribution', f'{args.epoch}')
     )
 
 

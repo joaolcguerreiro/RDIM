@@ -113,24 +113,24 @@ def draw_image_2d(imgs, n_rows=1, n_cols=1, fig_size=(3, 3), labels=None, show=T
     plt.show() if show else None
 
 
-def draw_image_3d(volumes, n_rows=1, n_cols=1, fig_size=(750, 750), labels=None, show=True, ax=None, theme='light'):
+def draw_image_3d(volumes, n_rows=1, n_cols=1, fig_size=(3, 3), labels=None, show=True, ax=None, theme='light'):
     pass
 
 
-def display_volumes(volumes, plane, dimension, n_rows, n_cols, volume_indexes=None, slice_index=-1, labels=None, theme='light'):
+def display_volumes(volumes, plane, dimension, n_rows=None, n_cols=None, fig_size=(3, 3), volume_filenames=None, slice_index=-1, labels=None, show=True, ax=None, theme='light'):
     if dimension == '2D':
         if int(slice_index) >= 0:
-            print(f'Volume {", ".join([f"{index:05}" for index in (volume_indexes or ["Unknown"])])}... Slice {slice_index}...')
-            imgs = [slice_volume(slice_index, plane, volume) for volume in volumes]
-            draw_image_2d(imgs, n_rows, n_cols, labels=labels, theme=theme)
+            slice_indexes = [slice_index]
         else:
-            for slice_index in range(count_volume_slices(plane, volumes[0])):
-                print(f'Volume {", ".join([f"{index:05}" for index in (volume_indexes or ["Unknown"])])}... Slice {slice_index}...')
-                imgs = [slice_volume(slice_index, plane, volume) for volume in volumes]
-                draw_image_2d(imgs, n_rows, n_cols, labels=labels, theme=theme)
+            slice_indexes = range(count_volume_slices(plane, volumes[0]))
+
+        for slice_index in slice_indexes:
+            print('Volumes:\n' + '\n'.join(f'- {volume_filename} (Slice {slice_index})' for volume_filename in volume_filenames)) if show else None
+            imgs = [slice_volume(slice_index, plane, volume) for volume in volumes]
+            draw_image_2d(imgs, n_rows, n_cols, fig_size=fig_size, labels=labels, show=show, ax=ax, theme=theme)
     elif dimension == '3D':
-        print(f'Volume {", ".join([f"{index:05}" for index in (volume_indexes or ["Unknown"])])}...')
-        draw_image_3d(volumes, n_rows, n_cols, labels=labels, theme=theme)
+        print('Volumes:\n' + '\n'.join(f'- {volume_filename}' for volume_filename in volume_filenames)) if show else None
+        draw_image_3d(volumes, n_rows, n_cols, fig_size=fig_size, labels=labels, show=show, ax=ax, theme=theme)
     else:
         raise NotImplementedError('Invalid dimension')
 
@@ -180,15 +180,21 @@ def compute_data_statistics(data_dir, num_channels):
     return _min, _max, mean, std
 
 
-def compute_super_resolution_volume_metadata(lr_metadata, scale_factor):
-    # Create a copy of the header
-    super_resolution_header = lr_metadata['header'].copy()
-    super_resolution_header.set_zooms(np.array(super_resolution_header.get_zooms()) / scale_factor)
-    super_resolution_header.set_data_shape(np.array(super_resolution_header.get_data_shape()) * scale_factor)
+def compute_super_resolution_volume_metadata(lr_metadata, scale_factor=None):
+    super_resolution_header = None
+    super_resolution_affine = None
 
-    # Update the affine matrix to account for the new voxel dimensions
-    super_resolution_affine = lr_metadata['affine'].copy()
-    np.fill_diagonal(super_resolution_affine[:3, :3], np.diagonal(super_resolution_affine[:3, :3]) / scale_factor)
+    if scale_factor is not None and scale_factor > 0:
+        # Create copies of the header and affine matrix
+        super_resolution_header = lr_metadata['header'].copy()
+        super_resolution_affine = lr_metadata['affine'].copy()
+
+        # Update the header to account for the new voxel dimensions
+        super_resolution_header.set_zooms(np.array(super_resolution_header.get_zooms()) / scale_factor)
+        super_resolution_header.set_data_shape(np.array(super_resolution_header.get_data_shape()) * scale_factor)
+
+        # Update the affine matrix to account for the new voxel dimensions
+        np.fill_diagonal(super_resolution_affine[:3, :3], np.diagonal(super_resolution_affine[:3, :3]) / scale_factor)
 
     return {
         'filename': lr_metadata['filename'],
@@ -205,18 +211,18 @@ def upsample(volume, scale_factor):
     return transforms.Zoom(zoom=scale_factor, mode="trilinear", keep_size=False)(volume)
 
 
-def compute_scale_factor(lr_volume, gt_volume):
-    # Remove channel dimension and fetch volume shapes
-    lr_shape = lr_volume.squeeze(axis=0).shape
-    gt_shape = gt_volume.squeeze(axis=0).shape
+def compute_scale_factor(lr_volume, hr_volume):
+    # Fetch volume spatial dimensions (discard channel dimension)
+    lr_shape = lr_volume.shape[1:]
+    hr_shape = hr_volume.shape[1:]
 
     # Calculate the scale factor for each dimension
-    scale_factor = np.array(gt_shape) / np.array(lr_shape)
+    scale_factor = np.array(hr_shape) / np.array(lr_shape)
 
     return scale_factor
 
 
-def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axial', dimension='2D', volume_indexes=None, slice_index=-1, labels=True, theme='light'):
+def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, fig_size=(3, 3), plane='axial', dimension='2D', volume_filenames=None, slice_index=-1, labels=True, theme='light'):
     lr_volumes = list() if lr_volumes is None else list(lr_volumes.to('cpu'))
     sr_volumes = list() if sr_volumes is None else list(sr_volumes.to('cpu'))
     gt_volumes = list() if gt_volumes is None else list(gt_volumes.to('cpu'))
@@ -244,7 +250,11 @@ def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axia
     batch_size = len(lr_volumes or sr_volumes or gt_volumes)
     _labels = list(label for label, _array in zip(['Downsampled', 'Synthetic', 'Ground Truth'], [lr_volumes, sr_volumes, gt_volumes]) if _array) * batch_size if labels else None
 
-    display_volumes(volumes, plane=plane, dimension=dimension, n_rows=batch_size, n_cols=num_volume_types, volume_indexes=volume_indexes, slice_index=slice_index, labels=_labels, theme=theme)
+    print_divisor(width=50)
+
+    display_volumes(volumes, plane=plane, dimension=dimension, n_rows=batch_size, n_cols=num_volume_types, fig_size=fig_size, volume_filenames=volume_filenames, slice_index=slice_index, labels=_labels, theme=theme)
+
+    print_divisor(width=50)
 
 
 def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):
@@ -267,66 +277,98 @@ def collect_batch_pixels(volumes, mean=None, std=None):
     return volumes_pixels
 
 
-def save_sample(gen_volume, gt_volume, save_dir_path, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', fig_size=(6, 6), theme='light'):
+def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=True):
     # Denormalize volumes
+    lr_volume = lr_volume if (mean is None or std is None) else denormalize(lr_volume, mean=mean, std=std)
     gen_volume = gen_volume if (mean is None or std is None) else denormalize(gen_volume, mean=mean, std=std)
-    gt_volume = gt_volume if (mean is None or std is None) else denormalize(gt_volume, mean=mean, std=std)
+    gt_volume = gt_volume if (mean is None or std is None or gt_volume is None) else denormalize(gt_volume, mean=mean, std=std)
+
+    # Compute scale factor
+    hr_volume = gen_volume if gen_volume is not None else gt_volume
+    scale_factor = compute_scale_factor(lr_volume, hr_volume) if (lr_volume is not None and hr_volume is not None) else (1, 1, 1)
 
     # Reorient volume for visualization
+    lr_volume = adjust_volume_orientation(upsample(lr_volume, scale_factor).to('cpu'))
     gen_volume = adjust_volume_orientation(gen_volume.to('cpu'))
-    gt_volume = adjust_volume_orientation(gt_volume.to('cpu'))
+    gt_volume = adjust_volume_orientation(gt_volume.to('cpu')) if gt_volume is not None else gt_volume
 
     # Define slice index
-    slice_index = count_volume_slices(plane=plane, volume=gt_volume) // 2
-
-    gen_slice = slice_volume(slice_index=slice_index, plane=plane, volume=gen_volume)
-    gt_slice = slice_volume(slice_index=slice_index, plane=plane, volume=gt_volume)
+    slice_index = (count_volume_slices(plane=plane, volume=gen_volume) // 2) if dimension == '2D' else None
 
     # Create a new figure
-    fig = plt.figure(figsize=fig_size)
+    n_imgs = sum(1 for volume in [lr_volume, gen_volume, gt_volume] if volume is not None)
+    fig_width = fig_size[0] * n_imgs
+    fig_height = fig_size[1] * (2 if with_histogram else 1)
+
+    fig = plt.figure(figsize=(fig_width, fig_height))
 
     if theme == 'dark':
         plt.style.use('dark_background')
 
     # Stick images always to top corners despite figure ratio
-    n_imgs = 2
     grid_img_top = 1
-    grid_img_bottom = grid_img_top - (fig_size[0] / fig_size[1] / n_imgs)
+    grid_img_bottom = grid_img_top - (fig_width / n_imgs / fig_height)
 
     # Create grid for images
     grid_img = plt.GridSpec(1, n_imgs, wspace=0, left=0, right=1, bottom=grid_img_bottom, top=grid_img_top)
-    ax_img = np.array([[fig.add_subplot(grid_img[0]), fig.add_subplot(grid_img[1])]])
-
-    # Create grid for histogram
-    grid_hist = plt.GridSpec(1, n_imgs, top=grid_img_bottom * 0.875)
-    ax_hist = fig.add_subplot(grid_hist[0:])
+    ax_img = np.array([[fig.add_subplot(grid_img[index]) for index in range(n_imgs)]])
 
     # Draw slices
-    draw_image_2d([gen_slice, gt_slice], labels=['Synthetic', 'Ground Truth'], show=False, ax=ax_img, theme=theme)
+    volumes, labels = zip(*filter(lambda slice_label_pair: slice_label_pair[0] is not None, zip([lr_volume, gen_volume, gt_volume], ['Downsampled', 'Synthetic', 'Ground Truth'])))
+    display_volumes(volumes, plane=plane, dimension=dimension, slice_index=slice_index, labels=labels, show=False, ax=ax_img, theme=theme)
 
-    # Draw pixel distribution histogram
-    draw_histogram(
-        data=[
-            {'Pixel Intensity': gen_slice.flatten().tolist(), 'Data Type': ['Synthetic'] * gen_slice.numel()},
-            {'Pixel Intensity': gt_slice.flatten().tolist(), 'Data Type': ['Ground Truth'] * gt_slice.numel()},
-        ],
-        title='Sample Pixel Distribution',
-        x_label='Pixel Intensity',
-        hue='Data Type',
-        bins=bins,
-        bin_range=None if (_min is None or _max is None) else (_min, _max),
-        element='step',
-        fill=False,
-        ax=ax_hist,
-        theme=theme
-    )
+    if with_histogram:
+        lr_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=lr_volume) if dimension == '2D' else lr_volume).flatten().tolist()
+        gen_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=gen_volume) if dimension == '2D' else gen_volume).flatten().tolist()
+        gt_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=gt_volume) if dimension == '2D' else gt_volume).flatten().tolist() if gt_volume is not None else list()
+
+        # Create grid for histogram
+        grid_hist = plt.GridSpec(1, n_imgs, top=grid_img_bottom * 0.875)
+        ax_hist = fig.add_subplot(grid_hist[0:])
+
+        # Draw pixel distribution histogram
+        draw_histogram(
+            data=[
+                {'Pixel Intensity': lr_pixel_values, 'Data Type': ['Downsampled'] * len(lr_pixel_values)},
+                {'Pixel Intensity': gen_pixel_values, 'Data Type': ['Synthetic'] * len(gen_pixel_values)},
+                *({'Pixel Intensity': gt_pixel_values, 'Data Type': ['Ground Truth'] * len(gt_pixel_values)} for gt_pixel_values in [gt_pixel_values] if gt_pixel_values),
+            ],
+            title='Sample Pixel Distribution',
+            x_label='Pixel Intensity',
+            hue='Data Type',
+            bins=bins,
+            bin_range=None if (_min is None or _max is None) else (_min, _max),
+            element='step',
+            fill=False,
+            ax=ax_hist,
+            theme=theme
+        )
 
     # Save figure
-    ensure_dir_exists(save_dir_path)
-    plt.savefig(save_dir_path)
+    ensure_dir_exists(save_filename)
+    plt.savefig(save_filename)
 
 
-def draw_line_chart(data, title, x_label, y_label, save_dir_path, ax=None, theme='light'):
+def save_samples(save_dir_path, volumes_metadata, lr_volumes, gen_volumes, gt_volumes=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=False):
+    save_filenames = [os.path.join(save_dir_path, f'{os.path.splitext(filename)[0]}') for filename in volumes_metadata['filename']]
+
+    for lr_volume, gen_volume, gt_volume, save_filename in zip(lr_volumes, gen_volumes, (gt_volumes if gt_volumes is not None else [gt_volumes] * len(gen_volumes)), save_filenames):
+        save_sample(
+            lr_volume=lr_volume,
+            gen_volume=gen_volume,
+            gt_volume=gt_volume,
+            bins=bins,
+            _min=_min, _max=_max, mean=mean, std=std,
+            save_filename=save_filename,
+            plane=plane,
+            dimension=dimension,
+            fig_size=fig_size,
+            theme=theme,
+            with_histogram=with_histogram
+        )
+
+
+def draw_line_chart(data, title, x_label, y_label, save_filename, ax=None, theme='light'):
     if theme == 'dark':
         plt.style.use('dark_background')
 
@@ -344,12 +386,12 @@ def draw_line_chart(data, title, x_label, y_label, save_dir_path, ax=None, theme
     ax.legend()
 
     # Save chart
-    if save_dir_path:
-        ensure_dir_exists(save_dir_path)
-        plt.savefig(save_dir_path)
+    if save_filename:
+        ensure_dir_exists(save_filename)
+        plt.savefig(save_filename)
 
 
-def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bin_range=None, element='bars', fill=True, save_dir_path=None, ax=None, theme='light'):
+def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bin_range=None, element='bars', fill=True, save_filename=None, ax=None, theme='light'):
     # Parse data
     data = pd.DataFrame({
         key: sum((_dict[key] for _dict in data), []) for key in [x_label, hue] if key is not None
@@ -367,12 +409,12 @@ def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bi
     ax.set_title(title)
 
     # Save chart
-    if save_dir_path:
-        ensure_dir_exists(save_dir_path)
-        plt.savefig(save_dir_path)
+    if save_filename:
+        ensure_dir_exists(save_filename)
+        plt.savefig(save_filename)
 
 
-def draw_box_plot(data, title, x_label, y_label, hue=None, save_dir_path=None, ax=None, theme='light'):
+def draw_box_plot(data, title, x_label, y_label, hue=None, save_filename=None, ax=None, theme='light'):
     # Parse data
     data = pd.DataFrame({
         key: sum((_dict[key] for _dict in data), []) for key in [x_label, y_label, hue] if key is not None
@@ -390,9 +432,9 @@ def draw_box_plot(data, title, x_label, y_label, hue=None, save_dir_path=None, a
     ax.set_title(title)
 
     # Save chart
-    if save_dir_path:
-        ensure_dir_exists(save_dir_path)
-        plt.savefig(save_dir_path)
+    if save_filename:
+        ensure_dir_exists(save_filename)
+        plt.savefig(save_filename)
 
 
 def create_experiment_directory(experiment_path, config_path=None, checkpoint_path=None, inference_mode=False):

@@ -1,12 +1,14 @@
 import os
 import sys
 import ast
+import random
 import argparse
 import numpy as np
 from torch.utils.data import DataLoader
 sys.path.append(os.path.join('..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.utils.utils import display_batch, set_seed
+from src.utils.logger import print_divisor
 
 
 # Available display modes
@@ -60,7 +62,7 @@ def main():
     sr_dataloader = DataLoader(sr_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
     gt_dataloader = DataLoader(gt_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
-    # Define display configurations by mapping each mode to its respective volume types, dataloaders, and batch data indexes
+    # Define display configurations. Map each mode to its respective volume types, dataloaders, and batch data indexes
     display_config = {
         'lr_scans': {'volume_types': ['lr_volumes'], 'dataloaders': [lr_dataloader], 'batch_data_indexes': [0]},
         'sr_scans': {'volume_types': ['sr_volumes'], 'dataloaders': [sr_dataloader], 'batch_data_indexes': [1]},
@@ -69,22 +71,42 @@ def main():
         'lr_gt_scans': {'volume_types': ['lr_volumes', 'gt_volumes'], 'dataloaders': [lr_dataloader, gt_dataloader], 'batch_data_indexes': [0, 1]},
         'sr_gt_scans': {'volume_types': ['sr_volumes', 'gt_volumes'], 'dataloaders': [sr_dataloader, gt_dataloader], 'batch_data_indexes': [1, 1]},
         'lr_sr_gt_scans': {'volume_types': ['lr_volumes', 'sr_volumes', 'gt_volumes'], 'dataloaders': [lr_dataloader, sr_dataloader, gt_dataloader], 'batch_data_indexes': [0, 1, 1]},
+        'batch_metadata_index': 2
     }
 
     if int(args.volume) >= 0:
         # Define volumes
-        volumes = {volume_type: dataloader.dataset[args.volume][batch_data_index].unsqueeze(dim=0) for volume_type, dataloader, batch_data_index in zip(display_config.get(args.mode).get('volume_types'), display_config.get(args.mode).get('dataloaders'), display_config.get(args.mode).get('batch_data_indexes'))}
+        volumes = {
+            volume_type: dataloader.dataset[args.volume][batch_data_index].unsqueeze(dim=0)
+            for volume_type, dataloader, batch_data_index in zip(
+                display_config.get(args.mode).get('volume_types'),
+                display_config.get(args.mode).get('dataloaders'),
+                display_config.get(args.mode).get('batch_data_indexes')
+            )
+        }
 
-        display_batch(**volumes, plane=args.plane, dimension=args.dim, volume_indexes=[args.volume], slice_index=args.slice, labels=args.labels)
+        # Generate list with filename for given volume
+        volume_filenames = [random.choice(display_config.get(args.mode).get('dataloaders')).dataset[args.volume][display_config.get('batch_metadata_index')]['filename']]
+
+        display_batch(**volumes, plane=args.plane, dimension=args.dim, volume_filenames=volume_filenames, slice_index=args.slice, labels=args.labels)
     else:
         for batch_index, batch_datas in enumerate(zip(*display_config.get(args.mode).get('dataloaders'))):
             # Define volumes
-            volumes = {volume_type: batch_data[batch_data_index] for volume_type, batch_data, batch_data_index in zip(display_config.get(args.mode).get('volume_types'), batch_datas, display_config.get(args.mode).get('batch_data_indexes'))}
+            volumes = {
+                volume_type: batch_data[batch_data_index]
+                for volume_type, batch_data, batch_data_index in zip(
+                    display_config.get(args.mode).get('volume_types'),
+                    batch_datas,
+                    display_config.get(args.mode).get('batch_data_indexes')
+                )
+            }
 
-            # Generate list of consecutive indexes for a given batch
-            volume_indexes = [index for index in range(batch_index * args.batch_size, (batch_index + 1) * args.batch_size) if index < len(lr_dataset or sr_dataset or gt_dataset)]
+            # Generate list with filenames from a given batch
+            volume_filenames = random.choice(batch_datas)[display_config.get('batch_metadata_index')]['filename']
 
-            display_batch(**volumes, plane=args.plane, dimension=args.dim, volume_indexes=volume_indexes, slice_index=args.slice, labels=args.labels)
+            display_batch(**volumes, plane=args.plane, dimension=args.dim, volume_filenames=volume_filenames, slice_index=args.slice, labels=args.labels)
+
+            print_divisor(width=0, new_lines=2, last=True) if batch_index + 1 != len(random.choice(display_config.get(args.mode).get('dataloaders'))) else None
 
 
 if __name__ == '__main__':
