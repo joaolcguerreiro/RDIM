@@ -78,7 +78,7 @@ def main():
                 _min=_min, _max=_max, mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'samples'),
                 volumes_metadata=sr_volumes_metadata,
-                fig_size=(3, 3.25)
+                fig_size=(3, 3)
             )
 
             # Save volumes
