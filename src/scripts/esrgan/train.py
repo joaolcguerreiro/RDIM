@@ -415,10 +415,10 @@ if __name__ == '__main__':
 
     if args.resume:
         experiment_path = args.resume
-        config_path = os.path.join(args.resume, "config.yaml")
+        config_path = os.path.join(args.resume, "configs", "config.yaml")
         checkpoint_path = max(glob(os.path.join(args.resume, "checkpoints", "*.pth")), key=os.path.getctime)
     else:
-        config_path = os.path.join('..', '..', '..', 'configuration', "esrgan", 'config.yaml')
+        config_path = os.path.join('..', '..', '..', 'configs', "esrgan", 'config.yaml')
 
     # Load configuration file
     with open(config_path, 'r') as f:

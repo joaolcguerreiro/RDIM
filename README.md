@@ -193,7 +193,7 @@ Note: This aforementioned structure is not mandatory. Also, the validation and t
 
 # Configuration File
 
-Global configuration files are in configuration/ directory... (in case of trainig resume a copy of this files is done to load original parameters) 
+Global configuration files are in configs/ directory... (a copy of the config file is stored in the experiment folder and later used to load the original parameters during the resume of a training experiment)
 
 #### Batch Size
 
@@ -209,14 +209,14 @@ Global configuration files are in configuration/ directory... (in case of traini
 
 # Experiment Tracking
 
-Everytime you train a model.... a experiments folder is built (except if training was resumed, thereby it is used the folder of the prior run)... the global configuration file is saved to resume training.
+Everytime you train a model.... an experiment folder is built (except if training was resumed, thereby it is used the folder of the prior run)... the global configuration file is stored in the experiment folder to fetch the original parameters during training resume.
 
 ### Directory Structure
 
 the structure is the following....
 <model_name>
    <date_time>
-      config.yaml
+      <configs>
       <checkpoints>
       <figures>
       <logs>
@@ -226,7 +226,7 @@ the structure is the following....
 
 ### Folder Description
 
-config.yaml ... copy of global configuration file used in the experiment. Loaded in case of training resuming.
+configs/... Contains copy of global configuration file used in the experiment. Loaded in case of training resuming.
 
 checkpoints/ .... Contains saved checkpoints of the model during training
 
@@ -250,7 +250,7 @@ In the following instructions, replace `<model>` by one of the options below:
 
 ### Train and Validation
 
-1) go to configuration/ and adjust configuration parameters needed....
+1) go to `configs/<model>/config.yaml` and adjust configuration parameters needed....
 
 2) Navigate to `src/scripts/<model>/`
 
@@ -277,7 +277,7 @@ Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more compu
 
 ### Load Pre-trained
 
-1) go to `configuration/<model>/config.yaml` and update pre-trained path key parameter of model....
+1) go to `configs/<model>/config.yaml` and update pre-trained path parameters of model....
 
 2) Navigate to `src/scripts/<model>/`
 

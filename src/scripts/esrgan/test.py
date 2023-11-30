@@ -156,7 +156,7 @@ if __name__ == '__main__':
 
     # Define experiment folder
     experiment_path = args.exp
-    config_path = os.path.join(args.exp, "config.yaml")
+    config_path = os.path.join(args.exp, "configs", "config.yaml")
     checkpoint_path = os.path.join(args.exp, "checkpoints", f"{args.epoch}.pth")
 
     # Load configuration file

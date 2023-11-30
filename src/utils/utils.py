@@ -453,7 +453,8 @@ def create_experiment_directory(experiment_path, config_path=None, checkpoint_pa
             os.makedirs(os.path.join(experiment_path, path))
 
         # Clone global config file for reproducibility
-        shutil.copy(config_path, experiment_path)
+        os.makedirs(os.path.join(experiment_path, 'configs'))
+        shutil.copy(config_path, os.path.join(experiment_path, 'configs'))
     else:
         os.makedirs(os.path.join(experiment_path, 'logs'))
         os.makedirs(os.path.join(experiment_path, 'figures'))
