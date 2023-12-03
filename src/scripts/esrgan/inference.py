@@ -29,8 +29,8 @@ def main():
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
     # Compute z-score range
-    z_min = (_min - mean) / std
-    z_max = (_max - mean) / std
+    z_min = torch.tensor((_min - mean) / std).view(1, -1, *([1] * 3))
+    z_max = torch.tensor((_max - mean) / std).view(1, -1, *([1] * 3))
 
     inference_dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     inference_dataloader = DataLoader(inference_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)

@@ -4,7 +4,6 @@ import argparse
 import logging
 import yaml
 import torch
-import numpy as np
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
@@ -31,9 +30,8 @@ def main():
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
     # Compute z-score range
-    z_min = (_min - mean) / std
-    z_max = (_max - mean) / std
-    z_data_range = float(np.max(z_max) - np.min(z_min))
+    z_min = torch.tensor((_min - mean) / std).view(1, -1, *([1] * 3))
+    z_max = torch.tensor((_max - mean) / std).view(1, -1, *([1] * 3))
 
     test_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TESTING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TESTING"]["HR_DIR_PATH"], scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     test_dataloader = DataLoader(test_dataset, batch_size=config["TESTING"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
@@ -58,7 +56,7 @@ def main():
     generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
 
     # Define metrics
-    metrics = SuperResolutionMetrics(_max=z_max, data_range=z_data_range, num_spatial_dims=(len(test_dataset.get_low_resolution_shape()) - 1))
+    metrics = SuperResolutionMetrics(num_spatial_dims=(len(test_dataset.get_low_resolution_shape()) - 1), _min=_min, _max=_max, mean=mean, std=std)
 
     # Initialize generator weights
     generator.load_state_dict(checkpoint['generator_state_dict'])

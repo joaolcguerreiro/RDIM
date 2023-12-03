@@ -1,5 +1,6 @@
 import os
 import sys
+import torch
 import numpy as np
 from monai.metrics import MSEMetric, PSNRMetric, SSIMMetric
 from tabulate import tabulate
@@ -37,8 +38,13 @@ class Metrics:
 
 
 class SuperResolutionMetrics(Metrics):
-    def __init__(self, _max, data_range, num_spatial_dims):
+    def __init__(self, num_spatial_dims, _min, _max, mean=None, std=None):
         super().__init__()
+
+        # Define data range
+        _min = float(torch.tensor(_min if (mean is None or std is None) else ((_min - mean) / std)).min())
+        _max = float(torch.tensor(_max if (mean is None or std is None) else ((_max - mean) / std)).max())
+        data_range = _max - _min
 
         # Define metrics
         self.metrics = [

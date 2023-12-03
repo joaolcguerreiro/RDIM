@@ -35,8 +35,8 @@ def main():
     _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_channels=config["MODEL"]["GENERATOR"]["IN_CHANNEL"])
 
     # Compute z-score range
-    z_min = (_min - mean) / std
-    z_max = (_max - mean) / std
+    z_min = torch.tensor((_min - mean) / std).view(1, -1, *([1] * 3))
+    z_max = torch.tensor((_max - mean) / std).view(1, -1, *([1] * 3))
 
     # Define datasets and data loaders
     train_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], lr_patch_size=args.lr_patch_size, _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
