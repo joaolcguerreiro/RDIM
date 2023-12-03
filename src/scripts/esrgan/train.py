@@ -19,7 +19,7 @@ from monai.inferers import SlidingWindowSplitter
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
-from src.utils.losses import VGGLoss
+from src.utils.losses import VGGLoss, RangeLoss
 from src.utils.utils import upsample, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
@@ -33,6 +33,10 @@ def main():
 
     # Compute training data statistics
     _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_channels=config["MODEL"]["GENERATOR"]["IN_CHANNEL"])
+
+    # Compute z-score range
+    z_min = (_min - mean) / std
+    z_max = (_max - mean) / std
 
     # Define datasets and data loaders
     train_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], lr_patch_size=args.lr_patch_size, _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
@@ -97,6 +101,7 @@ def main():
     perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], args.lr_patch_size))).to(device)
     adversarial_criterion = nn.BCEWithLogitsLoss().to(device)
     content_criterion = nn.L1Loss().to(device)
+    range_criterion = RangeLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)
 
     # Load pre-trained models
     if config['MODEL']['GENERATOR']['PRE_TRAINED_PATH']:
@@ -184,8 +189,11 @@ def main():
             # Compute pixel-wise loss
             content_loss = content_criterion(gen_volumes, hr_volumes)
 
+            # Compute range loss
+            range_loss = range_criterion(gen_volumes)
+
             # Generator Total loss
-            generator_total_loss = config['LOSS_WEIGHTS']['GENERATOR']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['GENERATOR']['ADVERSARIAL_LOSS'] * adversarial_loss + config['LOSS_WEIGHTS']['GENERATOR']['CONTENT_LOSS'] * content_loss
+            generator_total_loss = config['LOSS_WEIGHTS']['GENERATOR']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['GENERATOR']['ADVERSARIAL_LOSS'] * adversarial_loss + config['LOSS_WEIGHTS']['GENERATOR']['CONTENT_LOSS'] * content_loss + config['LOSS_WEIGHTS']['GENERATOR']['RANGE_LOSS'] * range_loss
 
             # Backward pass
             generator_total_loss.backward()
@@ -274,8 +282,11 @@ def main():
                     # Compute pixel-wise loss
                     content_loss = content_criterion(gen_volumes, hr_volumes)
 
+                    # Compute range loss
+                    range_loss = range_criterion(gen_volumes)
+
                     # Generator Total loss
-                    generator_total_loss = config['LOSS_WEIGHTS']['GENERATOR']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['GENERATOR']['ADVERSARIAL_LOSS'] * adversarial_loss + config['LOSS_WEIGHTS']['GENERATOR']['CONTENT_LOSS'] * content_loss
+                    generator_total_loss = config['LOSS_WEIGHTS']['GENERATOR']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['GENERATOR']['ADVERSARIAL_LOSS'] * adversarial_loss + config['LOSS_WEIGHTS']['GENERATOR']['CONTENT_LOSS'] * content_loss + config['LOSS_WEIGHTS']['GENERATOR']['RANGE_LOSS'] * range_loss
 
                     #=========================#
                     #  Validate Discriminator #
@@ -370,7 +381,7 @@ def main():
             # Plot sample figure
             save_sample(
                 lr_volume=lr_volumes[-1],
-                gen_volume=gen_volumes[-1],
+                gen_volume=(lambda volume: torch.clamp(volume, min=z_min, max=z_max) if args.clamp else volume)(gen_volumes[-1]),
                 gt_volume=hr_volumes[-1],
                 bins=100,
                 _min=_min, _max=_max, mean=mean, std=std,
@@ -411,6 +422,7 @@ if __name__ == '__main__':
     parser.add_argument('--val', default=True, help='Apply validation during training', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--resume', default=None, help="Path to experiment directory to be resumed", type=str)
     parser.add_argument('--lr-patch-size', default=(-1, -1, -1), help="Low-resolution training patch size to reduce computation", type=ast.literal_eval)
+    parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))
     args = parser.parse_args()
 
     if args.resume:

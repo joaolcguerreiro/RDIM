@@ -28,6 +28,10 @@ def main():
     # Fetch training data statistics
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
+    # Compute z-score range
+    z_min = (_min - mean) / std
+    z_max = (_max - mean) / std
+
     inference_dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     inference_dataloader = DataLoader(inference_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
@@ -70,6 +74,9 @@ def main():
             # Forward pass
             gen_volumes = generator_inferer(inputs=lr_volumes, network=generator)
 
+            # Clamp generated data
+            gen_volumes = torch.clamp(gen_volumes, min=z_min, max=z_max) if args.clamp else gen_volumes
+
             # Plot sample figures
             save_samples(
                 lr_volumes=lr_volumes,
@@ -96,6 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint', required=True, help='Path to model checkpoint', type=str)
     parser.add_argument('--lr-dir', required=True, help='Path to low-resolution data directory', type=str)
     parser.add_argument('--save-dir', required=True, help='Path to directory where results are saved', type=str)
+    parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--batch-size', default=2, help='Number of samples per batch', type=int)
     parser.add_argument('--num-workers', default=4, help='Number of subprocesses used for data loading', type=int)
     args = parser.parse_args()

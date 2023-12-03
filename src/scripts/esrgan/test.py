@@ -83,6 +83,9 @@ def main():
             # Forward pass
             gen_volumes = generator_inferer(inputs=lr_volumes, network=generator)
 
+            # Clamp generated data
+            gen_volumes = torch.clamp(gen_volumes, min=z_min, max=z_max) if args.clamp else gen_volumes
+
             # Compute metrics
             scores = metrics.compute_scores(gen_volumes, hr_volumes)
             test_pbar.set_postfix(scores)
@@ -152,6 +155,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Testing Script')
     parser.add_argument('--exp', required=True, help="Path to experiment directory", type=str)
     parser.add_argument('--epoch', required=True, help="Epoch to be tested", type=str)
+    parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))
     args = parser.parse_args()
 
     # Define experiment folder

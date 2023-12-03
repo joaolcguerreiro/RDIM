@@ -11,7 +11,7 @@ from src.models.esrgan import Discriminator
 
 
 class VGGLoss(nn.Module):
-    def __init__(self, _min, _max, mean, std, patch_size=(-1, -1, -1)):
+    def __init__(self, _min, _max, mean=None, std=None, patch_size=(-1, -1, -1)):
         super().__init__()
 
         # Define Criterion
@@ -28,7 +28,7 @@ class VGGLoss(nn.Module):
 
         # VGG transforms
         self.vgg_transforms = transforms.Compose([
-            NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True),
+            NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
             NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True),
             transforms.SpatialPad(spatial_size=(32, 32, 32)),
             EnsureExactChannels(num_channels=3),
@@ -107,3 +107,25 @@ class GANDLoss(nn.Module):
         discriminator_features_ground_truths = self.inferer(inputs=transformed_ground_truths, network=self.discriminator).detach()
 
         return self.criterion(discriminator_features_predictions, discriminator_features_ground_truths)
+
+
+class RangeLoss(nn.Module):
+    """
+    Compute loss that constraints generated data to be within a specific range by penalizing outputs outside it.
+    """
+
+    def __init__(self, _min, _max, mean=None, std=None):
+        super().__init__()
+
+        # Define Criterion
+        self.criterion = nn.L1Loss()
+
+        # Define data range
+        self._min = _min if (mean is None or std is None) else (_min - mean) / std
+        self._max = _max if (mean is None or std is None) else (_max - mean) / std
+
+    def forward(self, predictions):
+        below = torch.relu(self._min - predictions)
+        above = torch.relu(predictions - self._max)
+
+        return torch.mean(below + above)
