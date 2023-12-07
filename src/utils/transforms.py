@@ -12,7 +12,6 @@ from monai.utils.enums import TransformBackends
 from monai.config.type_definitions import NdarrayOrTensor
 from monai.transforms.transform import Transform, RandomizableTransform
 from monai.utils.type_conversion import convert_data_type, convert_to_dst_type, convert_to_tensor
-from monai.transforms.utils_pytorch_numpy_unification import where
 
 
 class EnsureChannelExists(Transform):
@@ -90,7 +89,7 @@ class EnsureExactChannels(Transform):
                     return volume
 
             repeats = (self.num_channels + num_volume_channels - 1) // num_volume_channels
-            volume = volume.repeat(repeats, 1, 1, 1)
+            volume = volume.repeat(repeats, *([1] * 3))
             volume = volume[:self.num_channels, :, :, :]
 
         elif num_volume_channels > self.num_channels:
@@ -138,11 +137,23 @@ class NormalizeIntensity(Transform):
         std: Union[float, Sequence[float], NdarrayOrTensor],
         channel_wise: bool = False,
     ) -> None:
-        self.mean = mean
-        self.std = std
+        if isinstance(mean, (float, int, np.integer, np.floating, NdarrayOrTensor)):
+            self.mean = mean
+        elif isinstance(mean, Sequence) and all(isinstance(m, (float, int)) for m in mean):
+            self.mean = mean
+        else:
+            raise ValueError(f"Mean must be an int, float, sequence of ints or floats, numpy array or torch tensor, got {type(mean)} {mean}.")
+
+        if isinstance(std, (float, int, np.integer, np.floating, NdarrayOrTensor)):
+            self.std = std
+        elif isinstance(std, Sequence) and all(isinstance(s, (float, int)) for s in std):
+            self.std = std
+        else:
+            raise ValueError(f"STD must be an int, float, sequence of ints or floats, numpy array or torch tensor, got {type(std)} {std}.")
+
         self.channel_wise = channel_wise
 
-    def _normalize(self, normalized_volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+    def _normalize(self, volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
         if not mean.numel() == 1:
             raise ValueError(f"Mean must be a singleton or scalar tensor, got {type(mean)} {mean}.")
 
@@ -150,43 +161,43 @@ class NormalizeIntensity(Transform):
             raise ValueError(f"STD must be a singleton or scalar tensor, got {type(std)} {std}.")
 
         # Get device and dtype of the input
-        device = normalized_volume.device
-        dtype = normalized_volume.dtype
+        device = volume.device
+        dtype = volume.dtype
 
         # Move to device and dtype of the input
         mean = mean.to(device, dtype)
         std = std.to(device, dtype)
 
         # Normalize
-        normalized_volume = (normalized_volume - mean) / std
+        volume = (volume - mean) / std
 
-        return normalized_volume
+        return volume
 
-    def _channel_wise_normalize(self, normalized_volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
-        if normalized_volume.shape[0] != mean.numel():
-            raise ValueError(f"Mean must match number of volume channels, got {mean.numel()} instead of {normalized_volume.shape[0]}.")
+    def _channel_wise_normalize(self, volume: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+        if volume.shape[0] != mean.numel():
+            raise ValueError(f"Mean must match number of volume channels, got {mean.numel()} instead of {volume.shape[0]}.")
 
         if not mean.dim() == 1 and mean.numel() > 1:
             raise ValueError(f"Mean must be one-dimensional, got {mean.dim()} instead of 1 dimension.")
 
-        if normalized_volume.shape[0] != std.numel():
-            raise ValueError(f"STD must match number of volume channels, got {std.numel()} instead of {normalized_volume.shape[0]}.")
+        if volume.shape[0] != std.numel():
+            raise ValueError(f"STD must match number of volume channels, got {std.numel()} instead of {volume.shape[0]}.")
 
         if not std.dim() == 1 and std.numel() > 1:
             raise ValueError(f"STD must be one-dimensional, got {std.dim()} instead of 1 dimension.")
 
         # Get device and dtype of the input
-        device = normalized_volume.device
-        dtype = normalized_volume.dtype
+        device = volume.device
+        dtype = volume.dtype
 
-        # Reshape and move to same device and dtype
-        mean = mean.view(-1, 1, 1, 1).to(device, dtype)
-        std = std.view(-1, 1, 1, 1).to(device, dtype)
+        # Reshape and move to device and dtype of the input
+        mean = mean.view(-1, *([1] * 3)).to(device, dtype)
+        std = std.view(-1, *([1] * 3)).to(device, dtype)
 
         # Normalize channel-wise
-        normalized_volume = (normalized_volume - mean) / std
+        volume = (volume - mean) / std
 
-        return normalized_volume
+        return volume
 
     def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
@@ -233,56 +244,99 @@ class ThresholdIntensity(Transform):
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, threshold: Union[float, Sequence[float], NdarrayOrTensor], above: bool = True, cval: float = 0.0, channel_wise: bool = False) -> None:
+    def __init__(self, threshold: Union[float, Sequence[float], NdarrayOrTensor], above: bool = True, cval: Union[float, Sequence[float], NdarrayOrTensor] = 0.0, channel_wise: bool = False) -> None:
         if isinstance(threshold, (float, int, np.integer, np.floating, NdarrayOrTensor)):
             self.threshold = threshold
         elif isinstance(threshold, Sequence) and all(isinstance(t, (float, int)) for t in threshold):
             self.threshold = threshold
         else:
-            raise ValueError(
-                f"Threshold must be an int, float, sequence of ints or floats, numpy array or torch tensor, got {type(threshold)} {threshold}.")
+            raise ValueError(f"Threshold must be an int, float, sequence of ints or floats, numpy array or torch tensor, got {type(threshold)} {threshold}.")
+
+        if isinstance(cval, (float, int, np.integer, np.floating, NdarrayOrTensor)):
+            self.cval = cval
+        elif isinstance(cval, Sequence) and all(isinstance(c, (float, int)) for c in cval):
+            self.cval = cval
+        else:
+            raise ValueError(f"Cval must be an int, float, sequence of ints or floats, numpy array or torch tensor, got {type(cval)} {cval}.")
 
         self.above = above
-        self.cval = cval
         self.channel_wise = channel_wise
 
-    def _apply_threshold(self, volume: torch.Tensor, threshold: torch.Tensor) -> torch.Tensor:
+    def _threshold(self, volume: torch.Tensor, threshold: torch.Tensor, cval: torch.Tensor) -> torch.Tensor:
         if not threshold.numel() == 1:
             raise ValueError(f"Threshold must be a singleton or scalar tensor, got {type(threshold)} {threshold}.")
 
-        mask = volume > threshold if self.above else volume < threshold
-        ret = where(mask, volume, self.cval)
-        return ret
+        if not cval.numel() == 1:
+            raise ValueError(f"Cval must be a singleton or scalar tensor, got {type(cval)} {cval}.")
 
-    def _channel_wise_threshold(self, volume: torch.Tensor, threshold: torch.Tensor) -> torch.Tensor:
+        # Get device and dtype of the input
+        device = volume.device
+        dtype = volume.dtype
+
+        # Move to device and dtype of the input
+        threshold = threshold.to(device, dtype)
+        cval = cval.to(device, dtype)
+
+        # Clamp
+        mask = volume > threshold if self.above else volume < threshold
+        volume = torch.where(mask, volume, cval)
+
+        return volume
+
+    def _channel_wise_threshold(self, volume: torch.Tensor, threshold: torch.Tensor, cval: torch.Tensor) -> torch.Tensor:
         if volume.shape[0] != threshold.numel():
             raise ValueError(f"Threshold must match number of volume channels, got {threshold.numel()} instead of {volume.shape[0]}.")
 
         if not threshold.dim() == 1 and threshold.numel() > 1:
             raise ValueError(f"Threshold must be one-dimensional, got {threshold.dim()} instead of 1 dimension.")
 
-        for channel in range(volume.shape[0]):
-            mask = volume[channel] > threshold[channel] if self.above else volume[channel] < threshold[channel]
-            volume[channel] = where(mask, volume[channel], self.cval)
+        if volume.shape[0] != cval.numel():
+            raise ValueError(f"Cval must match number of volume channels, got {cval.numel()} instead of {volume.shape[0]}.")
+
+        if not cval.dim() == 1 and cval.numel() > 1:
+            raise ValueError(f"Cval must be one-dimensional, got {cval.dim()} instead of 1 dimension.")
+
+        # Get device and dtype of the input
+        device = volume.device
+        dtype = volume.dtype
+
+        # Reshape and move to device and dtype of the input
+        threshold = threshold.view(-1, *([1] * 3)).to(device, dtype)
+        cval = cval.view(-1, *([1] * 3)).to(device, dtype)
+
+        # Clamp channel-wise
+        mask = volume > threshold if self.above else volume < threshold
+        volume = torch.where(mask, volume, cval)
 
         return volume
 
     def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
+        clipped_volume = convert_to_tensor(volume, track_meta=get_track_meta())
+        ret: NdarrayOrTensor
 
         if self.channel_wise:
             if isinstance(self.threshold, (float, int, np.integer, np.floating)):
-                threshold = [self.threshold] * volume.shape[0]
+                threshold = [self.threshold] * clipped_volume.shape[0]
             else:
                 threshold = self.threshold
 
+            if isinstance(self.cval, (float, int, np.integer, np.floating)):
+                cval = [self.cval] * clipped_volume.shape[0]
+            else:
+                cval = self.cval
+
             threshold = torch.tensor(threshold)
-            ret = self._channel_wise_threshold(volume, threshold)
+            cval = torch.tensor(cval)
+            clipped_volume = self._channel_wise_threshold(clipped_volume, threshold, cval)
+            ret = clipped_volume
         else:
             threshold = torch.tensor(self.threshold)
-            ret = self._apply_threshold(volume, threshold)
+            cval = torch.tensor(self.cval)
+            clipped_volume = self._threshold(clipped_volume, threshold, cval)
+            ret = clipped_volume
 
-        ret, *_ = convert_data_type(ret, dtype=volume.dtype)
+        ret = convert_to_dst_type(ret, dst=volume, dtype=clipped_volume.dtype)[0]
 
         return ret
 
@@ -393,7 +447,7 @@ class RandForegroundGaussianNoise(RandomizableTransform):
         # Join noisy foreground with original background
         volume = volume * background_mask + noisy_foreground
 
-        # Clip values to the min and max of the original volume to keep the same range
+        # Clamp values to the min and max of the original volume to keep the same range
         volume = torch.clamp(volume, self.min, self.max)
 
         return volume
@@ -513,7 +567,7 @@ class RandForegroundStreakNoise(RandomizableTransform):
         # Add the streak to the volume
         volume = torch.tensor(self.R.poisson(volume - self.min + streak - streak.min()) + self.min + streak.min()) * foreground_mask + volume * background_mask
 
-        # Clip values to the min and max of the original volume to keep the same range
+        # Clamp values to the min and max of the original volume to keep the same range
         volume = torch.clamp(volume, self.min, self.max)
 
         return volume

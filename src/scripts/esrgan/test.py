@@ -12,7 +12,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics
-from src.utils.utils import save_samples, save_batch, collect_batch_pixels, draw_box_plot, draw_histogram, set_seed
+from src.utils.utils import clamp, save_samples, save_batch, collect_batch_pixels, draw_box_plot, draw_histogram, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
 
@@ -29,10 +29,7 @@ def main():
     # Fetch training data statistics
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
-    # Compute z-score range
-    z_min = torch.tensor((_min - mean) / std).view(1, -1, *([1] * 3))
-    z_max = torch.tensor((_max - mean) / std).view(1, -1, *([1] * 3))
-
+    # Define dataset and data loader
     test_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TESTING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TESTING"]["HR_DIR_PATH"], scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     test_dataloader = DataLoader(test_dataset, batch_size=config["TESTING"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
@@ -82,7 +79,7 @@ def main():
             gen_volumes = generator_inferer(inputs=lr_volumes, network=generator)
 
             # Clamp generated data
-            gen_volumes = torch.clamp(gen_volumes, min=z_min, max=z_max) if args.clamp else gen_volumes
+            gen_volumes = torch.stack([clamp(gen_volume, _min=_min, _max=_max, mean=mean, std=std) for gen_volume in gen_volumes]) if args.clamp else gen_volumes
 
             # Compute metrics
             scores = metrics.compute_scores(gen_volumes, hr_volumes)

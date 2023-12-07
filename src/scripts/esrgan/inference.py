@@ -11,7 +11,7 @@ from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
-from src.utils.utils import create_experiment_directory, save_samples, save_batch, set_seed
+from src.utils.utils import clamp, create_experiment_directory, save_samples, save_batch, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
 
@@ -28,10 +28,7 @@ def main():
     # Fetch training data statistics
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
-    # Compute z-score range
-    z_min = torch.tensor((_min - mean) / std).view(1, -1, *([1] * 3))
-    z_max = torch.tensor((_max - mean) / std).view(1, -1, *([1] * 3))
-
+    # Define dataset and data loader
     inference_dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, scale_factor=checkpoint['generator_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     inference_dataloader = DataLoader(inference_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
@@ -75,7 +72,7 @@ def main():
             gen_volumes = generator_inferer(inputs=lr_volumes, network=generator)
 
             # Clamp generated data
-            gen_volumes = torch.clamp(gen_volumes, min=z_min, max=z_max) if args.clamp else gen_volumes
+            gen_volumes = torch.stack([clamp(gen_volume, _min=_min, _max=_max, mean=mean, std=std) for gen_volume in gen_volumes]) if args.clamp else gen_volumes
 
             # Plot sample figures
             save_samples(

@@ -15,7 +15,7 @@ from tqdm import tqdm
 from matplotlib.patches import Patch
 sys.path.append(os.path.join('..', '..'))
 from src.utils.logger import print_divisor
-from src.utils.transforms import NormalizeIntensity
+from src.utils.transforms import NormalizeIntensity, ThresholdIntensity
 
 
 def load_volume(volume_dir):
@@ -209,6 +209,13 @@ def denormalize(volume, mean, std):
 
 def upsample(volume, scale_factor):
     return transforms.Zoom(zoom=scale_factor, mode="trilinear", keep_size=False)(volume)
+
+
+def clamp(volume, _min, _max, mean=None, std=None):
+    _min = _min if (mean is None or std is None) else ((_min - mean) / std)
+    _max = _max if (mean is None or std is None) else ((_max - mean) / std)
+
+    return ThresholdIntensity(threshold=_max, above=False, channel_wise=True, cval=_max)(ThresholdIntensity(threshold=_min, above=True, channel_wise=True, cval=_min)(volume))
 
 
 def compute_scale_factor(lr_volume, hr_volume):

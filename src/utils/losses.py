@@ -121,8 +121,8 @@ class RangeLoss(nn.Module):
         self.criterion = nn.L1Loss()
 
         # Define data range
-        self._min = torch.tensor(_min if (mean is None or std is None) else ((_min - mean) / std)).view(1, -1, *[1] * 3)
-        self._max = torch.tensor(_max if (mean is None or std is None) else ((_max - mean) / std)).view(1, -1, *[1] * 3)
+        self._min = torch.tensor(_min if (mean is None or std is None) else ((_min - mean) / std)).view(1, -1, *([1] * 3))
+        self._max = torch.tensor(_max if (mean is None or std is None) else ((_max - mean) / std)).view(1, -1, *([1] * 3))
 
     def forward(self, predictions):
         below = torch.relu(self._min - predictions)
