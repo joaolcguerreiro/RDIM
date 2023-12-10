@@ -81,8 +81,8 @@ class GANLoss(nn.Module):
 
             return (loss_fake + loss_real) / 2
         elif self._type == 'RELATIVISTIC_AVERAGE_LEAST_SQUARES':
-            loss_fake = torch.mean(torch.sqrt(fake_labels_pred - real_labels_pred.mean() - real_labels_true))
-            loss_real = torch.mean(torch.sqrt(real_labels_pred - fake_labels_pred.mean() + real_labels_true))
+            loss_fake = torch.mean(torch.pow(fake_labels_pred - real_labels_pred.mean() - real_labels_true, 2))
+            loss_real = torch.mean(torch.pow(real_labels_pred - fake_labels_pred.mean() + real_labels_true, 2))
 
             return (loss_fake + loss_real) / 2
         elif self._type == 'RELATIVISTIC_AVERAGE_HINGE':
@@ -105,8 +105,8 @@ class GANLoss(nn.Module):
 
             return (loss_real + loss_fake) / 2
         elif self._type == 'RELATIVISTIC_AVERAGE_LEAST_SQUARES':
-            loss_real = torch.mean(torch.sqrt(real_labels_pred - fake_labels_pred.mean() - real_labels_true))
-            loss_fake = torch.mean(torch.sqrt(fake_labels_pred - real_labels_pred.mean() + real_labels_true))
+            loss_real = torch.mean(torch.pow(real_labels_pred - fake_labels_pred.mean() - real_labels_true, 2))
+            loss_fake = torch.mean(torch.pow(fake_labels_pred - real_labels_pred.mean() + real_labels_true, 2))
 
             return (loss_real + loss_fake) / 2
         elif self._type == 'RELATIVISTIC_AVERAGE_HINGE':
