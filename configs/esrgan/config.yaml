@@ -20,6 +20,7 @@ DATA:
 #=================================================================================================================#
 
 MODEL:
+  GAN_TYPE: 'RELATIVISTIC_AVERAGE_LEAST_SQUARES'
   GENERATOR:
     IN_CHANNEL: 1
     OUT_CHANNEL: 1
@@ -36,6 +37,12 @@ MODEL:
     NUM_CONV_BLOCKS: 8
     CONV_BLOCKS_OUTPUT_SIZE: 6
     PRE_TRAINED_PATH:
+
+GAN_TYPE_OPTIONS:
+  - 'STANDARD'
+  - 'RELATIVISTIC_AVERAGE_STANDARD'
+  - 'RELATIVISTIC_AVERAGE_LEAST_SQUARES'
+  - 'RELATIVISTIC_AVERAGE_HINGE'
 
 
 #=================================================================================================================#

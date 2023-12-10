@@ -55,6 +55,77 @@ class VGGLoss(nn.Module):
         return self.criterion(vgg_features_predictions, vgg_features_ground_truths)
 
 
+class GANLoss(nn.Module):
+    """
+    GANLoss (Generative Adversarial Network Loss), computes adversarial loss for GAN framework.
+    """
+
+    def __init__(self, _type='STANDARD', with_logits=False):
+        super().__init__()
+        assert _type == 'STANDARD' if not with_logits else True, f'If discriminator outputs probabilities rather than logits use \'STANDARD\' gan type instead of \'{_type}\' gan type.'
+
+        # Adversarial Loss Type
+        self._type = _type
+
+        # Define Criterion for Standard Adversarial Loss types
+        self.criterion = nn.BCELoss() if not with_logits else nn.BCEWithLogitsLoss()
+
+    def generator_loss(self, real_labels_pred=None, fake_labels_pred=None, real_labels_true=None, fake_labels_true=None):
+        if self._type == 'STANDARD':
+            loss_fake = self.criterion(fake_labels_pred, torch.ones_like(real_labels_true))
+
+            return loss_fake
+        elif self._type == 'RELATIVISTIC_AVERAGE_STANDARD':
+            loss_fake = self.criterion(fake_labels_pred - real_labels_pred.mean(), torch.ones_like(real_labels_true))
+            loss_real = self.criterion(real_labels_pred - fake_labels_pred.mean(), torch.zeros_like(fake_labels_true))
+
+            return (loss_fake + loss_real) / 2
+        elif self._type == 'RELATIVISTIC_AVERAGE_LEAST_SQUARES':
+            loss_fake = torch.mean(torch.sqrt(fake_labels_pred - real_labels_pred.mean() - real_labels_true))
+            loss_real = torch.mean(torch.sqrt(real_labels_pred - fake_labels_pred.mean() + real_labels_true))
+
+            return (loss_fake + loss_real) / 2
+        elif self._type == 'RELATIVISTIC_AVERAGE_HINGE':
+            loss_fake = torch.mean(torch.max(fake_labels_true, real_labels_true - (fake_labels_pred - real_labels_pred.mean())))
+            loss_real = torch.mean(torch.max(fake_labels_true, real_labels_true + (real_labels_pred - fake_labels_pred.mean())))
+
+            return (loss_fake + loss_real) / 2
+        else:
+            raise NotImplementedError(f'Invalid GAN loss type: {self._type}.')
+
+    def discriminator_loss(self, real_labels_pred=None, fake_labels_pred=None, real_labels_true=None, fake_labels_true=None):
+        if self._type == 'STANDARD':
+            loss_real = self.criterion(real_labels_pred, torch.ones_like(real_labels_true))
+            loss_fake = self.criterion(fake_labels_pred, torch.zeros_like(fake_labels_true))
+
+            return (loss_real + loss_fake) / 2
+        elif self._type == 'RELATIVISTIC_AVERAGE_STANDARD':
+            loss_real = self.criterion(real_labels_pred - fake_labels_pred.mean(), torch.ones_like(real_labels_true))
+            loss_fake = self.criterion(fake_labels_pred - real_labels_pred.mean(), torch.zeros_like(fake_labels_true))
+
+            return (loss_real + loss_fake) / 2
+        elif self._type == 'RELATIVISTIC_AVERAGE_LEAST_SQUARES':
+            loss_real = torch.mean(torch.sqrt(real_labels_pred - fake_labels_pred.mean() - real_labels_true))
+            loss_fake = torch.mean(torch.sqrt(fake_labels_pred - real_labels_pred.mean() + real_labels_true))
+
+            return (loss_real + loss_fake) / 2
+        elif self._type == 'RELATIVISTIC_AVERAGE_HINGE':
+            loss_real = torch.mean(torch.max(fake_labels_true, real_labels_true - (real_labels_pred - fake_labels_pred.mean())))
+            loss_fake = torch.mean(torch.max(fake_labels_true, real_labels_true + (fake_labels_pred - real_labels_pred.mean())))
+
+            return (loss_real + loss_fake) / 2
+        else:
+            raise NotImplementedError(f'Invalid GAN loss type: {self._type}.')
+
+    def forward(self, real_labels_pred=None, fake_labels_pred=None, real_labels_true=None, fake_labels_true=None, mode='GENERATOR'):
+        if mode == 'GENERATOR':
+            return self.generator_loss(real_labels_pred=real_labels_pred, fake_labels_pred=fake_labels_pred, real_labels_true=real_labels_true, fake_labels_true=fake_labels_true)
+        elif mode == 'DISCRIMINATOR':
+            return self.discriminator_loss(real_labels_pred=real_labels_pred, fake_labels_pred=fake_labels_pred, real_labels_true=real_labels_true, fake_labels_true=fake_labels_true)
+        else:
+            raise NotImplementedError(f'Invalid GAN loss mode: {mode}.')
+
+
 class GANDLoss(nn.Module):
     """
     GANDLoss (Generative Adversarial Network Discriminator Loss), computes perceptual loss based on the features from a GAN discriminator.

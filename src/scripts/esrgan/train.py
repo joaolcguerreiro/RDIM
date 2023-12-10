@@ -8,7 +8,6 @@ import yaml
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from torchview import draw_graph
@@ -19,7 +18,7 @@ from monai.inferers import SlidingWindowSplitter
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
-from src.utils.losses import VGGLoss, RangeLoss
+from src.utils.losses import VGGLoss, GANLoss, RangeLoss
 from src.utils.utils import upsample, clamp, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
@@ -95,7 +94,7 @@ def main():
 
     # Define the loss function
     perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], args.lr_patch_size))).to(device)
-    adversarial_criterion = nn.BCEWithLogitsLoss().to(device)
+    adversarial_criterion = GANLoss(_type=config['MODEL']['GAN_TYPE'], with_logits=True).to(device)
     content_criterion = nn.L1Loss().to(device)
     range_criterion = RangeLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)
 
@@ -159,9 +158,9 @@ def main():
             lr_volumes = lr_volumes.to(device)
             hr_volumes = hr_volumes.to(device)
 
-            # Define adversarial ground truths
-            real_labels_true = torch.tensor(np.ones((len(hr_volumes), 1)), requires_grad=False).to(device)
-            fake_labels_true = torch.tensor(np.zeros((len(lr_volumes), 1)), requires_grad=False).to(device)
+            # Define adversarial ground truths labels
+            real_labels_true = torch.ones((config["TRAINING"]["BATCH_SIZE"], 1), requires_grad=False).to(device)
+            fake_labels_true = torch.zeros((config["TRAINING"]["BATCH_SIZE"], 1), requires_grad=False).to(device)
 
             #=========================#
             #     Train Generator     #
@@ -179,8 +178,8 @@ def main():
             # Compute perceptual loss
             perceptual_loss = perceptual_criterion(gen_volumes, hr_volumes)
 
-            # Compute adversarial loss (relativistic average GAN)
-            adversarial_loss = adversarial_criterion(fake_labels_pred - real_labels_pred.mean(0, keepdim=True), real_labels_true)
+            # Compute adversarial loss
+            adversarial_loss = adversarial_criterion(real_labels_pred=real_labels_pred, fake_labels_pred=fake_labels_pred, real_labels_true=real_labels_true, fake_labels_true=fake_labels_true, mode='GENERATOR')
 
             # Compute pixel-wise loss
             content_loss = content_criterion(gen_volumes, hr_volumes)
@@ -206,12 +205,11 @@ def main():
             real_labels_pred = discriminator(hr_volumes)
             fake_labels_pred = discriminator(gen_volumes.detach())
 
-            # Compute adversarial loss (relativistic average GAN)
-            adversarial_loss_real = adversarial_criterion(real_labels_pred - fake_labels_pred.mean(0, keepdim=True), real_labels_true)
-            adversarial_loss_fake = adversarial_criterion(fake_labels_pred - real_labels_pred.mean(0, keepdim=True), fake_labels_true)
+            # Compute adversarial loss
+            adversarial_loss = adversarial_criterion(real_labels_pred=real_labels_pred, fake_labels_pred=fake_labels_pred, real_labels_true=real_labels_true, fake_labels_true=fake_labels_true, mode='DISCRIMINATOR')
 
             # Discriminator Total loss
-            discriminator_total_loss = (adversarial_loss_real + adversarial_loss_fake) / 2
+            discriminator_total_loss = adversarial_loss
 
             # Backward pass
             discriminator_total_loss.backward()
@@ -255,9 +253,9 @@ def main():
                     lr_volumes = lr_volumes.to(device)
                     hr_volumes = hr_volumes.to(device)
 
-                    # Define adversarial ground truths
-                    real_labels_true = torch.tensor(np.ones((len(hr_volumes), 1))).to(device)
-                    fake_labels_true = torch.tensor(np.zeros((len(lr_volumes), 1))).to(device)
+                    # Define adversarial ground truths labels
+                    real_labels_true = torch.ones((config["VALIDATION"]["BATCH_SIZE"], 1)).to(device)
+                    fake_labels_true = torch.zeros((config["VALIDATION"]["BATCH_SIZE"], 1)).to(device)
 
                     #=========================#
                     #    Validate Generator   #
@@ -272,8 +270,8 @@ def main():
                     # Compute perceptual loss
                     perceptual_loss = perceptual_criterion(gen_volumes, hr_volumes)
 
-                    # Compute adversarial loss (relativistic average GAN)
-                    adversarial_loss = adversarial_criterion(fake_labels_pred - real_labels_pred.mean(0, keepdim=True), real_labels_true)
+                    # Compute adversarial loss
+                    adversarial_loss = adversarial_criterion(real_labels_pred=real_labels_pred, fake_labels_pred=fake_labels_pred, real_labels_true=real_labels_true, fake_labels_true=fake_labels_true, mode='GENERATOR')
 
                     # Compute pixel-wise loss
                     content_loss = content_criterion(gen_volumes, hr_volumes)
@@ -292,12 +290,11 @@ def main():
                     real_labels_pred = discriminator_inferer(inputs=hr_volumes, network=discriminator)
                     fake_labels_pred = discriminator_inferer(inputs=gen_volumes, network=discriminator)
 
-                    # Compute adversarial loss (relativistic average GAN)
-                    adversarial_loss_real = adversarial_criterion(real_labels_pred - fake_labels_pred.mean(0, keepdim=True), real_labels_true)
-                    adversarial_loss_fake = adversarial_criterion(fake_labels_pred - real_labels_pred.mean(0, keepdim=True), fake_labels_true)
+                    # Compute adversarial loss
+                    adversarial_loss = adversarial_criterion(real_labels_pred=real_labels_pred, fake_labels_pred=fake_labels_pred, real_labels_true=real_labels_true, fake_labels_true=fake_labels_true, mode='DISCRIMINATOR')
 
                     # Discriminator Total loss
-                    discriminator_total_loss = (adversarial_loss_real + adversarial_loss_fake) / 2
+                    discriminator_total_loss = adversarial_loss
 
                     # Update the validation loss
                     generator_val_loss += generator_total_loss.item()
