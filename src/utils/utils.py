@@ -55,40 +55,62 @@ def get_volume_metadata(volume_dir):
 
 def slice_volume(slice_index, plane, volume):
     """
-    Get Volume Slice (2D)
+    Get Volume Slice (2D).
+    Expected Volume Dimensions Order is (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C).
+
+    Note:
+    X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
+    Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
+    Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
     """
 
     if plane == 'axial':
-        # 3D volume (Y, X, Z, C) => Slice along z-axis => 2D image (Y, X, C) => For display purposes interchange axis => 2D image (X, Y, C)
-        return volume[:, :, slice_index, :].swapaxes(0, 1)  # We get 2d plane (X, Y, C)
-    elif plane == 'sagittal':
-        # 3D volume (Y, X, Z, C) => Slice along y-axis => 2D image (X, Z, C) => For display purposes interchange axis => 2D image (Z, X, C)
-        return volume[slice_index, :, :, :].swapaxes(0, 1)  # We get 2d plane (Z, X, C)
+        # 3D volume (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) => Slice along Longitudinal Axis => 2D image (Anteroposterior Axis, Mediolateral Axis, Channel) = (Y, X, C)
+        return volume[slice_index, :, :, :]     # For display purposes keep the orientation
     elif plane == 'coronal':
-        # 3D volume (Y, X, Z, C) => Slice along x-axis => 2D image (Y, Z, C) => For display purposes interchange axis => 2D image (Z, Y, C)
-        return volume[:, slice_index, :, :].swapaxes(0, 1)  # We get 2d plane (Z, Y, C)
+        # 3D volume (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) => Slice along Anteroposterior Axis => 2D image (Longitudinal Axis, Mediolateral Axis, Channel) = (Z, X, C)
+        return volume[:, slice_index, :, :]     # For display purposes keep the orientation
+    elif plane == 'sagittal':
+        # 3D volume (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) => Slice along Mediolateral Axis => 2D image (Longitudinal Axis, Anteroposterior Axis, Channel) = (Z, Y, C)
+        return volume[:, :, slice_index, :]     # For display purposes keep the orientation
     else:
         raise NotImplementedError('Invalid plane')
 
 
 def count_volume_slices(plane, volume):
     """
-    Get Number of Slices in Volume Plane
+    Get Number of Slices in Volume Plane.
+    Expected Volume Dimensions Order is (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C).
+
+    Note:
+    X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
+    Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
+    Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
     """
 
     if plane == 'axial':
-        return volume.shape[2]
-    elif plane == 'sagittal':
         return volume.shape[0]
     elif plane == 'coronal':
         return volume.shape[1]
+    elif plane == 'sagittal':
+        return volume.shape[2]
     else:
         raise NotImplementedError('Invalid plane')
 
 
-def adjust_volume_orientation(volume):
-    # (1, Z, X, Y) => (Y, Z, X, 1) => (Y, X, Z, 1)
-    return volume.swapaxes(0, -1).swapaxes(1, 2)
+def reorder_volume_dimensions(volume, channel_dim=0, longitudinal_axis_dim=1, anteroposterior_axis_dim=2, mediolateral_axis_dim=3):
+    """
+    Rearrange Volume Dimensions Order from an Arbitrary Order of Dimensions into (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C).
+    Expected Volume Dimensions Order is Arbitrary.
+
+    Note:
+    X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
+    Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
+    Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
+    """
+
+    # Reorder arbitrary volume dimensions into (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C)
+    return volume.permute(longitudinal_axis_dim, anteroposterior_axis_dim, mediolateral_axis_dim, channel_dim)
 
 
 def draw_image_2d(imgs, n_rows=1, n_cols=1, fig_size=(3, 3), labels=None, show=True, ax=None, theme='light'):
@@ -244,10 +266,10 @@ def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, fig_size=(3
     hr_volumes = gt_volumes if gt_volumes else sr_volumes
     scale_factor = compute_scale_factor(lr_volumes[0], hr_volumes[0]) if (lr_volumes and hr_volumes) else (1, 1, 1)
 
-    # Reorient volume for visualization
-    lr_volumes = list(adjust_volume_orientation(upsample(lr_volume, scale_factor)) for lr_volume in lr_volumes)
-    sr_volumes = list(adjust_volume_orientation(sr_volume) for sr_volume in sr_volumes)
-    gt_volumes = list(adjust_volume_orientation(gt_volume) for gt_volume in gt_volumes)
+    # Reorder volume dimensions for visualization
+    lr_volumes = list(reorder_volume_dimensions(upsample(lr_volume, scale_factor)) for lr_volume in lr_volumes)
+    sr_volumes = list(reorder_volume_dimensions(sr_volume) for sr_volume in sr_volumes)
+    gt_volumes = list(reorder_volume_dimensions(gt_volume) for gt_volume in gt_volumes)
 
     # Interleave volumes for visualization
     volumes = [volume for interleaved_volumes in zip(*list(filter(None, [lr_volumes, sr_volumes, gt_volumes]))) for volume in interleaved_volumes]
@@ -294,10 +316,10 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
     hr_volume = gen_volume if gen_volume is not None else gt_volume
     scale_factor = compute_scale_factor(lr_volume, hr_volume) if (lr_volume is not None and hr_volume is not None) else (1, 1, 1)
 
-    # Reorient volume for visualization
-    lr_volume = adjust_volume_orientation(upsample(lr_volume, scale_factor).to('cpu'))
-    gen_volume = adjust_volume_orientation(gen_volume.to('cpu'))
-    gt_volume = adjust_volume_orientation(gt_volume.to('cpu')) if gt_volume is not None else gt_volume
+    # Reorder volume dimensions for visualization
+    lr_volume = reorder_volume_dimensions(upsample(lr_volume, scale_factor).to('cpu'))
+    gen_volume = reorder_volume_dimensions(gen_volume.to('cpu'))
+    gt_volume = reorder_volume_dimensions(gt_volume.to('cpu')) if gt_volume is not None else gt_volume
 
     # Define slice index
     slice_index = (count_volume_slices(plane=plane, volume=gen_volume) // 2) if dimension == '2D' else None

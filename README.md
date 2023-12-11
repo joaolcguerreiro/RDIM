@@ -423,8 +423,8 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `sr_gt_scans`
 | Option       | Description           | Default |
 |--------------|-----------------------|:-------:|
 | `'axial'`    | Your description here |    ✓    |
-| `'sagittal'` | Your description here |         |
 | `'coronal'`  | Your description here |         |
+| `'sagittal'` | Your description here |         |
 
 ---
 

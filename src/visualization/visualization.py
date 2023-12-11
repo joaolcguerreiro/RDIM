@@ -25,8 +25,8 @@ modes = {
 # Available anatomical planes
 planes = [
     "axial",
-    "sagittal",
-    "coronal"
+    "coronal",
+    "sagittal"
 ]
 
 # Available Display Dimensions
