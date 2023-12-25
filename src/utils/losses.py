@@ -1,10 +1,12 @@
 import os
 import sys
 import torch
+import numpy as np
 import torch.nn as nn
 import monai.transforms as transforms
 from torchvision.models import vgg19, VGG19_Weights
-from monai.inferers.inferer import SlidingWindowInferer
+from monai.inferers.inferer import SlidingWindowInferer, PatchInferer
+from monai.inferers import SlidingWindowSplitter
 sys.path.append(os.path.join('..', '..'))
 from src.utils.transforms import NormalizeIntensity, EnsureExactChannels
 from src.models.esrgan import Discriminator
@@ -53,6 +55,47 @@ class VGGLoss(nn.Module):
         vgg_features_ground_truths = self.inferer(inputs=transformed_ground_truths_2d, network=self.vgg).detach()
 
         return self.criterion(vgg_features_predictions, vgg_features_ground_truths)
+
+
+class Med3DLoss(nn.Module):
+    def __init__(self, patch_size, original_size, mean=None, std=None):
+        super().__init__()
+
+        # Define Criterion
+        self.criterion = nn.L1Loss()
+
+        # Avoid HTTP Error 403
+        torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
+
+        # Med3D (Pre-trained 3D-ResNet) as feature extractor
+        self.med3d = torch.hub.load("warvito/MedicalNet-models", model="medicalnet_resnet10_23datasets", verbose=False)
+
+        # Set the model to eval mode
+        self.med3d.eval()
+
+        for parameter in self.med3d.parameters():
+            parameter.requires_grad = False
+
+        # Med3D transforms
+        self.med3d_transforms = transforms.Compose([
+            NormalizeIntensity(mean=mean, std=std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
+            EnsureExactChannels(num_channels=1),
+            transforms.ToTensor(),
+        ])
+
+        # Define network inferer with minimum patch size of 8x8x8
+        self.inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=np.maximum(list(map(lambda patch_dim, original_dim: patch_dim if patch_dim > 0 else original_dim, patch_size, original_size)), [8, 8, 8]).tolist(), overlap=0.25), match_spatial_shape=True)
+
+    def forward(self, predictions, ground_truths):
+        # Preprocess data as expected by Med3D
+        transformed_predictions = torch.stack([self.med3d_transforms(prediction) for prediction in predictions], dim=0)
+        transformed_ground_truths = torch.stack([self.med3d_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
+
+        # Compute Med3D features
+        med3d_features_predictions = self.inferer(inputs=transformed_predictions, network=self.med3d)
+        med3d_features_ground_truths = self.inferer(inputs=transformed_ground_truths, network=self.med3d).detach()
+
+        return self.criterion(med3d_features_predictions, med3d_features_ground_truths)
 
 
 class GANLoss(nn.Module):

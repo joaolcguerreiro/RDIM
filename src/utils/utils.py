@@ -77,7 +77,7 @@ def slice_volume(slice_index, plane, volume):
         raise NotImplementedError('Invalid plane')
 
 
-def count_volume_slices(plane, volume):
+def get_num_plane_slices(plane, volume):
     """
     Get Number of Slices in Volume Plane.
     Expected Volume Dimensions Order is (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C).
@@ -144,7 +144,7 @@ def display_volumes(volumes, plane, dimension, n_rows=None, n_cols=None, fig_siz
         if int(slice_index) >= 0:
             slice_indexes = [slice_index]
         else:
-            slice_indexes = range(count_volume_slices(plane, volumes[0]))
+            slice_indexes = range(get_num_plane_slices(plane, volumes[0]))
 
         for slice_index in slice_indexes:
             print('Volumes:\n' + '\n'.join(f'- {volume_filename} (Slice {slice_index})' for volume_filename in volume_filenames)) if show else None
@@ -322,7 +322,7 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
     gt_volume = reorder_volume_dimensions(gt_volume.to('cpu')) if gt_volume is not None else gt_volume
 
     # Define slice index
-    slice_index = (count_volume_slices(plane=plane, volume=gen_volume) // 2) if dimension == '2D' else None
+    slice_index = (get_num_plane_slices(plane=plane, volume=gen_volume) // 2) if dimension == '2D' else None
 
     # Create a new figure
     n_imgs = sum(1 for volume in [lr_volume, gen_volume, gt_volume] if volume is not None)

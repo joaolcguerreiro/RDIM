@@ -53,7 +53,7 @@ def main():
     generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
 
     # Define metrics
-    metrics = SuperResolutionMetrics(num_spatial_dims=(len(test_dataset.get_low_resolution_shape()) - 1), _min=_min, _max=_max, mean=mean, std=std)
+    metrics = SuperResolutionMetrics(num_spatial_dims=len(test_dataset.get_low_resolution_shape(only_spatial_dims=True)), _min=_min, _max=_max, mean=mean, std=std)
 
     # Initialize generator weights
     generator.load_state_dict(checkpoint['generator_state_dict'])

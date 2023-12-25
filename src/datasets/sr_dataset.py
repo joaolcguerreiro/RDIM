@@ -85,15 +85,20 @@ class SuperResolutionDataset(Dataset):
 
         return lr_volume, hr_volume, sr_metadata
 
-    def get_low_resolution_shape(self):
+    def get_low_resolution_shape(self, only_spatial_dims=False):
         lr_volume, _, _ = self[0]
 
-        return lr_volume.shape
+        return lr_volume.shape[(1 if only_spatial_dims else None):] if self.lr_data_dir else None
 
-    def get_high_resolution_shape(self):
+    def get_high_resolution_shape(self, only_spatial_dims=False):
         _, hr_volume, _ = self[0]
 
-        return hr_volume.shape
+        return hr_volume.shape[(1 if only_spatial_dims else None):] if self.hr_data_dir else None
+
+    def get_num_channels(self):
+        lr_volume, hr_volume, _ = self[0]
+
+        return lr_volume.shape[0] if self.lr_data_dir else (hr_volume.shape[0] if self.hr_data_dir else None)
 
     def increment_epoch(self):
         self.epoch += 1

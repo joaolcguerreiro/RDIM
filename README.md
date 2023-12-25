@@ -9,21 +9,42 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 ---
 
+### Citation
+
+If you find this project useful, we would be grateful if you cite the paper:
+```
+@article{
+...
+}
+```
+
+---
+
 ### Quick Inference
 
-1) ....
-   * Using your own dataset
-     * Make sure your dataset is aligned with **[Data Requirements]()** section.
+```
+import torch
+from monai.inferers.inferer import SlidingWindowInferer
 
-   * Using LDCT Dataset
-     * Follow **[Download LDCT Dataset]()** and **[Prepare LDCT Dataset]()** sections.
+# Avoid HTTP Error 403
+torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
 
-2) Follow **[Setup Environment]()** section.
+# Two random volumes (batch size of 2) with 1 channel and size of 64x64x64. Mean is 0 and STD is 1.
+volumes = torch.randn(2, 1, 64, 64, 64)
 
-3) Run the following command:
-   ```
-    python src/scripts/srmediff/inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--num-workers=<num_workers>]
-   ```
+# Set patch size
+patch_size = (16, 16, 16)
+
+# Load model
+model = torch.hub.load('???', '???', pretrained=True)
+model.eval()
+
+# Define inferer
+inferer = SlidingWindowInferer(roi_size=patch_size, overlap=0.25, mode='gaussian')
+
+# Super-resolve volumes. Model expects z-score normalized input volumes.
+sr_volumes = inferer(inputs=volumes, network=model)
+```
 
 <hr style="border:2px solid gray">
 
