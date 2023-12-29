@@ -47,8 +47,8 @@ class VGGLoss(nn.Module):
         transformed_ground_truths = torch.stack([self.vgg_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
 
         # Convert 3D data to 2D
-        transformed_predictions_2d = transformed_predictions.permute(-5, -3, -4, -2, -1).view(-1, 3, *(transformed_predictions.shape[-2:]))
-        transformed_ground_truths_2d = transformed_ground_truths.permute(-5, -3, -4, -2, -1).view(-1, 3, *(transformed_ground_truths.shape[-2:]))
+        transformed_predictions_2d = transformed_predictions.permute(-5, -3, -4, -2, -1).contiguous().view(-1, 3, *(transformed_predictions.shape[-2:]))
+        transformed_ground_truths_2d = transformed_ground_truths.permute(-5, -3, -4, -2, -1).contiguous().view(-1, 3, *(transformed_ground_truths.shape[-2:]))
 
         # Compute VGG features
         vgg_features_predictions = self.inferer(inputs=transformed_predictions_2d, network=self.vgg)

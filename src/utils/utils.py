@@ -110,7 +110,7 @@ def reorder_volume_dimensions(volume, channel_dim=0, longitudinal_axis_dim=1, an
     """
 
     # Reorder arbitrary volume dimensions into (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C)
-    return volume.permute(longitudinal_axis_dim, anteroposterior_axis_dim, mediolateral_axis_dim, channel_dim)
+    return volume.permute(longitudinal_axis_dim, anteroposterior_axis_dim, mediolateral_axis_dim, channel_dim).contiguous()
 
 
 def draw_image_2d(imgs, n_rows=1, n_cols=1, fig_size=(3, 3), labels=None, show=True, ax=None, theme='light'):
