@@ -18,7 +18,7 @@ from monai.inferers import SlidingWindowSplitter
 sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
-from src.utils.losses import Med3DLoss, GANLoss, RangeLoss
+from src.utils.losses import VGGLoss, GANLoss, RangeLoss
 from src.utils.utils import upsample, clamp, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
@@ -93,7 +93,7 @@ def main():
     discriminator_scheduler = optim.lr_scheduler.StepLR(discriminator_optimizer, step_size=config['SCHEDULER']['DISCRIMINATOR']['STEP_SIZE'], gamma=config['SCHEDULER']['DISCRIMINATOR']['GAMMA'])
 
     # Define the loss function
-    perceptual_criterion = Med3DLoss(original_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True)).to(device)
+    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], args.lr_patch_size))).to(device)
     adversarial_criterion = GANLoss(_type=config['MODEL']['GAN_TYPE'], with_logits=True).to(device)
     content_criterion = nn.L1Loss().to(device)
     range_criterion = RangeLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)

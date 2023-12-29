@@ -39,7 +39,7 @@ class VGGLoss(nn.Module):
         ])
 
         # Define network inferer
-        self.inferer = SlidingWindowInferer(roi_size=patch_size[-3:-1], overlap=0.25, mode='gaussian')
+        self.inferer = SlidingWindowInferer(roi_size=patch_size[-2:], overlap=0.25, mode='gaussian')
 
     def forward(self, predictions, ground_truths):
         # Preprocess data as expected by VGG
@@ -47,8 +47,8 @@ class VGGLoss(nn.Module):
         transformed_ground_truths = torch.stack([self.vgg_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
 
         # Convert 3D data to 2D
-        transformed_predictions_2d = transformed_predictions.view(-1, 3, *(transformed_predictions.shape[-3:-1]))
-        transformed_ground_truths_2d = transformed_ground_truths.view(-1, 3, *(transformed_ground_truths.shape[-3:-1]))
+        transformed_predictions_2d = transformed_predictions.permute(-5, -3, -4, -2, -1).view(-1, 3, *(transformed_predictions.shape[-2:]))
+        transformed_ground_truths_2d = transformed_ground_truths.permute(-5, -3, -4, -2, -1).view(-1, 3, *(transformed_ground_truths.shape[-2:]))
 
         # Compute VGG features
         vgg_features_predictions = self.inferer(inputs=transformed_predictions_2d, network=self.vgg)
