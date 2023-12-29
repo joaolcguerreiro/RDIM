@@ -58,7 +58,7 @@ class VGGLoss(nn.Module):
 
 
 class Med3DLoss(nn.Module):
-    def __init__(self, patch_size, original_size, mean=None, std=None):
+    def __init__(self, original_size, patch_size=(-1, -1, -1), mean=None, std=None):
         super().__init__()
 
         # Define Criterion
@@ -68,7 +68,7 @@ class Med3DLoss(nn.Module):
         torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
 
         # Med3D (Pre-trained 3D-ResNet) as feature extractor
-        self.med3d = torch.hub.load("warvito/MedicalNet-models", model="medicalnet_resnet10_23datasets", verbose=False)
+        self.med3d = torch.hub.load("warvito/MedicalNet-models", model="medicalnet_resnet50_23datasets", verbose=False)
 
         # Set the model to eval mode
         self.med3d.eval()
@@ -85,6 +85,12 @@ class Med3DLoss(nn.Module):
 
         # Define network inferer with minimum patch size of 8x8x8
         self.inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=np.maximum(list(map(lambda patch_dim, original_dim: patch_dim if patch_dim > 0 else original_dim, patch_size, original_size)), [8, 8, 8]).tolist(), overlap=0.25), match_spatial_shape=True)
+
+    def to(self, *args, **kwargs):
+        # Required to move non-parameter attributes to device
+        self.inferer.merger_kwargs = {'device': kwargs.get('device') or next(iter(args), None)}
+
+        return super().to(*args, **kwargs)
 
     def forward(self, predictions, ground_truths):
         # Preprocess data as expected by Med3D

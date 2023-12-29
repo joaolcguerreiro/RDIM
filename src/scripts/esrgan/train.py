@@ -93,7 +93,7 @@ def main():
     discriminator_scheduler = optim.lr_scheduler.StepLR(discriminator_optimizer, step_size=config['SCHEDULER']['DISCRIMINATOR']['STEP_SIZE'], gamma=config['SCHEDULER']['DISCRIMINATOR']['GAMMA'])
 
     # Define the loss function
-    perceptual_criterion = Med3DLoss(patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], args.lr_patch_size)), original_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True)).to(device)
+    perceptual_criterion = Med3DLoss(original_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True)).to(device)
     adversarial_criterion = GANLoss(_type=config['MODEL']['GAN_TYPE'], with_logits=True).to(device)
     content_criterion = nn.L1Loss().to(device)
     range_criterion = RangeLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)
