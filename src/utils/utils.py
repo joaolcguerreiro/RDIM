@@ -113,7 +113,7 @@ def reorder_volume_dimensions(volume, channel_dim=0, longitudinal_axis_dim=1, an
     return volume.permute(longitudinal_axis_dim, anteroposterior_axis_dim, mediolateral_axis_dim, channel_dim).contiguous()
 
 
-def draw_image_2d(imgs, n_rows=1, n_cols=1, fig_size=(3, 3), labels=None, show=True, ax=None, theme='light'):
+def draw_image_2d(imgs, n_rows=1, n_cols=1, labels=None, show=True, ax=None, fig_size=(3, 3), theme='light'):
     if theme == 'dark':
         plt.style.use('dark_background')
 
@@ -135,11 +135,11 @@ def draw_image_2d(imgs, n_rows=1, n_cols=1, fig_size=(3, 3), labels=None, show=T
     plt.show() if show else None
 
 
-def draw_image_3d(volumes, n_rows=1, n_cols=1, fig_size=(3, 3), labels=None, show=True, ax=None, theme='light'):
+def draw_image_3d(volumes, n_rows=1, n_cols=1, labels=None, show=True, ax=None, fig_size=(3, 3), theme='light'):
     pass
 
 
-def display_volumes(volumes, plane, dimension, n_rows=None, n_cols=None, fig_size=(3, 3), volume_filenames=None, slice_index=-1, labels=None, show=True, ax=None, theme='light'):
+def display_volumes(volumes, plane, dimension, n_rows=None, n_cols=None, volume_filenames=None, slice_index=-1, labels=None, show=True, ax=None, fig_size=(3, 3), theme='light'):
     if dimension == '2D':
         if int(slice_index) >= 0:
             slice_indexes = [slice_index]
@@ -149,10 +149,10 @@ def display_volumes(volumes, plane, dimension, n_rows=None, n_cols=None, fig_siz
         for slice_index in slice_indexes:
             print('Volumes:\n' + '\n'.join(f'- {volume_filename} (Slice {slice_index})' for volume_filename in volume_filenames)) if show else None
             imgs = [slice_volume(slice_index, plane, volume) for volume in volumes]
-            draw_image_2d(imgs, n_rows, n_cols, fig_size=fig_size, labels=labels, show=show, ax=ax, theme=theme)
+            draw_image_2d(imgs, n_rows, n_cols, labels=labels, show=show, ax=ax, fig_size=fig_size, theme=theme)
     elif dimension == '3D':
         print('Volumes:\n' + '\n'.join(f'- {volume_filename}' for volume_filename in volume_filenames)) if show else None
-        draw_image_3d(volumes, n_rows, n_cols, fig_size=fig_size, labels=labels, show=show, ax=ax, theme=theme)
+        draw_image_3d(volumes, n_rows, n_cols, labels=labels, show=show, ax=ax, fig_size=fig_size, theme=theme)
     else:
         raise NotImplementedError('Invalid dimension')
 
@@ -251,7 +251,7 @@ def compute_scale_factor(lr_volume, hr_volume):
     return scale_factor
 
 
-def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, fig_size=(3, 3), plane='axial', dimension='2D', volume_filenames=None, slice_index=-1, labels=True, theme='light'):
+def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axial', dimension='2D', volume_filenames=None, slice_index=-1, labels=True, fig_size=(3, 3), theme='light'):
     lr_volumes = list() if lr_volumes is None else list(lr_volumes.to('cpu'))
     sr_volumes = list() if sr_volumes is None else list(sr_volumes.to('cpu'))
     gt_volumes = list() if gt_volumes is None else list(gt_volumes.to('cpu'))
@@ -281,7 +281,7 @@ def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, fig_size=(3
 
     print_divisor(width=50)
 
-    display_volumes(volumes, plane=plane, dimension=dimension, n_rows=batch_size, n_cols=num_volume_types, fig_size=fig_size, volume_filenames=volume_filenames, slice_index=slice_index, labels=_labels, theme=theme)
+    display_volumes(volumes, plane=plane, dimension=dimension, n_rows=batch_size, n_cols=num_volume_types, volume_filenames=volume_filenames, slice_index=slice_index, labels=_labels, fig_size=fig_size, theme=theme)
 
     print_divisor(width=50)
 
@@ -306,7 +306,7 @@ def collect_batch_pixels(volumes, mean=None, std=None):
     return volumes_pixels
 
 
-def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=True):
+def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=True, bound_range=True):
     # Denormalize volumes
     lr_volume = lr_volume if (mean is None or std is None) else denormalize(lr_volume, mean=mean, std=std)
     gen_volume = gen_volume if (mean is None or std is None) else denormalize(gen_volume, mean=mean, std=std)
@@ -367,6 +367,7 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
             hue='Data Type',
             bins=bins,
             bin_range=None if (_min is None or _max is None) else (_min, _max),
+            frequency_range=(None, torch.histc(gt_volume.flatten(), bins=bins).max().item() if gt_volume.numel() > 0 and isinstance(bins, int) else None) if bound_range else None,
             element='step',
             fill=False,
             ax=ax_hist,
@@ -378,7 +379,7 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
     plt.savefig(save_filename)
 
 
-def save_samples(save_dir_path, volumes_metadata, lr_volumes, gen_volumes, gt_volumes=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=False):
+def save_samples(save_dir_path, volumes_metadata, lr_volumes, gen_volumes, gt_volumes=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=False, bound_range=False):
     save_filenames = [os.path.join(save_dir_path, f'{os.path.splitext(filename)[0]}') for filename in volumes_metadata['filename']]
 
     for lr_volume, gen_volume, gt_volume, save_filename in zip(lr_volumes, gen_volumes, (gt_volumes if gt_volumes is not None else [gt_volumes] * len(gen_volumes)), save_filenames):
@@ -393,17 +394,18 @@ def save_samples(save_dir_path, volumes_metadata, lr_volumes, gen_volumes, gt_vo
             dimension=dimension,
             fig_size=fig_size,
             theme=theme,
-            with_histogram=with_histogram
+            with_histogram=with_histogram,
+            bound_range=bound_range
         )
 
 
-def draw_line_chart(data, title, x_label, y_label, save_filename, ax=None, theme='light'):
+def draw_line_chart(data, title, x_label, y_label, save_filename, ax=None, fig_size=None, theme='light'):
     if theme == 'dark':
         plt.style.use('dark_background')
 
     # Create a new figure
     if ax is None:
-        _, ax = plt.subplots()
+        _, ax = plt.subplots(figsize=fig_size)
 
     for _dict in data:
         ax.plot(_dict[x_label], _dict[y_label], label=_dict['Label'])
@@ -420,7 +422,7 @@ def draw_line_chart(data, title, x_label, y_label, save_filename, ax=None, theme
         plt.savefig(save_filename)
 
 
-def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bin_range=None, element='bars', fill=True, save_filename=None, ax=None, theme='light'):
+def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bin_range=None, frequency_range=None, element='bars', fill=True, save_filename=None, ax=None, fig_size=None, theme='light'):
     # Parse data
     data = pd.DataFrame({
         key: sum((_dict[key] for _dict in data), []) for key in [x_label, hue] if key is not None
@@ -431,11 +433,12 @@ def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bi
 
     # Create a new figure
     if ax is None:
-        _, ax = plt.subplots()
+        _, ax = plt.subplots(figsize=fig_size)
 
     # Chart customization
     sns.histplot(data=data, x=x_label, hue=hue, stat=stat, bins=bins, binrange=bin_range, element=element, fill=fill, palette="Pastel1")
     ax.set_title(title)
+    ax.set_ylim(frequency_range)
 
     # Save chart
     if save_filename:
@@ -443,7 +446,7 @@ def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bi
         plt.savefig(save_filename)
 
 
-def draw_box_plot(data, title, x_label, y_label, hue=None, save_filename=None, ax=None, theme='light'):
+def draw_box_plot(data, title, x_label, y_label, hue=None, save_filename=None, ax=None, fig_size=None, theme='light'):
     # Parse data
     data = pd.DataFrame({
         key: sum((_dict[key] for _dict in data), []) for key in [x_label, y_label, hue] if key is not None
@@ -454,7 +457,7 @@ def draw_box_plot(data, title, x_label, y_label, hue=None, save_filename=None, a
 
     # Create a new figure
     if ax is None:
-        _, ax = plt.subplots()
+        _, ax = plt.subplots(figsize=fig_size)
 
     # Chart customization
     sns.boxplot(data=data, x=x_label, y=y_label, hue=hue, palette="Pastel1")
