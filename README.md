@@ -18,33 +18,52 @@ If you find this project useful, we would be grateful if you cite the paper:
 }
 ```
 
----
+<hr style="border:2px solid gray">
 
-### Quick Inference
+# Quick Inference
 
-```
-import torch
-from monai.inferers.inferer import SlidingWindowInferer
+### Super-Resolution
 
-# Avoid HTTP Error 403
-torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
+   ```python
+   import torch
+   from monai.inferers.inferer import SlidingWindowInferer
+   
+   # Set patch size
+   patch_size = (32, 32, 32)
+   
+   # Define inferer (Optional)
+   inferer = SlidingWindowInferer(roi_size=patch_size, overlap=0.25, mode='gaussian')
+   
+   # Two random volumes (batch size of 2) with 1 channel and size of 128x128x128. Mean is 0 and STD is 1.
+   volumes = torch.randn(2, 1, 128, 128, 128)
+   
+   # Avoid HTTP Error 403
+   torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
+   
+   # Load model
+   model = torch.hub.load('???', '???', pretrained=True)
+   model.eval()
+   
+   # Super-resolve volumes. Model expects z-score normalized input volumes.
+   sr_volumes = model(volumes) if not inferer else inferer(inputs=volumes, network=model)
+   ```
 
-# Two random volumes (batch size of 2) with 1 channel and size of 64x64x64. Mean is 0 and STD is 1.
-volumes = torch.randn(2, 1, 64, 64, 64)
+### Feature Extraction
 
-# Set patch size
-patch_size = (16, 16, 16)
-
-# Load model
-model = torch.hub.load('???', '???', pretrained=True)
-model.eval()
-
-# Define inferer
-inferer = SlidingWindowInferer(roi_size=patch_size, overlap=0.25, mode='gaussian')
-
-# Super-resolve volumes. Model expects z-score normalized input volumes.
-sr_volumes = inferer(inputs=volumes, network=model)
-```
+   ```python
+   import torch
+   from monai.inferers.inferer import SlidingWindowInferer
+   
+   ...
+   
+   # Load model
+   model = torch.hub.load('???', '???', pretrained=True)
+   model.forward = model.extract_features
+   model.eval()
+   
+   # Extract features. Model expects z-score normalized input volumes.
+   features = model(volumes) if not inferer else inferer(inputs=volumes, network=model)
+   ```
 
 <hr style="border:2px solid gray">
 
