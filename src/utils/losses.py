@@ -13,6 +13,11 @@ from src.models.esrgan import Discriminator
 
 
 class VGGLoss(nn.Module):
+    """
+    2.5D VGG Loss, computes average 2D perceptual loss on slices from all three axes.
+    Expected volume dimensions order is arbitrary.
+    """
+
     def __init__(self, _min, _max, mean=None, std=None, patch_size=(-1, -1, -1)):
         super().__init__()
 
@@ -38,23 +43,38 @@ class VGGLoss(nn.Module):
             NormalizeIntensity(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], channel_wise=True),
         ])
 
-        # Define network inferer
-        self.inferer = SlidingWindowInferer(roi_size=patch_size[-2:], overlap=0.25, mode='gaussian')
+        # Set patch size
+        self.patch_size = patch_size
+
+        # Define processing planes
+        self.planes = [
+            {'orthogonal_axis_dim': -3, 'coplanar_axes_dims': [-2, -1]},
+            {'orthogonal_axis_dim': -2, 'coplanar_axes_dims': [-3, -1]},
+            {'orthogonal_axis_dim': -1, 'coplanar_axes_dims': [-3, -2]},
+        ]
 
     def forward(self, predictions, ground_truths):
         # Preprocess data as expected by VGG
         transformed_predictions = torch.stack([self.vgg_transforms(prediction) for prediction in predictions], dim=0)
         transformed_ground_truths = torch.stack([self.vgg_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
 
-        # Convert 3D data to 2D
-        transformed_predictions_2d = transformed_predictions.permute(-5, -3, -4, -2, -1).contiguous().view(-1, 3, *(transformed_predictions.shape[-2:]))
-        transformed_ground_truths_2d = transformed_ground_truths.permute(-5, -3, -4, -2, -1).contiguous().view(-1, 3, *(transformed_ground_truths.shape[-2:]))
+        # Handle 2.5D processing
+        vgg_features_predictions = []
+        vgg_features_ground_truths = []
 
-        # Compute VGG features
-        vgg_features_predictions = self.inferer(inputs=transformed_predictions_2d, network=self.vgg)
-        vgg_features_ground_truths = self.inferer(inputs=transformed_ground_truths_2d, network=self.vgg).detach()
+        for plane in self.planes:
+            # Define network inferer
+            inferer = SlidingWindowInferer(roi_size=list(self.patch_size[dim] for dim in plane['coplanar_axes_dims']), overlap=0.25, mode='gaussian')
 
-        return self.criterion(vgg_features_predictions, vgg_features_ground_truths)
+            # Convert 3D data to 2D
+            transformed_predictions_2d = transformed_predictions.permute(-5, plane['orthogonal_axis_dim'], -4, *plane['coplanar_axes_dims']).contiguous().view(-1, 3, *(transformed_predictions.shape[dim] for dim in plane['coplanar_axes_dims']))
+            transformed_ground_truths_2d = transformed_ground_truths.permute(-5, plane['orthogonal_axis_dim'], -4, *plane['coplanar_axes_dims']).contiguous().view(-1, 3, *(transformed_ground_truths.shape[dim] for dim in plane['coplanar_axes_dims']))
+
+            # Compute VGG features
+            vgg_features_predictions.append(inferer(inputs=transformed_predictions_2d, network=self.vgg))
+            vgg_features_ground_truths.append(inferer(inputs=transformed_ground_truths_2d, network=self.vgg).detach())
+
+        return self.criterion(torch.stack(vgg_features_predictions), torch.stack(vgg_features_ground_truths))
 
 
 class Med3DLoss(nn.Module):
