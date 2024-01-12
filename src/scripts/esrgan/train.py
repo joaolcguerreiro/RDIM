@@ -335,7 +335,7 @@ def main():
                 bins=100,
                 _min=_min, _max=_max, mean=mean, std=std,
                 save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),
-                fig_size=(3, 3.25)
+                fig_size=(3, 3)
             ) if args.val else None
 
         # Save checkpoint
@@ -379,7 +379,7 @@ def main():
                 bins=100,
                 _min=_min, _max=_max, mean=mean, std=std,
                 save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}'),
-                fig_size=(3, 3.25)
+                fig_size=(3, 3)
             ) if args.val else None
 
             # Plot generator loss

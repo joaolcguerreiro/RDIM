@@ -114,7 +114,9 @@ def reorder_volume_dimensions(volume, channel_dim=0, longitudinal_axis_dim=1, an
 
 
 def draw_image_2d(imgs, n_rows=1, n_cols=1, labels=None, show=True, ax=None, fig_size=(3, 3), theme='light'):
-    if theme == 'dark':
+    if theme == 'light':
+        plt.style.use('default')
+    elif theme == 'dark':
         plt.style.use('dark_background')
 
     # Create a new figure
@@ -325,22 +327,26 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
     slice_index = (get_num_plane_slices(plane=plane, volume=gen_volume) // 2) if dimension == '2D' else None
 
     # Create a new figure
-    n_imgs = sum(1 for volume in [lr_volume, gen_volume, gt_volume] if volume is not None)
-    fig_width = fig_size[0] * n_imgs
-    fig_height = fig_size[1] * (2 if with_histogram else 1)
+    n_columns = sum(1 for volume in [lr_volume, gen_volume, gt_volume] if volume is not None)
+    n_img_rows = 1
+    n_hist_rows = (2 if with_histogram else 0)
+    fig_width = fig_size[0] * n_columns
+    fig_height = fig_size[1] * (n_img_rows + n_hist_rows)
 
     fig = plt.figure(figsize=(fig_width, fig_height))
 
-    if theme == 'dark':
+    if theme == 'light':
+        plt.style.use('default')
+    elif theme == 'dark':
         plt.style.use('dark_background')
 
-    # Stick images always to top corners despite figure ratio
+    # Define images grid position
     grid_img_top = 1
-    grid_img_bottom = grid_img_top - (fig_width / n_imgs / fig_height)
+    grid_img_bottom = grid_img_top - (n_img_rows / (n_img_rows + n_hist_rows))
 
     # Create grid for images
-    grid_img = plt.GridSpec(1, n_imgs, wspace=0, left=0, right=1, bottom=grid_img_bottom, top=grid_img_top)
-    ax_img = np.array([[fig.add_subplot(grid_img[index]) for index in range(n_imgs)]])
+    grid_img = plt.GridSpec(n_img_rows, n_columns, wspace=0, hspace=0, left=0, right=1, bottom=grid_img_bottom, top=grid_img_top)
+    ax_img = np.array([[fig.add_subplot(grid_img[row, column]) for row in range(n_img_rows) for column in range(n_columns)]])
 
     # Draw slices
     volumes, labels = zip(*filter(lambda slice_label_pair: slice_label_pair[0] is not None, zip([lr_volume, gen_volume, gt_volume], ['Downsampled', 'Synthetic', 'Ground Truth'])))
@@ -352,8 +358,8 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
         gt_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=gt_volume) if dimension == '2D' else gt_volume).flatten().tolist() if gt_volume is not None else list()
 
         # Create grid for histogram
-        grid_hist = plt.GridSpec(1, n_imgs, top=grid_img_bottom * 0.875)
-        ax_hist = fig.add_subplot(grid_hist[0:])
+        grid_hist = plt.GridSpec(n_hist_rows, n_columns, top=grid_img_bottom * 0.875)
+        ax_hist = fig.add_subplot(grid_hist[:])
 
         # Draw pixel distribution histogram
         draw_histogram(
@@ -367,7 +373,7 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
             hue='Data Type',
             bins=bins,
             bin_range=None if (_min is None or _max is None) else (_min, _max),
-            frequency_range=(None, torch.histc(gt_volume.flatten(), bins=bins).max().item() if gt_volume.numel() > 0 and isinstance(bins, int) else None) if bound_range else None,
+            frequency_range=(None, (torch.histc(torch.tensor(gt_pixel_values), bins=bins, min=_min, max=_max).max().item() * 1.15) if (torch.tensor(gt_pixel_values).numel() > 0 and isinstance(bins, int) and _min is not None and _max is not None) else None) if bound_range else None,
             element='step',
             fill=False,
             ax=ax_hist,
@@ -399,16 +405,21 @@ def save_samples(save_dir_path, volumes_metadata, lr_volumes, gen_volumes, gt_vo
         )
 
 
-def draw_line_chart(data, title, x_label, y_label, save_filename, ax=None, fig_size=None, theme='light'):
-    if theme == 'dark':
+def draw_line_chart(data, title, x_label, y_label, save_filename=None, ax=None, fig_size=None, theme='light'):
+    if theme == 'light':
+        plt.style.use('default')
+    elif theme == 'dark':
         plt.style.use('dark_background')
 
     # Create a new figure
     if ax is None:
         _, ax = plt.subplots(figsize=fig_size)
 
-    for _dict in data:
-        ax.plot(_dict[x_label], _dict[y_label], label=_dict['Label'])
+    # Define color palette
+    colors = sns.color_palette('tab10', n_colors=len(data))
+
+    for _dict, color in zip(data, colors):
+        ax.plot(_dict[x_label], _dict[y_label], label=_dict['Label'], color=color)
 
     # Chart customization
     ax.set_xlabel(x_label)
@@ -428,7 +439,9 @@ def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bi
         key: sum((_dict[key] for _dict in data), []) for key in [x_label, hue] if key is not None
     })
 
-    if theme == 'dark':
+    if theme == 'light':
+        plt.style.use('default')
+    elif theme == 'dark':
         plt.style.use('dark_background')
 
     # Create a new figure
@@ -436,7 +449,7 @@ def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bi
         _, ax = plt.subplots(figsize=fig_size)
 
     # Chart customization
-    sns.histplot(data=data, x=x_label, hue=hue, stat=stat, bins=bins, binrange=bin_range, element=element, fill=fill, palette="Pastel1")
+    sns.histplot(data=data, x=x_label, hue=hue, stat=stat, bins=bins, binrange=bin_range, element=element, fill=fill, palette='tab10')
     ax.set_title(title)
     ax.set_ylim(frequency_range)
 
@@ -452,7 +465,9 @@ def draw_box_plot(data, title, x_label, y_label, hue=None, save_filename=None, a
         key: sum((_dict[key] for _dict in data), []) for key in [x_label, y_label, hue] if key is not None
     })
 
-    if theme == 'dark':
+    if theme == 'light':
+        plt.style.use('default')
+    elif theme == 'dark':
         plt.style.use('dark_background')
 
     # Create a new figure
@@ -460,7 +475,7 @@ def draw_box_plot(data, title, x_label, y_label, hue=None, save_filename=None, a
         _, ax = plt.subplots(figsize=fig_size)
 
     # Chart customization
-    sns.boxplot(data=data, x=x_label, y=y_label, hue=hue, palette="Pastel1")
+    sns.boxplot(data=data, x=x_label, y=y_label, hue=hue, palette='tab10')
     ax.set_title(title)
 
     # Save chart
