@@ -12,7 +12,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics
-from src.utils.utils import clamp, save_samples, save_batch, collect_batch_pixels, draw_box_plot, draw_histogram, set_seed
+from src.utils.utils import clamp, save_samples, save_batch, collect_batch_pixels, parse_bin_range, compute_max_frequency, draw_box_plot, draw_histogram, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
 
@@ -138,7 +138,8 @@ def main():
         x_label='Pixel Intensity',
         hue='Data Type',
         bins=100,
-        bin_range=(_min, _max),
+        bin_range=parse_bin_range(_min=_min, _max=_max),
+        frequency_range=(None, compute_max_frequency(pixel_values=hr_pixel_values, bins=100, _min=_min, _max=_max) * 1.15),
         element='step',
         fill=False,
         save_filename=os.path.join(experiment_path, 'figures', 'test', 'pixel_distribution', f'{args.epoch}')

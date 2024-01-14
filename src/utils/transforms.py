@@ -1,5 +1,6 @@
 import torch
 import warnings
+import math
 import numpy as np
 import monai.transforms as transforms
 import torch.nn.functional as F
@@ -102,19 +103,15 @@ class EnsureExactChannels(Transform):
                     warnings.warn(msg)
                     return volume
 
-            # Flatten the tensor
-            flattened_volume = volume.view(-1)
+            # Permute tensor data and ensure original content is spatially coherent
+            kernel_volume = torch.cat([volume[:((num_volume_channels // self.num_channels) * self.num_channels), ...][channel_index::(num_volume_channels // self.num_channels)] for channel_index in range(num_volume_channels // self.num_channels)], dim=-1)
 
-            # Compute target elements excluding last dimension
-            target_elements = self.num_channels * volume.shape[-3] * volume.shape[-2]
+            # Repeat excess channels and trim them if applicable
+            excess_volume = volume[((num_volume_channels // self.num_channels) * self.num_channels):, ...]
+            excess_volume = excess_volume.repeat(math.ceil(kernel_volume.shape[0] / excess_volume.shape[0]), *([1] * 3))[:kernel_volume.shape[0]] if excess_volume.numel() > 0 else None
 
-            # Compute the number of elements in the last dimension based on total elements
-            num_last_dim_elements = len(flattened_volume) // target_elements
-
-            # Trim the excess and reshape to the desired shape
-            volume = flattened_volume[:self.num_channels * volume.shape[-3] * volume.shape[-2] * num_last_dim_elements].view(
-                self.num_channels, volume.shape[-3], volume.shape[-2], num_last_dim_elements
-            )
+            # Stack kernel and excess horizontally
+            volume = torch.cat([kernel_volume, excess_volume], dim=-1) if excess_volume is not None else kernel_volume
 
         return volume
 

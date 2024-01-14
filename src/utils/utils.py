@@ -15,7 +15,7 @@ from tqdm import tqdm
 from matplotlib.patches import Patch
 sys.path.append(os.path.join('..', '..'))
 from src.utils.logger import print_divisor
-from src.utils.transforms import NormalizeIntensity, ThresholdIntensity
+from src.utils.transforms import NormalizeIntensity, ThresholdIntensity, EnsureExactChannels
 
 
 def load_volume(volume_dir):
@@ -113,6 +113,25 @@ def reorder_volume_dimensions(volume, channel_dim=0, longitudinal_axis_dim=1, an
     return volume.permute(longitudinal_axis_dim, anteroposterior_axis_dim, mediolateral_axis_dim, channel_dim).contiguous()
 
 
+def format_volume(volume, _min=None, _max=None):
+    """
+    Adjust Volume for Visualization.
+    Expected Volume Dimensions Order is Flexible, but Channel Dimension is required to be First (Channel, ...) = (C, ...).
+    """
+
+    # Scale volume to the valid range for imshow with RGB data ([0, 1] for floats or [0, 255] for integers).
+    volume = (min_max_scaling(volume, _min=_min, _max=_max) if (_min is not None and _max is not None) else ((volume - volume.min()) / (volume.max() - volume.min()))) * (255 if not torch.is_floating_point(volume) else 1.0)
+
+    # Ensure valid number of channels (Grayscale: 1, RGB: 3, RGBA: 4)
+    if volume.shape[0] not in (1, 3, 4):
+        volume = force_valid_channels(volume, num_channel=1)
+
+    # Reorder volume dimensions for visualization
+    volume = reorder_volume_dimensions(volume)
+
+    return volume
+
+
 def draw_image_2d(imgs, n_rows=1, n_cols=1, labels=None, show=True, ax=None, fig_size=(3, 3), theme='light'):
     if theme == 'light':
         plt.style.use('default')
@@ -149,7 +168,7 @@ def display_volumes(volumes, plane, dimension, n_rows=None, n_cols=None, volume_
             slice_indexes = range(get_num_plane_slices(plane, volumes[0]))
 
         for slice_index in slice_indexes:
-            print('Volumes:\n' + '\n'.join(f'- {volume_filename} (Slice {slice_index})' for volume_filename in volume_filenames)) if show else None
+            print(f'Volumes at Slice {slice_index}:\n' + '\n'.join(f'- {volume_filename}' for volume_filename in volume_filenames)) if show else None
             imgs = [slice_volume(slice_index, plane, volume) for volume in volumes]
             draw_image_2d(imgs, n_rows, n_cols, labels=labels, show=show, ax=ax, fig_size=fig_size, theme=theme)
     elif dimension == '3D':
@@ -227,6 +246,10 @@ def compute_super_resolution_volume_metadata(lr_metadata, scale_factor=None):
     }
 
 
+def min_max_scaling(volume, _min, _max):
+    return NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True)(volume)
+
+
 def denormalize(volume, mean, std):
     return NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True)(volume)
 
@@ -242,6 +265,10 @@ def clamp(volume, _min, _max, mean=None, std=None):
     return ThresholdIntensity(threshold=_max, above=False, channel_wise=True, cval=_max)(ThresholdIntensity(threshold=_min, above=True, channel_wise=True, cval=_min)(volume))
 
 
+def force_valid_channels(volume, num_channel):
+    return EnsureExactChannels(num_channels=num_channel)(volume)
+
+
 def compute_scale_factor(lr_volume, hr_volume):
     # Fetch volume spatial dimensions (discard channel dimension)
     lr_shape = lr_volume.shape[1:]
@@ -253,7 +280,7 @@ def compute_scale_factor(lr_volume, hr_volume):
     return scale_factor
 
 
-def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axial', dimension='2D', volume_filenames=None, slice_index=-1, labels=True, fig_size=(3, 3), theme='light'):
+def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, _min=None, _max=None, plane='axial', dimension='2D', volume_filenames=None, slice_index=-1, labels=True, fig_size=(3, 3), theme='light'):
     lr_volumes = list() if lr_volumes is None else list(lr_volumes.to('cpu'))
     sr_volumes = list() if sr_volumes is None else list(sr_volumes.to('cpu'))
     gt_volumes = list() if gt_volumes is None else list(gt_volumes.to('cpu'))
@@ -268,10 +295,10 @@ def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, plane='axia
     hr_volumes = gt_volumes if gt_volumes else sr_volumes
     scale_factor = compute_scale_factor(lr_volumes[0], hr_volumes[0]) if (lr_volumes and hr_volumes) else (1, 1, 1)
 
-    # Reorder volume dimensions for visualization
-    lr_volumes = list(reorder_volume_dimensions(upsample(lr_volume, scale_factor)) for lr_volume in lr_volumes)
-    sr_volumes = list(reorder_volume_dimensions(sr_volume) for sr_volume in sr_volumes)
-    gt_volumes = list(reorder_volume_dimensions(gt_volume) for gt_volume in gt_volumes)
+    # Adjust volumes for visualization
+    lr_volumes = list(format_volume(upsample(lr_volume, scale_factor), _min=_min, _max=_max) for lr_volume in lr_volumes)
+    sr_volumes = list(format_volume(sr_volume, _min=_min, _max=_max) for sr_volume in sr_volumes)
+    gt_volumes = list(format_volume(gt_volume, _min=_min, _max=_max) for gt_volume in gt_volumes)
 
     # Interleave volumes for visualization
     volumes = [volume for interleaved_volumes in zip(*list(filter(None, [lr_volumes, sr_volumes, gt_volumes]))) for volume in interleaved_volumes]
@@ -308,6 +335,14 @@ def collect_batch_pixels(volumes, mean=None, std=None):
     return volumes_pixels
 
 
+def parse_bin_range(_min, _max):
+    return float(torch.tensor(_min).min()), float(torch.tensor(_max).max())
+
+
+def compute_max_frequency(pixel_values, bins, _min=None, _max=None):
+    return torch.histc(torch.tensor(pixel_values), bins=bins, min=float(torch.tensor(_min if _min is not None else 0).min()), max=float(torch.tensor(_max if _max is not None else 0).max())).max().item() if (torch.tensor(pixel_values).numel() > 0 and isinstance(bins, int)) else None
+
+
 def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=True, bound_range=True):
     # Denormalize volumes
     lr_volume = lr_volume if (mean is None or std is None) else denormalize(lr_volume, mean=mean, std=std)
@@ -318,10 +353,10 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
     hr_volume = gen_volume if gen_volume is not None else gt_volume
     scale_factor = compute_scale_factor(lr_volume, hr_volume) if (lr_volume is not None and hr_volume is not None) else (1, 1, 1)
 
-    # Reorder volume dimensions for visualization
-    lr_volume = reorder_volume_dimensions(upsample(lr_volume, scale_factor).to('cpu'))
-    gen_volume = reorder_volume_dimensions(gen_volume.to('cpu'))
-    gt_volume = reorder_volume_dimensions(gt_volume.to('cpu')) if gt_volume is not None else gt_volume
+    # Adjust volumes for visualization
+    lr_volume = format_volume(raw_lr_volume := upsample(lr_volume, scale_factor).to('cpu'), _min=_min, _max=_max)
+    gen_volume = format_volume(raw_gen_volume := gen_volume.to('cpu'), _min=_min, _max=_max)
+    gt_volume = format_volume(raw_gt_volume := gt_volume.to('cpu'), _min=_min, _max=_max) if gt_volume is not None else (raw_gt_volume := gt_volume)
 
     # Define slice index
     slice_index = (get_num_plane_slices(plane=plane, volume=gen_volume) // 2) if dimension == '2D' else None
@@ -353,9 +388,9 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
     display_volumes(volumes, plane=plane, dimension=dimension, slice_index=slice_index, labels=labels, show=False, ax=ax_img, theme=theme)
 
     if with_histogram:
-        lr_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=lr_volume) if dimension == '2D' else lr_volume).flatten().tolist()
-        gen_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=gen_volume) if dimension == '2D' else gen_volume).flatten().tolist()
-        gt_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=gt_volume) if dimension == '2D' else gt_volume).flatten().tolist() if gt_volume is not None else list()
+        lr_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_lr_volume)) if dimension == '2D' else raw_lr_volume).flatten().tolist()
+        gen_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_gen_volume)) if dimension == '2D' else raw_gen_volume).flatten().tolist()
+        gt_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_gt_volume)) if dimension == '2D' else raw_gt_volume).flatten().tolist() if raw_gt_volume is not None else list()
 
         # Create grid for histogram
         grid_hist = plt.GridSpec(n_hist_rows, n_columns, top=grid_img_bottom * 0.875)
@@ -372,8 +407,8 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
             x_label='Pixel Intensity',
             hue='Data Type',
             bins=bins,
-            bin_range=None if (_min is None or _max is None) else (_min, _max),
-            frequency_range=(None, (torch.histc(torch.tensor(gt_pixel_values), bins=bins, min=_min, max=_max).max().item() * 1.15) if (torch.tensor(gt_pixel_values).numel() > 0 and isinstance(bins, int) and _min is not None and _max is not None) else None) if bound_range else None,
+            bin_range=None if (_min is None or _max is None) else parse_bin_range(_min=_min, _max=_max),
+            frequency_range=(None, (compute_max_frequency(gt_pixel_values, bins=bins, _min=_min, _max=_max) * 1.15) if (_min is not None and _max is not None) else None) if bound_range else None,
             element='step',
             fill=False,
             ax=ax_hist,

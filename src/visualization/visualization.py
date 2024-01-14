@@ -88,7 +88,7 @@ def main():
         # Generate list with filename for given volume
         volume_filenames = [random.choice(display_config.get(args.mode).get('dataloaders')).dataset[args.volume][display_config.get('batch_metadata_index')]['filename']]
 
-        display_batch(**volumes, plane=args.plane, dimension=args.dim, volume_filenames=volume_filenames, slice_index=args.slice, labels=args.labels)
+        display_batch(**volumes, _min=args.pixel_range[0], _max=args.pixel_range[1], plane=args.plane, dimension=args.dim, volume_filenames=volume_filenames, slice_index=args.slice, labels=args.labels)
     else:
         for batch_index, batch_datas in enumerate(zip(*display_config.get(args.mode).get('dataloaders'))):
             # Define volumes
@@ -104,7 +104,7 @@ def main():
             # Generate list with filenames from a given batch
             volume_filenames = random.choice(batch_datas)[display_config.get('batch_metadata_index')]['filename']
 
-            display_batch(**volumes, plane=args.plane, dimension=args.dim, volume_filenames=volume_filenames, slice_index=args.slice, labels=args.labels)
+            display_batch(**volumes, _min=args.pixel_range[0], _max=args.pixel_range[1], plane=args.plane, dimension=args.dim, volume_filenames=volume_filenames, slice_index=args.slice, labels=args.labels)
 
             print_divisor(width=0, last=True, new_lines_offset=-1) if batch_index + 1 != len(random.choice(display_config.get(args.mode).get('dataloaders'))) else None
 
