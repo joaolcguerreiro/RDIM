@@ -4,14 +4,14 @@
 
 DATA:
   TRAINING:
-    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training/LR
-    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training/HR
+    LR_DIR_PATH: /path/to/dataset/training/LR
+    HR_DIR_PATH: /path/to/dataset/training/HR
   VALIDATION:
-    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation/LR
-    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation/HR
+    LR_DIR_PATH: /path/to/dataset/validation/LR
+    HR_DIR_PATH: /path/to/dataset/validation/HR
   TESTING:
-    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing/LR
-    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing/HR
+    LR_DIR_PATH: /path/to/dataset/testing/LR
+    HR_DIR_PATH: /path/to/dataset/testing/HR
   NUM_WORKERS: 4
 
 

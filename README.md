@@ -1,4 +1,4 @@
-# SRMeDiff
+# <span style="color: orange">VoxRDiff</span>
 
 Repository ....
 
@@ -7,34 +7,23 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 ...
 
----
+<hr style="border:2px solid orange">
 
-### Citation
+# <span style="color: orange">Quick Inference</span>
 
-If you find this project useful, we would be grateful if you cite the paper:
-```
-@article{
-...
-}
-```
-
-<hr style="border:2px solid gray">
-
-# Quick Inference
-
-### Super-Resolution
+#### 3D Reconstruction
 
    ```python
    import torch
    from monai.inferers.inferer import SlidingWindowInferer
    
-   # Set patch size
+   # Set patch size (D, H, W)
    patch_size = (32, 32, 32)
    
    # Define inferer (Optional)
    inferer = SlidingWindowInferer(roi_size=patch_size, overlap=0.25, mode='gaussian')
    
-   # Two random volumes (batch size of 2) with 1 channel and size of 128x128x128. Mean is 0 and STD is 1.
+   # Two random volumes (batch size of 2) with 1 channel and size of 128x128x128 (D, H, W). Mean is 0 and STD is 1.
    volumes = torch.randn(2, 1, 128, 128, 128)
    
    # Avoid HTTP Error 403
@@ -44,17 +33,50 @@ If you find this project useful, we would be grateful if you cite the paper:
    model = torch.hub.load('???', '???', pretrained=True)
    model.eval()
    
-   # Super-resolve volumes. Model expects z-score normalized input volumes.
-   sr_volumes = model(volumes) if not inferer else inferer(inputs=volumes, network=model)
+   # Generated volumes. Model expects z-score normalized input volumes.
+   gen_volumes = model(volumes) if not inferer else inferer(inputs=volumes, network=model)
    ```
 
-### Feature Extraction
+<hr style="border:1px solid gray">
+
+#### 2D Reconstruction
 
    ```python
    import torch
    from monai.inferers.inferer import SlidingWindowInferer
    
-   ...
+   # Set patch size (D, H, W) = (1, H, W)
+   patch_size = (1, 32, 32)
+   
+   ... # Same as 3D Reconstruction
+   
+   # Two random images (batch size of 2) with 1 channel and size of 128x128 (H, W). Mean is 0 and STD is 1.
+   volumes = torch.randn(2, 1, 128, 128)
+   
+   # Add required depth dimension (1, H, W)
+   volumes = volumes.unsqueeze(dim=-3)
+   
+   ... # Same as 3D Reconstruction
+   
+   # Load model
+   model = torch.hub.load('???', '???', pretrained=True)
+   model.eval()
+
+   ... # Same as 3D Reconstruction
+
+   # Remove depth dimension
+   gen_volumes = gen_volumes.squeeze(dim=-3)
+   ```
+
+<hr style="border:1px solid gray">
+
+#### Feature Extraction
+
+   ```python
+   import torch
+   from monai.inferers.inferer import SlidingWindowInferer
+   
+   ... # Same as Reconstruction
    
    # Load model
    model = torch.hub.load('???', '???', pretrained=True)
@@ -65,24 +87,31 @@ If you find this project useful, we would be grateful if you cite the paper:
    features = model(volumes) if not inferer else inferer(inputs=volumes, network=model)
    ```
 
-<hr style="border:2px solid gray">
+<hr style="border:2px solid orange">
 
-# Setup Environment
+# <span style="color: orange">Usage</span>
 
-1) Create environment:
+### Setup Environment
+
+1) Clone GitHub repository:
+
+   ```
+   git clone https://github.com/??????
+   cd VoxRDiff
+   ```
+
+2) Create environment:
    ```
    conda create -n srmediff python=3.10.11
-   ```
-   ```
    conda activate srmediff
    ```
 
-2) Install Python dependencies (Python 3.10 is recommended):
+3) Install Python dependencies (Python 3.10 is recommended):
    ```
    pip install -r requirements.txt
    ```
 
-3) Install layout engine of Graphviz properly (https://github.com/mert-kurttutan/torchview).
+4) Install layout engine of Graphviz properly (https://github.com/mert-kurttutan/torchview). [REMOVE THIS]
    ```
    # For macOS
    brew install graphviz
@@ -100,185 +129,17 @@ If you find this project useful, we would be grateful if you cite the paper:
    choco install graphviz
    ```
 
-<hr style="border:2px solid gray">
+<hr style="border:1px solid gray">
 
-# Data Requirements
+### Prepare Data
 
-BE SURE DATA FILE FORMAT IS NIFTI... IF DICOM THEN CONVERT BEFORE ????... channel dim required to be first... accepted data shapes: (W, H, D) or (C, W, H, D) (WHERE H, W, D can interchange and C>0)... (for video super-resolution a valid shape is (C, T, W, H)... where T, W, H can interchange)
+1) See [data/README.md](data/README.md) for details.
 
-every low-resolution image should have a corresponding high-resolution image. The pair of low-res and high-res images should have the same filename
+2) After preparing the data, navigate to `configs/<model>/config.yaml` and adjust data paths....
 
-Supported files: NifTI...
+<hr style="border:1px solid gray">
 
-<hr style="border:2px solid gray">
-
-# Download LDCT Dataset
-
-Follow this steps in case you want to use the LDCT dataset.
-
-1) Download requires the [NBIA Data Retriever](https://wiki.cancerimagingarchive.net/display/NBIA/Downloading+TCIA+Images).
-
-2) Download data with Manifest File.
-   - **macOS** and **Windows**
-     - Double click manifest file in `srmediff/data/manifest.tcia` to open it;
-     - Select `Descriptive Directory Name` option;
-     - Click `Browse` and select destiny directory for downloaded files. We recommend `srmediff/data` directory;
-     - Click `Start`;
-   - **Linux**
-     - Run command:
-       ```
-       # For CentOS
-       /opt/NBIADataRetriever/NBIADataRetriever --cli <abolute_path_to_project>/srmediff/data/manifest.tcia -d <abolute_path_to_project>/srmediff/data
-       ```
-       ```
-       # For Ubuntu
-       /opt/nbia-data-retriever/nbia-data-retriever --cli <abolute_path_to_project>/srmediff/data/manifest.tcia -d <abolute_path_to_project>/srmediff/data
-       ```
-     - Help: Follow *"Running the NBIA Data Retriever on Linux"* section in https://wiki.cancerimagingarchive.net/display/NBIA/NBIA+Data+Retriever+Command-Line+Interface+Guide. `<location>/<manifest file name>.tcia` and `<parent location>/<download directory>` are expected to be the absolute paths. The remaining command-line options are not considered.
-
-<hr style="border:2px solid gray">
-
-# Prepare LDCT Dataset
-
-0) Navigate to `preprocessing` directory:
-   ```
-   cd src/preprocessing
-   ```
-   
-1) Run data cleaning script:
-   ```
-   python clean_ldct.py
-   ```
-   
-2) Run data formatting script:
-   ```
-   python format_ldct.py
-   ```
-   
-3) Run data splitting script:
-   ```
-   python split_data.py
-   ```
-
-(DELETE FROM HERE WHEN LDCT IS WORKING!!!) **LIDC-IDRI Dataset**
-
-0) Navigate to `preprocessing` directory:
-   ```
-   cd src/preprocessing
-   ```
-
-1) Run data cleaning script:
-   ```
-   python clean_lidc_idri.py
-   ```
-
-2) Run data formatting script:
-   ```
-   python format_lidc_idri.py
-   ```
-
-3) Run data splitting script:
-   ```
-   python split_data.py
-   ```
-
-4) Run data downsampling script:
-   ```
-   python downsample_data.py
-   ```
-
-<hr style="border:2px solid gray">
-
-# Prepare Alternative Dataset
-
-In case you want to use your own dataset:
-
-1) VALIDATION DATA IS OPTIONAL... BUT YOU CAN RUN SPLIT SCRIPT [OPTIONAL] IF YOU WANT TO SPLIT YOUR TRAINING DATA (USE --DIR FLAG TO SPECIFY DIRECTORY PATH)... validation and testing splits are not MANDATORY.
-
-2) BE SURE DATA FILE FORMAT IS NIFTI... IF DICOM THEN CONVERT BEFORE ????... channel dim required to be first... accepted data shapes: (W, H, D) or (C, W, H, D) (WHERE H, W, D can interchange and C>0)... (for video super-resolution a valid shape is (C, T, W, H)... where T, W, H can interchange)
-
-3) UPDATE CONFIG FILE WITH DATA PATHS
-
-4) YOU CAN SIMULATE THE DEGRADATIONS WITH DOWNSAMPLE_DATA SCRIPT... [OPTIONAL]
-
----
-
-The following illustrates a valid directory structure:
-
-```
-├───data
-      ├───training
-      │      ├────LR
-      │      │      └──example-0001.nii.gz
-      │      │      └──example-0002.nii.gz
-      │      ...    └──...
-      │      │
-      │      └───HR
-      │      │      └──example-0001.nii.gz
-      │      │      └──example-0002.nii.gz
-      │      ...    └──...
-      │
-      ├───validation
-      │      ├───LR
-      │      └───HR
-      ├───testing
-      │      ├───LR
-      │      └───HR
-      └──
-```
-
-Note: This aforementioned structure is not mandatory. Also, the validation and testing splits are not MANDATORY.
-
-<hr style="border:2px solid gray">
-
-# Configuration File
-
-Global configuration files are in configs/ directory... (a copy of the config file is stored in the experiment folder and later used to load the original parameters during the resume of a training experiment)
-
-#### Batch Size
-
-- sdfhjsdfdsj
-
----
-
-#### Gradient Accumulation Steps
-
-- Strategy for memory-efficiency. Effectively simulates a batch size of K x BATCH_SIZE, while using the memory required for a batch size of BATCH_SIZE, e.g., if K=2 and BATCH_SIZE=4, then essentially we have a batch size of 8.
-
-<hr style="border:2px solid gray">
-
-# Experiment Tracking
-
-Everytime you train a model.... an experiment folder is built (except if training was resumed, thereby it is used the folder of the prior run)... the global configuration file is stored in the experiment folder to fetch the original parameters during training resume.
-
-### Directory Structure
-
-the structure is the following....
-<model_name>
-   <date_time>
-      <configs>
-      <checkpoints>
-      <figures>
-      <logs>
-      <results>
-
----
-
-### Folder Description
-
-configs/... Contains copy of global configuration file used in the experiment. Loaded in case of training resuming.
-
-checkpoints/ .... Contains saved checkpoints of the model during training
-
-figures/ ....
-
-logs/ ....
-
-results/ .... Contains the output of running the trained model on the test set. The results are typically generated by running the trained model on the test set using the test.py script.
-
-<hr style="border:2px solid gray">
-
-# Run Model
+### Run Model
 
 In the following instructions, replace `<model>` by one of the options below:
 
@@ -288,9 +149,9 @@ In the following instructions, replace `<model>` by one of the options below:
 
 ---
 
-### Train and Validation
+#### Train and Validation
 
-1) go to `configs/<model>/config.yaml` and adjust configuration parameters needed....
+1) Navigate to `configs/<model>/config.yaml` and adjust configuration parameters needed....
 
 2) Navigate to `src/scripts/<model>/`
 
@@ -310,27 +171,29 @@ In the following instructions, replace `<model>` by one of the options below:
    python train.py --val=False
    ```
 
-Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more computationally expensive)... Also, for `lr_patch_size` equal or smaller than `"[8, 8, 8]"` the `batch_size` is required to be greater than `1`.
+Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more computationally expensive)... Also, for `lr_patch_size` equal or smaller than `"[8, 8, 8]"` the `batch_size` is required to be greater than `1` because of discriminator batch norm.
 ... Also, for SRMeDiff the dimensions of the `lr_patch_size` are recommended to be powers of 2...
 
 ---
 
-### Load Pre-trained
+#### Load Pre-trained
 
-1) go to `configs/<model>/config.yaml` and update pre-trained path parameters of model....
+1) See [pretrained_models/README.md](pretrained_models/README.md) to download available pre-trained models... or use checkpoint path from a previous experiment...
 
-2) Navigate to `src/scripts/<model>/`
+2) Navigate to `configs/<model>/config.yaml` and update pre-trained path parameters of model....
 
-3) Run ...
+3) Navigate to `src/scripts/<model>/`
+
+4) Run ...
    ```
    python train.py
    ```
 
 ---
 
-### Resume Training
+#### Resume Train
 
-1) go to `experiments/<model>` and copy experiment path
+1) Navigate to `experiments/<model>` and copy experiment path
 
 2) Navigate to `src/scripts/<model>/`
 
@@ -339,13 +202,13 @@ Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more compu
    python train.py --resume=<experiment_path>
    ```
 
-    Note: Load pre-trained differs from resume training since in pre-training only the model weights are loaded. If you simultaneously resume a training the checkpoint weights will override the pre-trained weights.
+    Note: Load pre-trained differs from resume training since in pre-training only the model weights are loaded and the training is reset... If you resume training the last epoch checkpoint weights will be prioritized over the pre-trained weights...
 
 ---
 
-### Test
+#### Test
 
-1) go to `experiments/<model>` and copy experiment path
+1) Navigate to `experiments/<model>` and copy experiment path
 
 2) Navigate to `src/scripts/<model>/`
 
@@ -353,10 +216,12 @@ Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more compu
    ```
    python test.py --exp=<experiment_path> --epoch=<epoch>
    ```
+   
+Note: Results are in <experiment_path/results>... additionally check <experiment_path/logs/test> and <experiment_path/figures/test> for more details...
 
 ---
 
-### Inference
+#### Inference
 
 1) Get path of a checkpoint file...
 
@@ -367,9 +232,40 @@ Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more compu
     python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--num-workers=<num_workers>]
    ```
 
-<hr style="border:2px solid gray">
+<hr style="border:1px solid gray">
 
-# Visualize Results
+### Experiment Tracking (??MAYBE DELETE THIS??)
+
+Everytime you train a model.... an experiment folder is built (except if training was resumed, thereby it is used the folder of the prior run)... the global configuration file is stored in the experiment folder to fetch the original parameters during training resume.
+
+#### Directory Structure
+
+the structure is the following....
+<model_name>
+   <date_time>
+      <configs>
+      <checkpoints>
+      <figures>
+      <logs>
+      <results>
+
+---
+
+#### Folder Description
+
+configs/... Contains copy of global configuration file used in the experiment. Loaded in case of training resuming.
+
+checkpoints/ .... Contains saved checkpoints of the model during training
+
+figures/ ....
+
+logs/ ....
+
+results/ .... Contains the output of running the trained model on the test set. The results are typically generated by running the trained model on the test set using the test.py script.
+
+<hr style="border:1px solid gray">
+
+### Visualize Results
 
 Image visualization file...
 
@@ -527,4 +423,19 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `sr_gt_scans`
 |--------|-------------|:-------:|
 | `bool` | ...         |  True   |
 
-<hr style="border:2px solid gray">
+<hr style="border:2px solid orange">
+
+# <span style="color: orange">Citation</span>
+
+If you find this project useful, please consider citing the paper:
+```
+@article{
+...
+}
+```
+
+<hr style="border:2px solid orange">
+
+# <span style="color: orange">License</span>
+
+This project is licensed under MIT license. See [LICENSE](LICENSE) for details.

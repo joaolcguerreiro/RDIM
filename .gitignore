@@ -4,6 +4,6 @@ __pycache__/
 data/*
 experiments/*
 pretrained_models/*
-!data/manifest.tcia
+!data/README.md
 !experiments/README.md
 !pretrained_models/README.md

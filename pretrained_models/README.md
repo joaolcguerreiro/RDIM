@@ -1,1 +1,5 @@
-Stores pre-trained models that you can use as a starting point for fine-tuning or transfer learning.
+Store pre-trained models here to use them as a starting point.
+
+Download available model checkpoints at [Google drive](????).
+
+Navigate to `configs/<model>/config.yaml` and update pre-trained path parameter.
