@@ -48,7 +48,7 @@ Every low-resolution image should have a corresponding high-resolution image. Th
       ...
 ```
 
-Note: Validation data is optional. Use flag `--val=False` during training...
+> Note: Validation data is optional. Use flag `--val=False` during training...
 
 ---
 
@@ -129,4 +129,4 @@ The following illustrates a valid dataset structure:
       └──
 ```
 
-Note: `training`, `validation` and `testing` do not need to be in the same directory. This is a just a suggested directory structure.
+> Note: `training`, `validation` and `testing` do not need to be in the same directory. This is a just a suggested directory structure.

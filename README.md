@@ -9,9 +9,20 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
 
 <hr style="border:2px solid orange">
 
+# <span style="color: orange">Citation</span>
+
+If you find this project useful, please consider citing the paper:
+```
+@article{
+...
+}
+```
+
+<hr style="border:2px solid orange">
+
 # <span style="color: orange">Quick Inference</span>
 
-#### 3D Reconstruction
+#### Reconstruction
 
    ```python
    import torch
@@ -35,37 +46,6 @@ SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUT
    
    # Generated volumes. Model expects z-score normalized input volumes.
    gen_volumes = model(volumes) if not inferer else inferer(inputs=volumes, network=model)
-   ```
-
-<hr style="border:1px solid gray">
-
-#### 2D Reconstruction
-
-   ```python
-   import torch
-   from monai.inferers.inferer import SlidingWindowInferer
-   
-   # Set patch size (D, H, W) = (1, H, W)
-   patch_size = (1, 32, 32)
-   
-   ... # Same as 3D Reconstruction
-   
-   # Two random images (batch size of 2) with 1 channel and size of 128x128 (H, W). Mean is 0 and STD is 1.
-   volumes = torch.randn(2, 1, 128, 128)
-   
-   # Add required depth dimension (1, H, W)
-   volumes = volumes.unsqueeze(dim=-3)
-   
-   ... # Same as 3D Reconstruction
-   
-   # Load model
-   model = torch.hub.load('???', '???', pretrained=True)
-   model.eval()
-
-   ... # Same as 3D Reconstruction
-
-   # Remove depth dimension
-   gen_volumes = gen_volumes.squeeze(dim=-3)
    ```
 
 <hr style="border:1px solid gray">
@@ -171,7 +151,7 @@ In the following instructions, replace `<model>` by one of the options below:
    python train.py --val=False
    ```
 
-Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more computationally expensive)... Also, for `lr_patch_size` equal or smaller than `"[8, 8, 8]"` the `batch_size` is required to be greater than `1` because of discriminator batch norm.
+> Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more computationally expensive)... Also, for `lr_patch_size` equal or smaller than `"[8, 8, 8]"` the `batch_size` is required to be greater than `1` because of discriminator batch norm.
 ... Also, for SRMeDiff the dimensions of the `lr_patch_size` are recommended to be powers of 2...
 
 ---
@@ -202,7 +182,7 @@ Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more compu
    python train.py --resume=<experiment_path>
    ```
 
-    Note: Load pre-trained differs from resume training since in pre-training only the model weights are loaded and the training is reset... If you resume training the last epoch checkpoint weights will be prioritized over the pre-trained weights...
+> Note: Load pre-trained differs from resume training since in pre-training only the model weights are loaded and the training is reset... If you resume training the last epoch checkpoint weights will be prioritized over the pre-trained weights...
 
 ---
 
@@ -216,8 +196,8 @@ Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more compu
    ```
    python test.py --exp=<experiment_path> --epoch=<epoch>
    ```
-   
-Note: Results are in <experiment_path/results>... additionally check <experiment_path/logs/test> and <experiment_path/figures/test> for more details...
+
+> Note: Results are in <experiment_path/results>... additionally check <experiment_path/logs/test> and <experiment_path/figures/test> for more details...
 
 ---
 
@@ -422,17 +402,6 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `sr_gt_scans`
 | Option | Description | Default |
 |--------|-------------|:-------:|
 | `bool` | ...         |  True   |
-
-<hr style="border:2px solid orange">
-
-# <span style="color: orange">Citation</span>
-
-If you find this project useful, please consider citing the paper:
-```
-@article{
-...
-}
-```
 
 <hr style="border:2px solid orange">
 
