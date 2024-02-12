@@ -82,7 +82,7 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 3) Run clone data script to duplicate dataset into `data` directory:
    ```
-   python clone_data.py --dir=<path_to_raw_lidc_idri> --dataset_name="LIDC-IDRI"
+   python clone_data.py --dir=<path_to_raw_lidc_idri> --dataset-name="LIDC-IDRI"
    ```
 
 4) Run data cleaning script:
@@ -148,7 +148,7 @@ Store the dataset in the `data` directory to align with the structure in [Overvi
 
 * Clone data into `data` directory:
    ```
-   python clone_data.py --dir=<path_to_raw_alternative_dataset> --dataset_name=<dataset_name>
+   python clone_data.py --dir=<path_to_raw_alternative_dataset> --dataset-name=<dataset_name>
    ```
 
 > Note: This step is not mandatory. The structure in [Overview](#overview) is just a convention to ensure organization.
