@@ -2,7 +2,6 @@ import shutil
 import argparse
 import os
 import csv
-from glob import glob
 
 
 def main():
@@ -26,13 +25,13 @@ def main():
                 if row[modality_index] != 'CT':
                     shutil.rmtree(parse_path(row[path_index]))
     except Exception as e:
-        print("Download data again. An error occurred: {}".format(e))
+        print(f'An error occurred: {e}.\n' + 'If error remains download data again.')
 
 
 if __name__ == '__main__':
     # Define argument parser
     parser = argparse.ArgumentParser(description='Clean data')
-    parser.add_argument('--dir', default=max((path for path in glob(os.path.join('..', '..', 'data', 'manifest*')) if os.path.isdir(path)), key=os.path.getmtime, default=None), help='Path to directory with data', type=str)
+    parser.add_argument('--dir', required=True, help='Path to directory with raw data', type=str)
     args = parser.parse_args()
 
     main()

@@ -11,65 +11,65 @@ from glob import glob
 
 def main():
     try:
-        if args.old_dir:
-            # Remove metadata and license files
-            license_file = os.path.join(args.old_dir, 'LIDC-IDRI', 'LICENSE')
-            metadata_file = os.path.join(args.old_dir, 'metadata.csv')
+        # Remove metadata and license files
+        license_file_path = os.path.join(args.dir, 'LIDC-IDRI', 'LICENSE')
+        metadata_file_path = os.path.join(args.dir, 'metadata.csv')
 
-            if os.path.exists(license_file):
-                os.remove(license_file)
+        if os.path.exists(license_file_path):
+            os.remove(license_file_path)
 
-            if os.path.exists(metadata_file):
-                os.remove(metadata_file)
+        if os.path.exists(metadata_file_path):
+            os.remove(metadata_file_path)
 
-            if os.path.exists(args.new_dir):
-                shutil.rmtree(args.new_dir)
+        # Move the data from the redundant intermediary directory to the root directory
+        src_dir_path = os.path.join(args.dir, 'LIDC-IDRI')
+        dest_dir_path = args.dir
 
-            # Remove redundant intermediary folder
-            if os.path.exists(args.old_dir):
-                src = os.path.join(args.old_dir, 'LIDC-IDRI')
-                dst = args.new_dir
-                shutil.move(src, dst)
-                shutil.rmtree(args.old_dir)
+        if os.path.exists(src_dir_path):
+            for file_path in os.listdir(src_dir_path):
+                if file_path != ".DS_Store":
+                    shutil.move(os.path.join(src_dir_path, file_path), dest_dir_path)
+
+            # Remove redundant intermediary directory
+            shutil.rmtree(src_dir_path)
 
         # Fetch all data file paths
-        dataset_files = sorted(glob(os.path.join(args.new_dir, '*')))
+        dataset_file_paths = sorted(glob(os.path.join(args.dir, '*')))
 
         # Simplify dataset hierarchy by removing redundant intermediary folders
         for _ in range(2):
-            for parent_dir in dataset_files:
+            for parent_dir_path in dataset_file_paths:
                 # Pass non-directory files
-                if not os.path.isdir(parent_dir):
+                if not os.path.isdir(parent_dir_path):
                     continue
 
                 # Check if redundant folder was already removed
-                if len([child_file for child_file in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, child_file))]) == 0:
+                if len([child_file_path for child_file_path in os.listdir(parent_dir_path) if os.path.isdir(os.path.join(parent_dir_path, child_file_path))]) == 0:
                     continue
 
-                # Get the path of the child directory
-                child_dir = os.path.join(parent_dir, [file for file in os.listdir(parent_dir) if file != ".DS_Store" and os.path.isdir(os.path.join(parent_dir, file))][0])
+                # Get path of the child directory
+                child_dir_path = os.path.join(parent_dir_path, [child_file_path for child_file_path in os.listdir(parent_dir_path) if child_file_path != ".DS_Store" and os.path.isdir(os.path.join(parent_dir_path, child_file_path))][0])
 
-                # Move all the contents of the child directory to the parent directory
-                for file in os.listdir(child_dir):
-                    src = os.path.join(child_dir, file)
-                    dst = os.path.join(parent_dir, file)
-                    shutil.move(src, dst)
+                # Move the data from the child directory to the parent directory
+                for file_path in os.listdir(child_dir_path):
+                    if file_path != ".DS_Store":
+                        shutil.move(os.path.join(child_dir_path, file_path), parent_dir_path)
 
-                # Remove the child directory
-                shutil.rmtree(child_dir)
+                # Remove redundant child directory
+                shutil.rmtree(child_dir_path)
 
         # Transform DICOM to NIfTI file format
-        for volume_dir in dataset_files:
+        for volume_dir_path in dataset_file_paths:
             # Pass non-directory files
-            if not os.path.isdir(volume_dir):
+            if not os.path.isdir(volume_dir_path):
                 continue
 
             # Remove scans with less than minimum required slices
-            if len(os.listdir(volume_dir)) - 1 < args.min_slices:
-                shutil.rmtree(volume_dir)
+            if len(os.listdir(volume_dir_path)) - 1 < args.min_slices:
+                shutil.rmtree(volume_dir_path)
             else:
                 # Load all DICOM files
-                dicom_files = sorted([os.path.join(volume_dir, file) for file in os.listdir(volume_dir) if file.endswith('.dcm')])
+                dicom_files = sorted([os.path.join(volume_dir_path, file) for file in os.listdir(volume_dir_path) if file.endswith('.dcm')])
 
                 # Load the DICOM files into a list of pydicom datasets
                 datasets = [pydicom.dcmread(file) for file in dicom_files]
@@ -80,8 +80,8 @@ def main():
                 voxel_dims = (pixel_spacing[0], pixel_spacing[1], slice_thickness)
 
                 # Check slice thickness
-                if slice_thickness > args.min_slice_thick:
-                    shutil.rmtree(volume_dir)
+                if slice_thickness > args.max_slice_thick:
+                    shutil.rmtree(volume_dir_path)
                     continue
 
                 # Get the data as a 3D numpy array
@@ -98,17 +98,20 @@ def main():
                 nifti_img.header.set_zooms(voxel_dims)
 
                 # Save the NIFTI image to a file
-                nib.save(nifti_img, volume_dir + ".nii.gz")
+                nib.save(nifti_img, volume_dir_path + "-raw.nii.gz")
+
+                # Remove old directory
+                shutil.rmtree(volume_dir_path)
 
         # Fetch all data file paths
-        dataset_files = sorted(glob(os.path.join(args.new_dir, '*')))
+        dataset_file_paths = sorted(glob(os.path.join(args.dir, '*')))
 
         # Compute training data range to perform transforms accordingly
         _min = float('+inf')
         _max = float('-inf')
 
-        for file in dataset_files:
-            if file.endswith('.nii') or file.endswith('.nii.gz'):
+        for file in dataset_file_paths:
+            if file.endswith('-raw.nii.gz'):
                 # Load the NIfTI file
                 nifti_img = nib.load(file)
                 data = nifti_img.get_fdata()
@@ -120,20 +123,20 @@ def main():
         # Uniform shape transforms
         uniform_transforms = transforms.Compose([
             transforms.EnsureChannelFirst(channel_dim='no_channel'),
-            transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max-_min)),
+            transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max - _min)),
             transforms.SpatialPad(spatial_size=args.uniform_shape),
             transforms.CenterSpatialCrop(roi_size=args.uniform_shape),
             transforms.Zoom(zoom=(1 / args.scale_factor), mode="trilinear", keep_size=False),
-            transforms.NormalizeIntensity(subtrahend=-_min/(_max-_min), divisor=1/(_max-_min)),
+            transforms.NormalizeIntensity(subtrahend=-_min / (_max - _min), divisor=1 / (_max - _min)),
             transforms.ThresholdIntensity(threshold=args.min, above=True, cval=args.min),
             transforms.ThresholdIntensity(threshold=args.max, above=False, cval=args.max),
             transforms.ToNumpy()
         ])
 
-        for file in dataset_files:
-            if file.endswith('.nii') or file.endswith('.nii.gz'):
+        for file_path in dataset_file_paths:
+            if file_path.endswith('-raw.nii.gz'):
                 # Load the NIfTI file
-                nifti_img = nib.load(file)
+                nifti_img = nib.load(file_path)
                 data = nifti_img.get_fdata()
 
                 # Apply the transformations
@@ -152,27 +155,26 @@ def main():
                 uniform_nifti_img = nib.Nifti1Image(uniform_data, new_affine, new_header)
 
                 # Save the transformed NIfTI file
-                nib.save(uniform_nifti_img, file)
+                nib.save(uniform_nifti_img, file_path.replace('-raw', ''))
 
-        # Remove old directories
-        for volume_dir in dataset_files:
-            if not (file.endswith('.nii') or volume_dir.endswith(".nii.gz")) and os.path.exists(volume_dir):
-                shutil.rmtree(volume_dir)
+        # Remove raw NIfTI files
+        for file_path in dataset_file_paths:
+            if file_path.endswith('-raw.nii.gz'):
+                os.remove(file_path)
     except Exception as e:
-        print("Check directory paths. If error remains download data again. An error occurred: {}".format(e))
+        print(f'An error occurred: {e}.\n' + 'If error remains download data again.')
 
 
 if __name__ == '__main__':
     # Define argument parser
     parser = argparse.ArgumentParser(description='Format data')
-    parser.add_argument('--old-dir', default=max((path for path in glob(os.path.join('..', '..', 'data', 'manifest*')) if os.path.isdir(path)), key=os.path.getmtime, default=None), help='Path to directory with data', type=str)
-    parser.add_argument('--new-dir', default=os.path.join('..', '..', 'data', 'LIDC-IDRI'), help='Path to destiny directory', type=str)
+    parser.add_argument('--dir', required=True, help='Path to directory with raw data', type=str)
     parser.add_argument('--min-slices', default=256, help='Minimum number of slices per volume', type=int)
-    parser.add_argument('--min-slice-thick', default=1.25, help='Minimum slice thickness per volume', type=float)
-    parser.add_argument('--uniform-shape', default=(512, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
-    parser.add_argument('--scale-factor', default=2, help='Scale factor to reduce data resolution and alleviate computation', type=int)
+    parser.add_argument('--max-slice-thick', default=1.25, help='Maximum slice thickness per volume', type=float)
     parser.add_argument('--min', default=-1000, help='Minimum HU scale value', type=int)
     parser.add_argument('--max', default=1000, help='Maximum HU scale value', type=int)
+    parser.add_argument('--uniform-shape', default=(512, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
+    parser.add_argument('--scale-factor', default=2, help='Scale factor to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()
 
     main()
