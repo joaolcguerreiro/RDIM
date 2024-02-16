@@ -7,27 +7,27 @@ from sklearn.model_selection import train_test_split
 
 def main():
     try:
-        # Remove training, validation, and testing directories
-        shutil.rmtree(args.train_dir) if os.path.exists(args.train_dir) else None
-        shutil.rmtree(args.val_dir) if os.path.exists(args.val_dir) else None
-        shutil.rmtree(args.test_dir) if os.path.exists(args.test_dir) else None
+        # Remove and create training, validation, and testing directories
+        train_dir_path = os.path.join(args.dir, 'training')
+        val_dir_path = os.path.join(args.dir, 'validation')
+        test_dir_path = os.path.join(args.dir, 'testing')
 
-        # Create training, validation, and testing directories
-        os.makedirs(args.train_dir, exist_ok=True)
-        os.makedirs(args.val_dir, exist_ok=True) if args.val else None
-        os.makedirs(args.test_dir, exist_ok=True)
+        for dir_path in [train_dir_path, val_dir_path, test_dir_path]:
+            if os.path.exists(dir_path):
+                shutil.rmtree(dir_path)
 
-        # Fetch all training data file paths
-        dataset_files = sorted(glob(os.path.join(args.dir, '*')))
+            os.makedirs(dir_path)
+
+        # Fetch all data file paths
+        dataset_file_paths = sorted(glob(os.path.join(args.dir, '*.nii.gz')))
 
         # Split dataset
-        train, val = train_test_split(dataset_files, test_size=(0.10 if args.val else 0.05), shuffle=True, random_state=20)
-        val, test = train_test_split(val, test_size=0.5, shuffle=True, random_state=20) if args.val else ([], val)
+        train, test = train_test_split(dataset_file_paths, test_size=(args.test_size * 2 if args.val else args.test_size), shuffle=True, random_state=20)
+        val, test = train_test_split(test, test_size=0.5, shuffle=True, random_state=20) if args.val else ([], test)
 
-        for (split, directory) in [(train, args.train_dir), (val, args.val_dir), (test, args.test_dir)]:
-            for file in split:
-                _, filename = os.path.split(file)
-                shutil.copy(file, os.path.join(directory, filename))
+        for split, dir_path in zip([train, val, test], [train_dir_path, val_dir_path, test_dir_path]):
+            for file_path in split:
+                shutil.move(file_path, dir_path)
     except Exception as e:
         print("Check directory paths. If error remains download data again. An error occurred: {}".format(e))
 
@@ -35,11 +35,9 @@ def main():
 if __name__ == '__main__':
     # Define argument parser
     parser = argparse.ArgumentParser(description='Split data')
+    parser.add_argument('--dir', required=True, help='Path to directory with data', type=str)
     parser.add_argument('--val', default=True, help='Build validation split', type=(lambda arg: (str(arg).lower() == 'true')))
-    parser.add_argument('--dir', default=os.path.join('..', '..', 'data', 'LIDC-IDRI'), help='Path to directory with data', type=str)
-    parser.add_argument('--train-dir', default=os.path.join('..', '..', 'data', 'training'), help='Path to destination training directory', type=str)
-    parser.add_argument('--val-dir', default=os.path.join('..', '..', 'data', 'validation'), help='Path to destination validation directory', type=str)
-    parser.add_argument('--test-dir', default=os.path.join('..', '..', 'data', 'testing'), help='Path to destination testing directory', type=str)
+    parser.add_argument('--test-size', default=0.05, help='Fraction of data for evaluation', type=int)
     args = parser.parse_args()
 
     main()

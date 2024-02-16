@@ -95,14 +95,16 @@ Every low-resolution image should have a corresponding high-resolution image. Th
    python format_lidc_idri.py --dir="../../data/LIDC-IDRI"
    ```
 
-6) Run data downsampling script to create lr-hr pairs:
+6) Run data splitting script:
    ```
-   python simulate_ldct.py --dir="../../data/LIDC-IDRI"
+   python split_data.py --dir="../../data/LIDC-IDRI"
    ```
 
-7) Run data splitting script:
+7) Run data downsampling script to create LR-HR pairs:
    ```
-   python split_data.py --dir=--dir="../../data/LIDC-IDRI"
+   python simulate_ldct.py --dir="../../data/LIDC-IDRI/training" --augmentation-factor=2
+   python simulate_ldct.py --dir="../../data/LIDC-IDRI/validation"
+   python simulate_ldct.py --dir="../../data/LIDC-IDRI/testing"
    ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).

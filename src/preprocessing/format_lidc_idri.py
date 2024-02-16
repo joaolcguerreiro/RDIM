@@ -104,21 +104,20 @@ def main():
                 shutil.rmtree(volume_dir_path)
 
         # Fetch all data file paths
-        dataset_file_paths = sorted(glob(os.path.join(args.dir, '*')))
+        dataset_file_paths = sorted(glob(os.path.join(args.dir, '*-raw.nii.gz')))
 
         # Compute training data range to perform transforms accordingly
         _min = float('+inf')
         _max = float('-inf')
 
-        for file in dataset_file_paths:
-            if file.endswith('-raw.nii.gz'):
-                # Load the NIfTI file
-                nifti_img = nib.load(file)
-                data = nifti_img.get_fdata()
+        for file_path in dataset_file_paths:
+            # Load the NIfTI file
+            nifti_img = nib.load(file_path)
+            data = nifti_img.get_fdata()
 
-                # Compute the minimum and maximum values
-                _min = min(_min, data.min())
-                _max = max(_max, data.max())
+            # Compute the minimum and maximum values
+            _min = min(_min, data.min())
+            _max = max(_max, data.max())
 
         # Uniform shape transforms
         uniform_transforms = transforms.Compose([
@@ -134,33 +133,31 @@ def main():
         ])
 
         for file_path in dataset_file_paths:
-            if file_path.endswith('-raw.nii.gz'):
-                # Load the NIfTI file
-                nifti_img = nib.load(file_path)
-                data = nifti_img.get_fdata()
+            # Load the NIfTI file
+            nifti_img = nib.load(file_path)
+            data = nifti_img.get_fdata()
 
-                # Apply the transformations
-                uniform_data = np.around(uniform_transforms(data)).astype(np.int16)
+            # Apply the transformations
+            uniform_data = np.around(uniform_transforms(data)).astype(np.int16)
 
-                # Update header of the transformed image
-                new_header = nifti_img.header.copy()
-                new_header.set_zooms(np.array(new_header.get_zooms()) * args.scale_factor)
-                new_header.set_data_shape(uniform_data.shape)
+            # Update header of the transformed image
+            new_header = nifti_img.header.copy()
+            new_header.set_zooms(np.array(new_header.get_zooms()) * args.scale_factor)
+            new_header.set_data_shape(uniform_data.shape)
 
-                # Update the affine matrix to account for the new voxel dimensions
-                new_affine = nifti_img.affine.copy()
-                np.fill_diagonal(new_affine[:3, :3], np.diagonal(new_affine[:3, :3]) * args.scale_factor)
+            # Update the affine matrix to account for the new voxel dimensions
+            new_affine = nifti_img.affine.copy()
+            np.fill_diagonal(new_affine[:3, :3], np.diagonal(new_affine[:3, :3]) * args.scale_factor)
 
-                # Create a new NIfTI image
-                uniform_nifti_img = nib.Nifti1Image(uniform_data, new_affine, new_header)
+            # Create a new NIfTI image
+            uniform_nifti_img = nib.Nifti1Image(uniform_data, new_affine, new_header)
 
-                # Save the transformed NIfTI file
-                nib.save(uniform_nifti_img, file_path.replace('-raw', ''))
+            # Save the transformed NIfTI file
+            nib.save(uniform_nifti_img, file_path.replace('-raw', ''))
 
         # Remove raw NIfTI files
         for file_path in dataset_file_paths:
-            if file_path.endswith('-raw.nii.gz'):
-                os.remove(file_path)
+            os.remove(file_path)
     except Exception as e:
         print(f'An error occurred: {e}.\n' + 'If error remains download data again.')
 

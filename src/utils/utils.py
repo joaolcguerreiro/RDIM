@@ -59,9 +59,9 @@ def slice_volume(slice_index, plane, volume):
     Expected Volume Dimensions Order is (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C).
 
     Note:
-    X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
-    Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
-    Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
+        X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
+        Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
+        Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
     """
 
     if plane == 'axial':
@@ -83,9 +83,9 @@ def get_num_plane_slices(plane, volume):
     Expected Volume Dimensions Order is (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C).
 
     Note:
-    X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
-    Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
-    Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
+        X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
+        Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
+        Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
     """
 
     if plane == 'axial':
@@ -104,9 +104,9 @@ def reorder_volume_dimensions(volume, channel_dim=0, longitudinal_axis_dim=1, an
     Expected Volume Dimensions Order is Arbitrary.
 
     Note:
-    X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
-    Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
-    Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
+        X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
+        Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
+        Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
     """
 
     # Reorder arbitrary volume dimensions into (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C)
