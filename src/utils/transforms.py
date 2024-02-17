@@ -13,6 +13,7 @@ from monai.utils.enums import TransformBackends
 from monai.config.type_definitions import NdarrayOrTensor
 from monai.transforms.transform import Transform, RandomizableTransform
 from monai.utils.type_conversion import convert_data_type, convert_to_dst_type, convert_to_tensor
+from skimage.transform import radon, iradon
 
 
 class EnsureChannelExists(Transform):
@@ -20,7 +21,7 @@ class EnsureChannelExists(Transform):
     Adds a channel dimension to a 3D input tensor if it does not exist.
 
     Args:
-        strict_check: whether to raise an error when the input is not a 3D or 4D tensor.
+        strict_check: Whether to raise an error when the input is not a 3D or 4D tensor.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
@@ -47,14 +48,46 @@ class EnsureChannelExists(Transform):
         return volume
 
 
+class RemoveChannelDimension(Transform):
+    """
+    Remove singleton channel dimension to a 4D input tensor if it does exist.
+
+    Args:
+        strict_check: Whether to raise an error when the input is not a 3D or 4D tensor.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, strict_check: bool = True):
+        self.strict_check = strict_check
+
+    def __call__(self, volume: torch.Tensor) -> torch.Tensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if len(volume.shape) not in [3, 4]:
+            msg = "Input tensor is not 3D or 4D. EnsureChannelExists may not be applied correctly."
+
+            if self.strict_check:
+                raise ValueError(msg)
+            else:
+                warnings.warn(msg)
+                return volume
+
+        # Add the channel dimension if it does exist
+        if len(volume.shape) == 4:
+            volume = volume.squeeze(dim=0)
+
+        return volume
+
+
 class EnsureExactChannels(Transform):
     """
     Ensures a 4D input tensor has exactly `num_channels` channels. If it does not, it either repeats or reshapes the channels.
 
     Args:
-        num_channels: the exact number of channels the input tensor should have after applying the transform.
-        strict_check: whether to raise an error when the input is not a 4D tensor or flexibility is not intended while the input size is invalid for an integral reshape.
-        flexible_reshape: whether to allow flexible reshaping when the number of channels is not a multiple or divisor of the current number of channels in the volume.
+        num_channels: The exact number of channels the input tensor should have after applying the transform.
+        strict_check: Whether to raise an error when the input is not a 4D tensor or flexibility is not intended while the input size is invalid for an integral reshape.
+        flexible_reshape: Whether to allow flexible reshaping when the number of channels is not a multiple or divisor of the current number of channels in the volume.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
@@ -121,9 +154,9 @@ class NormalizeIntensity(Transform):
     Normalize the input image by subtracting the mean and dividing by the standard deviation.
 
     Args:
-        mean: mean value(s) for normalization. If grayscale, provide a single float value. If RGB, provide a sequence of three floats.
-        std: standard deviation value(s) for normalization. Same format as `mean`.
-        channel_wise: if True, normalize each channel separately. Please ensure that the first dimension represents the channel of the image if True.
+        mean: Mean value(s) for normalization. If grayscale, provide a single float value. If RGB, provide a sequence of three floats.
+        std: Standard deviation value(s) for normalization. Same format as `mean`.
+        channel_wise: If True, normalize each channel separately. Please ensure that the first dimension represents the channel of the image if True.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
@@ -233,10 +266,10 @@ class ThresholdIntensity(Transform):
     And fill the remaining parts of the image to the `cval` value.
 
     Args:
-        threshold: the threshold to filter intensity values.
-        above: filter values above the threshold or below the threshold, default is True.
-        cval: value to fill the remaining parts of the image, default is 0.
-        channel_wise: if True, apply the threshold to each channel separately. Default is False.
+        threshold: The threshold to filter intensity values.
+        above: Filter values above the threshold or below the threshold, default is True.
+        cval: Value to fill the remaining parts of the image, default is 0.
+        channel_wise: If True, apply the threshold to each channel separately. Default is False.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
@@ -343,9 +376,9 @@ class RandGaussianSmooth(RandomizableTransform):
     Apply Gaussian smooth to the input data based on randomly selected `sigma` parameters.
 
     Args:
-        sigma: randomly select sigma value for the first spatial dimension.
-        prob: probability of Gaussian smooth.
-        approx: discrete Gaussian kernel type, available options are "erf", "sampled", and "scalespace".
+        sigma: Sigma range to randomly select value for Gaussian smoothing.
+        approx: Discrete Gaussian kernel type, available options are "erf", "sampled", and "scalespace".
+        prob: Probability of Gaussian smooth.
     """
 
     backend = [TransformBackends.TORCH]
@@ -375,7 +408,115 @@ class RandGaussianSmooth(RandomizableTransform):
 
         sigma = ensure_tuple_size(vals=(self.rand_sigma, self.rand_sigma, self.rand_sigma), dim=volume.ndim - 1)
 
-        return transforms.GaussianSmooth(sigma=sigma, approx=self.approx)(volume)
+        # Apply Gaussian smooth
+        volume = transforms.GaussianSmooth(sigma=sigma, approx=self.approx)(volume)
+
+        return volume
+
+
+class RandGaussianNoise(RandomizableTransform):
+    """
+    Apply Gaussian noise to the input data.
+
+    Args:
+        mean: Mean (centre) of the distribution.
+        std: Standard deviation (spread) of distribution.
+        scale: Whether to scale the standard deviation based on the data range.
+        dtype: Output data type, if None, same as input image. defaults to float32.
+        prob: Probability of Gaussian noise.
+    """
+
+    backend = [TransformBackends.TORCH]
+
+    def __init__(self, prob: float = 0.1, mean: float = 0.0, std: Tuple[float, float] = (0, 0.1), scale: bool = False, dtype: DtypeLike = np.float32) -> None:
+        RandomizableTransform.__init__(self, prob)
+        self.mean = mean
+        self.std = std
+        self.rand_std = self.std[0]
+        self.scale = scale
+        self.dtype = dtype
+        self.noise: Optional[np.ndarray] = None
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        super().randomize(None)
+
+        if not self._do_transform:
+            return None
+
+        # Get the data range
+        data_range = (torch.max(data) - torch.min(data)) if self.scale else 1.0
+
+        self.rand_std = self.R.uniform(low=self.std[0] * data_range, high=self.std[1] * data_range)
+        noise = self.R.normal(self.mean, self.rand_std, size=data.shape)
+        self.noise, *_ = convert_data_type(noise, dtype=self.dtype)
+
+    def __call__(self, volume: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if randomize:
+            self.randomize(volume)
+
+        if not self._do_transform:
+            return volume
+
+        volume, *_ = convert_data_type(volume, dtype=self.dtype)
+        noise, *_ = convert_to_dst_type(self.noise, volume)
+
+        # Add Gaussian noise
+        volume = volume + noise
+
+        return volume
+
+
+class RandPoissonNoise(RandomizableTransform):
+    """
+    Apply Poisson noise to the input data.
+
+    Args:
+        noise_strength: Value range to control strength of the Poisson noise.
+        prob: Probability of Poisson noise.
+    """
+
+    backend = [TransformBackends.TORCH]
+
+    def __init__(self, prob: float = 0.1, noise_strength: Tuple[float, float] = (1, 5)) -> None:
+        RandomizableTransform.__init__(self, prob)
+        self.noise_strength = noise_strength
+        self.rand_noise_strength = self.noise_strength[0]
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        super().randomize(None)
+
+        if not self._do_transform:
+            return None
+
+        self.rand_noise_strength = self.R.uniform(low=self.noise_strength[0], high=self.noise_strength[1])
+
+    def __call__(self, volume: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if randomize:
+            self.randomize()
+
+        if not self._do_transform or self.rand_noise_strength == 0:
+            return volume
+
+        # Compute scale factor based on noise strength
+        scale_factor = 1 / self.rand_noise_strength
+
+        # Get volume minimum
+        _min = torch.min(volume)
+
+        # Ensure all values are strictly non-negative
+        volume = volume - _min
+
+        # Apply Poisson noise
+        volume = torch.poisson(volume * scale_factor) / scale_factor
+
+        # Revert volume range
+        volume = volume + _min
+
+        return volume
 
 
 class RandForegroundGaussianNoise(RandomizableTransform):
@@ -383,22 +524,23 @@ class RandForegroundGaussianNoise(RandomizableTransform):
     Add Gaussian noise to volume.
 
     Args:
-        prob: Probability to add Gaussian noise.
-        mean: Mean or “centre” of the distribution.
+        mean: Mean (centre) of the distribution.
         std: Standard deviation (spread) of distribution.
-        dtype: output data type, if None, same as input image. defaults to float32.
+        scale: Whether to scale the standard deviation based on the data range.
+        dtype: Output data type, if None, same as input image. defaults to float32.
+        prob: Probability to add Gaussian noise.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, prob: float = 0.1, mean: float = 0.0, std: float = 0.1, dtype: DtypeLike = np.float32) -> None:
+    def __init__(self, prob: float = 0.1, mean: float = 0.0, std: Tuple[float, float] = (0, 0.1), scale: bool = False, dtype: DtypeLike = np.float32) -> None:
         RandomizableTransform.__init__(self, prob)
         self.mean = mean
         self.std = std
+        self.rand_std = self.std[0]
+        self.scale = scale
         self.dtype = dtype
         self.noise: Optional[np.ndarray] = None
-        self.min = None
-        self.max = None
 
     def randomize(self, volume: NdarrayOrTensor, mean: Optional[float] = None) -> None:
         super().randomize(None)
@@ -406,17 +548,11 @@ class RandForegroundGaussianNoise(RandomizableTransform):
         if not self._do_transform:
             return None
 
-        # Get the volume min and max
-        self.min = torch.min(volume)
-        self.max = torch.max(volume)
-        volume_range = self.max - self.min
+        # Get the data range
+        data_range = (torch.max(volume) - torch.min(volume)) if self.scale else 1.0
 
-        # Scale the mean and standard deviation by the range of the volume
-        scaled_mean = (self.mean if mean is None else mean) * volume_range
-        scaled_std = self.std * volume_range
-
-        rand_std = self.R.uniform(0, scaled_std)
-        noise = self.R.normal(scaled_mean, rand_std, size=volume.shape)
+        self.rand_std = self.R.uniform(low=self.std[0] * data_range, high=self.std[1] * data_range)
+        noise = self.R.normal((self.mean if mean is None else mean), self.rand_std, size=volume.shape)
         self.noise, *_ = convert_data_type(noise, dtype=self.dtype)
 
     def __call__(self, volume: NdarrayOrTensor, mean: Optional[float] = None, randomize: bool = True) -> NdarrayOrTensor:
@@ -444,9 +580,6 @@ class RandForegroundGaussianNoise(RandomizableTransform):
         # Join noisy foreground with original background
         volume = volume * background_mask + noisy_foreground
 
-        # Clamp values to the min and max of the original volume to keep the same range
-        volume = torch.clamp(volume, self.min, self.max)
-
         return volume
 
 
@@ -455,20 +588,20 @@ class RandForegroundStreakNoise(RandomizableTransform):
     Add random streaks to a volume from a set of origins along a circular path, using Poisson noise.
 
     Args:
-        prob (float): Probability to add streak noise.
-        intensity (float): The intensity of the streaks.
-        line_thickness (int): The thickness of the lines that form the streaks.
-        num_origins (tuple[int, int] | int): The number or range of origins along the circular path.
-        num_streaks (tuple[int, int] | int): The number or range of streaks to generate from each origin.
-        origin_radius_ratio (float, optional): The ratio to scale the circular path radius for the origins.
-                                                If it's greater than 1, the origins will be outside the volume.
-                                                If it's less than 1, the origins will be inside the volume.
-                                                Default is 1 (no scaling, origins lie on the volume boundary).
-        slope_variation (float): Control streak slope variation.
-        white_noise (bool): Define streaks color range.
-                                                If true streaks are brighter.
-                                                If false streaks both dark and bright (span grayscale range).
-        dtype (DtypeLike): Output data type, if None, same as input image.
+        intensity: The intensity of the streaks.
+        line_thickness: The thickness of the lines that form the streaks.
+        num_origins: The number or range of origins along the circular path.
+        num_streaks: The number or range of streaks to generate from each origin.
+        origin_radius_ratio: The ratio to scale the circular path radius for the origins.
+                                If it's greater than 1, the origins will be outside the volume.
+                                If it's less than 1, the origins will be inside the volume.
+                                Default is 1 (no scaling, origins lie on the volume boundary).
+        slope_variation: Control streak slope variation.
+        white_noise: Define streaks color range.
+                                If true streaks are brighter.
+                                If false streaks both dark and bright (span grayscale range).
+        dtype: Output data type, if None, same as input image.
+        prob: Probability to add streak noise.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
@@ -577,8 +710,8 @@ class RandTranslate(RandomizableTransform):
     Args:
         translate_range: The range for each dimension within which to apply translation.
                          Can be a single float, tuple of floats, or tuple of tuple of floats.
-        prob: probability of translation.
         padding_mode: Padding mode for grid sampling ('zeros', 'border', or 'reflection').
+        prob: probability of translation.
     """
 
     backend = [TransformBackends.TORCH]
@@ -694,3 +827,91 @@ class RandSpatialCrop(RandomizableTransform):
         volume_crop = volume[slicer]
 
         return volume_crop
+
+
+class SparseSampling(Transform):
+    pass
+
+
+class Radon(Transform):
+    """
+    Apply Radon transform to a 3D input tensor.
+
+    Args:
+        max_angle: Maximum angle for the Radon transform angle distribution.
+        num_angles: Number of angles to use for the Radon transform.
+        strict_check: Whether to raise an error when the input is not a 3D tensor.
+
+    Note:
+        The input tensor is expected to be in the form [D, H, W], where D, H, and W correspond to the Depth, Height, and Width dimensions, respectively..
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, max_angle: float = 360, num_angles: int = 1080, strict_check: bool = True):
+        self.max_angle = max_angle
+        self.num_angles = num_angles
+        self.strict_check = strict_check
+
+    def __call__(self, volume: torch.Tensor) -> torch.Tensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if len(volume.shape) != 3:
+            msg = "Input tensor is not 3D. Radon may not be applied correctly."
+
+            if self.strict_check:
+                raise ValueError(msg)
+            else:
+                warnings.warn(msg)
+                return volume
+
+        # Define angles for the Radon transform
+        angles = np.linspace(0, self.max_angle, self.num_angles, endpoint=False)
+
+        # Apply Radon transform for each slice in the volume
+        sinograms = torch.stack([torch.tensor(radon(_slice.numpy(), theta=angles, circle=False)) for _slice in volume])
+
+        return sinograms
+
+
+class FilteredBackProjection(Transform):
+    """
+    Apply Filtered Back Projection (FBP) to a 3D input tensor representing sinograms.
+
+    Args:
+        max_angle: Maximum angle for the Radon transform angle distribution used to create the sinograms.
+        num_angles: Number of angles used for the Radon transform resulting in the sinograms.
+        filter_name: Name of the filter to use for FBP.
+        strict_check: Whether to raise an error when the input is not a 3D tensor.
+
+    Note:
+        The input tensor is expected to be in the form [D, H, W], where D, H, and W correspond to the number of sinograms, the number of projection angles, and the number of rays per angle, respectively.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, max_angle: float = 360, num_angles: int = 1080, filter_name: str = 'ramp', strict_check: bool = True):
+        self.max_angle = max_angle
+        self.num_angles = num_angles
+        self.filter_name = filter_name
+        self.strict_check = strict_check
+
+    def __call__(self, sinograms: torch.Tensor) -> torch.Tensor:
+        sinograms = convert_to_tensor(sinograms, track_meta=get_track_meta())
+
+        if len(sinograms.shape) != 3:
+            msg = "Input tensor is not 3D. FilteredBackProjection may not be applied correctly."
+
+            if self.strict_check:
+                raise ValueError(msg)
+            else:
+                warnings.warn(msg)
+                return sinograms
+
+        # Define angles for the FBP transform
+        angles = np.linspace(0, self.max_angle, self.num_angles, endpoint=False)
+
+        # Apply FBP transform for each sinogram in the volume
+        volume = torch.stack([torch.tensor(iradon(sinogram.numpy(), theta=angles, filter_name=self.filter_name, circle=False)) for sinogram in sinograms])
+
+        return volume

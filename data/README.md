@@ -3,8 +3,8 @@
 #### Table of Contents
 
 1) [Overview](#overview)
-2) [Prepare ??Low-Field MRI?? Dataset](#prepare-??Low-Field-MRI??-dataset)
-3) [Prepare ??Low-Dose CT?? Dataset](#prepare-??Low-Dose-CT??-dataset)
+2) [Prepare Low Dose CT Grand Challenge Dataset](#prepare-low-dose-ct-grand-challenge-dataset)
+3) [Prepare ??Low-Field MRI?? Dataset](#prepare-??Low-Field-MRI??-dataset)
 4) [Prepare LIDC-IDRI Dataset](#prepare-lidc-idri-dataset)
 5) [Prepare Other Dataset](#prepare-other-dataset)
 
@@ -55,6 +55,16 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
+#### Prepare Low Dose CT Grand Challenge Dataset
+
+1) Download [Low Dose CT Grand Challenge](https://www.aapm.org/grandchallenge/lowdosect/) dataset.
+
+`... download_some_name.sh... clean_some_name.py... simulate_ldct.py... split_data.py`
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
 #### Prepare ??Low-Field MRI?? Dataset
 
 `... download_some_name.sh... clean_some_name.py... simulate_lfmri.py... split_data.py`
@@ -63,17 +73,9 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
-#### Prepare ??Low-Dose CT?? Dataset
-
-`... download_some_name.sh... clean_some_name.py... simulate_ldct.py... split_data.py`
-
-> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
-
-<hr style="border:1px solid gray">
-
 #### Prepare LIDC-IDRI Dataset
 
-1) Download [LIDC-IDRI](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=1966254).
+1) Download [LIDC-IDRI](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=1966254) dataset.
 
 2) Navigate to `preprocessing` directory:
    ```
@@ -157,16 +159,20 @@ Store the dataset in the `data` directory to align with the structure in [Overvi
 
 ---
 
-If the dataset lacks lr-hr pairs or does not include data splits, run the following scripts if necessary:
+If the dataset does not include data splits or lacks LR-HR pairs, run the following scripts if necessary:
 
-* Downsample data to create lr-hr pairs:
-   ```
-   python simulate_ldct.py --dir="../../data/<dataset_name>"
-   ```
-
-* Split data (expects `LR` and `HR` directories inside `<dataset_name>` directory):
+* Split data:
    ```
    python split_data.py --dir="../../data/<dataset_name>"
    ```
+
+* Downsample data to create LR-HR pairs:
+   ```
+   python simulate_ldct.py --dir="../../data/<dataset_name>/training" --augmentation-factor=2
+   python simulate_ldct.py --dir="../../data/<dataset_name>/validation"
+   python simulate_ldct.py --dir="../../data/<dataset_name>/testing"
+   ```
+
+> Note: Expects `training`, `validation`, and `testing` directories inside `<dataset_name>` directory.
 
 > Note: It is assumed that the dataset is stored in the `data` directory, aligned with the structure in [Overview](#overview). The aforementioned is not mandatory and the dataset directory location is arbitrary. In such case adjust the `-dir` options in the commands above.
