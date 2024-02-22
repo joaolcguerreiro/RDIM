@@ -1,26 +1,19 @@
-import shutil
 import os
+import sys
 import ast
+import shutil
 import argparse
 import pydicom
 import numpy as np
 import nibabel as nib
 import monai.transforms as transforms
 from glob import glob
+sys.path.append(os.path.join('..', '..'))
+from src.utils.transforms import EnsureChannelExists, ReverseDimensions
 
 
 def main():
     try:
-        # Remove metadata and license files
-        license_file_path = os.path.join(args.dir, 'LIDC-IDRI', 'LICENSE')
-        metadata_file_path = os.path.join(args.dir, 'metadata.csv')
-
-        if os.path.exists(license_file_path):
-            os.remove(license_file_path)
-
-        if os.path.exists(metadata_file_path):
-            os.remove(metadata_file_path)
-
         # Move the data from the redundant intermediary directory to the root directory
         src_dir_path = os.path.join(args.dir, 'LIDC-IDRI')
         dest_dir_path = args.dir
@@ -93,9 +86,13 @@ def main():
 
                 data = np.array(data).astype(np.int16)
 
+                # Reverse volume dimension order
+                data = data.transpose()
+
                 # Create a NIfTI image from the DICOM datasets
                 nifti_img = nib.Nifti1Image(data, np.eye(4), None)
                 nifti_img.header.set_zooms(voxel_dims)
+                nifti_img.header.set_data_shape(data.shape)
 
                 # Save the NIFTI image to a file
                 nib.save(nifti_img, volume_dir_path + "-raw.nii.gz")
@@ -121,14 +118,14 @@ def main():
 
         # Uniform shape transforms
         uniform_transforms = transforms.Compose([
-            transforms.EnsureChannelFirst(channel_dim='no_channel'),
+            ReverseDimensions(),
+            EnsureChannelExists(),
             transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max - _min)),
             transforms.SpatialPad(spatial_size=args.uniform_shape),
             transforms.CenterSpatialCrop(roi_size=args.uniform_shape),
             transforms.Zoom(zoom=(1 / args.scale_factor), mode="trilinear", keep_size=False),
             transforms.NormalizeIntensity(subtrahend=-_min / (_max - _min), divisor=1 / (_max - _min)),
-            transforms.ThresholdIntensity(threshold=args.min, above=True, cval=args.min),
-            transforms.ThresholdIntensity(threshold=args.max, above=False, cval=args.max),
+            ReverseDimensions(),
             transforms.ToNumpy()
         ])
 
@@ -140,14 +137,13 @@ def main():
             # Apply the transformations
             uniform_data = np.around(uniform_transforms(data)).astype(np.int16)
 
-            # Update header of the transformed image
+            # Create copies of the header and affine matrix
             new_header = nifti_img.header.copy()
-            new_header.set_zooms(np.array(new_header.get_zooms()) * args.scale_factor)
-            new_header.set_data_shape(uniform_data.shape)
-
-            # Update the affine matrix to account for the new voxel dimensions
             new_affine = nifti_img.affine.copy()
-            np.fill_diagonal(new_affine[:3, :3], np.diagonal(new_affine[:3, :3]) * args.scale_factor)
+
+            # Update the header to account for the new voxel size
+            new_header.set_data_shape(uniform_data.shape)
+            new_header.set_zooms(list(np.array(new_header.get_zooms()) * args.scale_factor)[:3] + list(new_header.get_zooms())[3:])
 
             # Create a new NIfTI image
             uniform_nifti_img = nib.Nifti1Image(uniform_data, new_affine, new_header)
@@ -168,8 +164,6 @@ if __name__ == '__main__':
     parser.add_argument('--dir', required=True, help='Path to directory with raw data', type=str)
     parser.add_argument('--min-slices', default=256, help='Minimum number of slices per volume', type=int)
     parser.add_argument('--max-slice-thick', default=1.25, help='Maximum slice thickness per volume', type=float)
-    parser.add_argument('--min', default=-1000, help='Minimum HU scale value', type=int)
-    parser.add_argument('--max', default=1000, help='Maximum HU scale value', type=int)
     parser.add_argument('--uniform-shape', default=(512, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
     parser.add_argument('--scale-factor', default=2, help='Scale factor to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()

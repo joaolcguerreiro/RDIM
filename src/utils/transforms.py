@@ -1,3 +1,4 @@
+import sys
 import torch
 import warnings
 import math
@@ -21,18 +22,20 @@ class EnsureChannelExists(Transform):
     Adds a channel dimension to a 3D input tensor if it does not exist.
 
     Args:
+        channel_dim: Channel dimension index.
         strict_check: Whether to raise an error when the input is not a 3D or 4D tensor.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, strict_check: bool = True):
+    def __init__(self, channel_dim: int = 0, strict_check: bool = True):
+        self.channel_dim = channel_dim
         self.strict_check = strict_check
 
     def __call__(self, volume: torch.Tensor) -> torch.Tensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
-        if len(volume.shape) not in [3, 4]:
+        if volume.dim() not in [3, 4]:
             msg = "Input tensor is not 3D or 4D. EnsureChannelExists may not be applied correctly."
 
             if self.strict_check:
@@ -42,8 +45,8 @@ class EnsureChannelExists(Transform):
                 return volume
 
         # Add the channel dimension if it does not exist
-        if len(volume.shape) == 3:
-            volume = volume.unsqueeze(dim=0)
+        if volume.dim() == 3:
+            volume = volume.unsqueeze(dim=self.channel_dim)
 
         return volume
 
@@ -53,18 +56,20 @@ class RemoveChannelDimension(Transform):
     Remove singleton channel dimension to a 4D input tensor if it does exist.
 
     Args:
+        channel_dim: Channel dimension index.
         strict_check: Whether to raise an error when the input is not a 3D or 4D tensor.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, strict_check: bool = True):
+    def __init__(self, channel_dim: int = 0, strict_check: bool = True):
+        self.channel_dim = channel_dim
         self.strict_check = strict_check
 
     def __call__(self, volume: torch.Tensor) -> torch.Tensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
-        if len(volume.shape) not in [3, 4]:
+        if volume.dim() not in [3, 4]:
             msg = "Input tensor is not 3D or 4D. EnsureChannelExists may not be applied correctly."
 
             if self.strict_check:
@@ -73,9 +78,9 @@ class RemoveChannelDimension(Transform):
                 warnings.warn(msg)
                 return volume
 
-        # Add the channel dimension if it does exist
-        if len(volume.shape) == 4:
-            volume = volume.squeeze(dim=0)
+        # Remove the channel dimension if it does exist
+        if volume.dim() == 4:
+            volume = volume.squeeze(dim=self.channel_dim)
 
         return volume
 
@@ -100,7 +105,7 @@ class EnsureExactChannels(Transform):
     def __call__(self, volume: torch.Tensor) -> torch.Tensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
-        if len(volume.shape) != 4:
+        if volume.dim() != 4:
             msg = "Input tensor is not 4D. EnsureExactChannels may not be applied correctly."
 
             if self.strict_check:
@@ -145,6 +150,61 @@ class EnsureExactChannels(Transform):
 
             # Stack kernel and excess horizontally
             volume = torch.cat([kernel_volume, excess_volume], dim=-1) if excess_volume is not None else kernel_volume
+
+        return volume
+
+
+class PermuteDimensions(Transform):
+    """
+    Permute volume dimensions order.
+
+    Args:
+        axes: Volume dimensions order.
+        strict_check: Whether to raise an error when the input is not a 3D or 4D tensor.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, axes: Sequence[int], strict_check: bool = True):
+        self.axes = axes
+        self.strict_check = strict_check
+
+    def __call__(self, volume: torch.Tensor) -> torch.Tensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if len(self.axes) != volume.dim():
+            msg = f"Axes size {len(self.axes)} do not match number of dimensions in input tensor {volume.dim()}. PermuteDimensions may not be applied correctly."
+
+            if self.strict_check:
+                raise ValueError(msg)
+            else:
+                warnings.warn(msg)
+                return volume
+
+        if not (isinstance(self.axes, Sequence) and all(isinstance(a, int) for a in self.axes)):
+            raise ValueError(f"Axes must be sequence of ints, got {type(self.axes)} {self.axes}.")
+
+        # Reorder volume dimensions
+        volume = volume.permute(*self.axes).contiguous()
+
+        return volume
+
+
+class ReverseDimensions(Transform):
+    """
+    Reverse volume dimensions order.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self):
+        pass
+
+    def __call__(self, volume: torch.Tensor) -> torch.Tensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        # Reverse volume dimensions
+        volume = PermuteDimensions(axes=[*range(volume.dim() - 1, -1, -1)])(volume)
 
         return volume
 
@@ -829,10 +889,6 @@ class RandSpatialCrop(RandomizableTransform):
         return volume_crop
 
 
-class SparseSampling(Transform):
-    pass
-
-
 class Radon(Transform):
     """
     Apply Radon transform to a 3D input tensor.
@@ -843,7 +899,7 @@ class Radon(Transform):
         strict_check: Whether to raise an error when the input is not a 3D tensor.
 
     Note:
-        The input tensor is expected to be in the form [D, H, W], where D, H, and W correspond to the Depth, Height, and Width dimensions, respectively..
+        The input tensor is expected to be in the form [D, H, W], where D, H, and W correspond to the Depth, Height, and Width dimensions, respectively.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
@@ -856,7 +912,7 @@ class Radon(Transform):
     def __call__(self, volume: torch.Tensor) -> torch.Tensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
-        if len(volume.shape) != 3:
+        if volume.dim() != 3:
             msg = "Input tensor is not 3D. Radon may not be applied correctly."
 
             if self.strict_check:
@@ -874,14 +930,14 @@ class Radon(Transform):
         return sinograms
 
 
-class FilteredBackProjection(Transform):
+class InverseRadon(Transform):
     """
-    Apply Filtered Back Projection (FBP) to a 3D input tensor representing sinograms.
+    Apply Inverse Radon to a 3D input tensor representing sinograms.
 
     Args:
         max_angle: Maximum angle for the Radon transform angle distribution used to create the sinograms.
         num_angles: Number of angles used for the Radon transform resulting in the sinograms.
-        filter_name: Name of the filter to use for FBP.
+        filter_name: Name of the filter to use for Inverse Radon.
         strict_check: Whether to raise an error when the input is not a 3D tensor.
 
     Note:
@@ -900,7 +956,7 @@ class FilteredBackProjection(Transform):
         sinograms = convert_to_tensor(sinograms, track_meta=get_track_meta())
 
         if len(sinograms.shape) != 3:
-            msg = "Input tensor is not 3D. FilteredBackProjection may not be applied correctly."
+            msg = "Input tensor is not 3D. InverseRadon may not be applied correctly."
 
             if self.strict_check:
                 raise ValueError(msg)
@@ -908,10 +964,107 @@ class FilteredBackProjection(Transform):
                 warnings.warn(msg)
                 return sinograms
 
-        # Define angles for the FBP transform
+        # Define angles for the Inverse Radon transform
         angles = np.linspace(0, self.max_angle, self.num_angles, endpoint=False)
 
-        # Apply FBP transform for each sinogram in the volume
+        # Apply Inverse Radon transform for each sinogram in the volume
         volume = torch.stack([torch.tensor(iradon(sinogram.numpy(), theta=angles, filter_name=self.filter_name, circle=False)) for sinogram in sinograms])
+
+        return volume
+
+
+class RandSimulateLowDose(RandomizableTransform):
+    """
+    Simulate Low-Dose CT from 3D input tensor in HU scale.
+
+    Args:
+        incident_flux_level: Number of X-ray photons in a specific area per unit time.
+        mean: Mean (centre) of the distribution from the electronic noise.
+        std: Standard deviation (spread) of distribution from the electronic noise.
+        scale: Whether to scale the standard deviation based on the data range.
+        clamp: Wheter to clip the output tensor with the input range.
+        prob: Probability to add Gaussian noise.
+
+    Note:
+        The input tensor is expected to be in the form [D, H, W], where D, H, and W correspond to the Depth, Height, and Width dimensions, respectively.
+        Voxel size units are expected to be meters.
+
+    Usage:
+        Weak noise: incident_flux_level = (1e4, 2e4) and std = (5.0, 10.0)
+        Medium noise: incident_flux_level = (5e3, 1e4) and std = (5.0, 10.0)
+        Strong noise: incident_flux_level = (2e3, 5e3) and std = (1.0, 2.5)
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, prob: float = 0.1, incident_flux_level: Tuple[int, int] = (5e3, 1e4), mean: float = 0.0, std: Tuple[float, float] = (2.0, 5.0), scale: bool = False, clamp: bool = False) -> None:
+        RandomizableTransform.__init__(self, prob)
+        self.incident_flux_level = incident_flux_level
+        self.rand_incident_flux_level = self.incident_flux_level[0]
+        self.mean = mean
+        self.std = std
+        self.rand_std = self.std[0]
+        self.scale = scale
+        self.clamp = clamp
+        self.gaussian_noise = 0.0
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        super().randomize(None)
+
+        if not self._do_transform:
+            return None
+
+        # Get the data range
+        data_range = (torch.max(data) - torch.min(data)) if self.scale else 1.0
+
+        self.rand_incident_flux_level = self.R.uniform(low=self.incident_flux_level[0], high=self.incident_flux_level[1])
+        self.rand_std = self.R.uniform(low=self.std[0] * data_range, high=self.std[1] * data_range)
+        self.gaussian_noise = self.R.normal(self.mean, self.rand_std, size=data.shape)
+
+    def __call__(self, volume: NdarrayOrTensor, voxel_size: int = 1e-3, randomize: bool = True) -> NdarrayOrTensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if not self._do_transform:
+            return volume
+
+        # Define volume range
+        _min = float(volume.min())
+        _max = float(volume.max())
+
+        # Define water attenuation coefficient
+        u_water = 20
+
+        # Compute linear attenuation coefficients base on water attenuation
+        u_normal_dose = (u_water / 1000) * volume + u_water
+
+        # Compute normal-dose projection data with the setup parallel beam geometry and 1080 projection angles in one rotation
+        normal_dose_projection_data = Radon(max_angle=360, num_angles=1080)(u_normal_dose) * voxel_size
+
+        # Compute the normal-dose transmission data
+        normal_dose_transmission_data = torch.exp(-normal_dose_projection_data)
+
+        if randomize:
+            self.randomize(normal_dose_transmission_data)
+
+        # Compute the low-dose transmission data
+        low_dose_transmission_data = torch.poisson(self.rand_incident_flux_level * normal_dose_transmission_data) + self.gaussian_noise
+
+        # Ensure all non-negative values
+        low_dose_transmission_data = torch.where(low_dose_transmission_data >= 0, low_dose_transmission_data, 0)
+
+        # Compute low-dose projection data
+        low_dose_projection_data = torch.log(self.rand_incident_flux_level / (low_dose_transmission_data + sys.float_info.epsilon))
+
+        # Filter projection of added Poisson noise
+        poisson_noise_projection_data = normal_dose_projection_data - low_dose_projection_data
+
+        # Compute low-dose linear attenuation coefficients
+        u_low_dose = u_normal_dose + InverseRadon(max_angle=360, num_angles=1080)(poisson_noise_projection_data / voxel_size)
+
+        # Convert back to HU scale
+        volume = 1000 * (u_low_dose - u_water) / u_water
+
+        # Clamp values if applicable
+        volume = volume if not self.clamp else ThresholdIntensity(threshold=_max, above=False, channel_wise=False, cval=_max)(ThresholdIntensity(threshold=_min, above=True, channel_wise=False, cval=_min)(volume))
 
         return volume

@@ -35,8 +35,8 @@ class SuperResolutionDataset(Dataset):
         ])
 
         self.final_transforms = transforms.Compose([
-            transforms.ToTensor(),
             NormalizeIntensity(mean=mean, std=std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
+            transforms.ToTensor(),
         ])
 
         # Data Augmentation Transforms

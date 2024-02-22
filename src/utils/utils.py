@@ -15,7 +15,7 @@ from tqdm import tqdm
 from matplotlib.patches import Patch
 sys.path.append(os.path.join('..', '..'))
 from src.utils.logger import print_divisor
-from src.utils.transforms import NormalizeIntensity, ThresholdIntensity, EnsureExactChannels
+from src.utils.transforms import PermuteDimensions, ReverseDimensions, NormalizeIntensity, ThresholdIntensity, EnsureExactChannels
 
 
 def load_volume(volume_dir):
@@ -34,7 +34,8 @@ def save_volume(volume, affine, header, filename, save_dir):
 
 
 def get_volume_data(volume_dir):
-    return load_volume(volume_dir).get_fdata().astype(np.float32)[:, :, :]
+    # Reverse NIfTI volume dimensions (W, H, D, C) into PyTorch volume dimensions (C, D, H, W) = (C, Z, Y, X)
+    return reverse_dimensions(load_volume(volume_dir).get_fdata().astype(np.float32))
 
 
 def get_volume_affine(volume_dir):
@@ -110,7 +111,7 @@ def reorder_volume_dimensions(volume, channel_dim=0, longitudinal_axis_dim=1, an
     """
 
     # Reorder arbitrary volume dimensions into (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C)
-    return volume.permute(longitudinal_axis_dim, anteroposterior_axis_dim, mediolateral_axis_dim, channel_dim).contiguous()
+    return permute_dimensions(volume, (longitudinal_axis_dim, anteroposterior_axis_dim, mediolateral_axis_dim, channel_dim))
 
 
 def format_volume(volume, _min=None, _max=None):
@@ -232,18 +233,23 @@ def compute_super_resolution_volume_metadata(lr_metadata, scale_factor=None):
         super_resolution_header = lr_metadata['header'].copy()
         super_resolution_affine = lr_metadata['affine'].copy()
 
-        # Update the header to account for the new voxel dimensions
-        super_resolution_header.set_zooms(np.array(super_resolution_header.get_zooms()) / scale_factor)
-        super_resolution_header.set_data_shape(np.array(super_resolution_header.get_data_shape()) * scale_factor)
-
-        # Update the affine matrix to account for the new voxel dimensions
-        np.fill_diagonal(super_resolution_affine[:3, :3], np.diagonal(super_resolution_affine[:3, :3]) / scale_factor)
+        # Update the header to account for the new voxel size
+        super_resolution_header.set_data_shape(list(np.array(super_resolution_header.get_data_shape()) * scale_factor)[:3] + list(super_resolution_header.get_data_shape())[3:])
+        super_resolution_header.set_zooms(list(np.array(super_resolution_header.get_zooms()) / scale_factor)[:3] + list(super_resolution_header.get_zooms())[3:])
 
     return {
         'filename': lr_metadata['filename'],
         'affine': super_resolution_affine,
         'header': super_resolution_header
     }
+
+
+def permute_dimensions(volume, axes):
+    return PermuteDimensions(axes=axes)(volume)
+
+
+def reverse_dimensions(volume):
+    return ReverseDimensions()(volume)
 
 
 def min_max_scaling(volume, _min, _max):
@@ -320,7 +326,10 @@ def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):
         # Denormalize volume
         volume = volume if (mean is None or std is None) else denormalize(volume, mean=mean, std=std)
 
-        save_volume(volume.to('cpu'), affine, header, filename, save_dir_path)
+        # Reverse volume dimension order
+        volume = reverse_dimensions(volume)
+
+        save_volume(volume.to('cpu').numpy(), affine, header, filename, save_dir_path)
 
 
 def collect_batch_pixels(volumes, mean=None, std=None):

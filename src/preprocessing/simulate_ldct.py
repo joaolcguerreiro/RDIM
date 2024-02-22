@@ -8,28 +8,29 @@ import nibabel as nib
 import monai.transforms as transforms
 from glob import glob
 sys.path.append(os.path.join('..', '..'))
-from src.utils.transforms import RemoveChannelDimension, EnsureChannelExists, Radon, FilteredBackProjection, RandPoissonNoise, RandGaussianNoise
+from src.utils.transforms import RemoveChannelDimension, EnsureChannelExists, ReverseDimensions, RandSimulateLowDose
 
 
 def main():
     try:
         # Common transforms
         initial_transforms = transforms.Compose([
+            ReverseDimensions(),
             RemoveChannelDimension(),
         ])
 
         final_transforms = transforms.Compose([
             EnsureChannelExists(),
+            transforms.ThresholdIntensity(threshold=args.min, above=True, cval=args.min),
+            transforms.ThresholdIntensity(threshold=args.max, above=False, cval=args.max),
+            ReverseDimensions(),
             transforms.ToNumpy()
         ])
 
         # Low-Resolution Transforms
         lr_transforms = transforms.Compose([
-            Radon(max_angle=360, num_angles=1080),
-            RandPoissonNoise(prob=0.9, noise_strength=(args.noise_strength, args.noise_strength)),
-            RandGaussianNoise(prob=0.9, std=(args.noise_strength * 0.0002, args.noise_strength * 0.0002), scale=True),
-            FilteredBackProjection(max_angle=360, num_angles=1080)
-        ])
+            RandSimulateLowDose(prob=1.0, incident_flux_level=(2000, 5000), std=(2.5, 2.5), clamp=True),
+        ], map_items=False, unpack_items=True)
 
         # High-Resolution Transforms
         hr_transforms = transforms.Compose([
@@ -63,8 +64,11 @@ def main():
                     nifti_img = nib.load(file_path)
                     volume = initial_transforms(nifti_img.get_fdata())
 
+                    # Compute voxel size in meters
+                    voxel_size = sum(nifti_img.header.get_zooms()[:2]) / len(nifti_img.header.get_zooms()[:2]) / 1000 / args.scale_factor
+
                     # Apply the transformations
-                    lr_volume = np.around(final_transforms(lr_transforms(volume))).astype(np.int16)
+                    lr_volume = np.around(final_transforms(lr_transforms((volume, voxel_size)))).astype(np.int16)
                     hr_volume = np.around(final_transforms(hr_transforms(volume))).astype(np.int16)
 
                     # Create NIfTI images
@@ -89,8 +93,10 @@ if __name__ == '__main__':
     # Define argument parser
     parser = argparse.ArgumentParser(description='Simulate Low-Dode CT')
     parser.add_argument('--dir', required=True, help='Path to directory with data', type=str)
-    parser.add_argument('--noise-strength', default=50, help='Noise degradation intensity', type=int)
+    parser.add_argument('--min', default=-1000, help='Minimum HU scale value', type=int)
+    parser.add_argument('--max', default=1000, help='Maximum HU scale value', type=int)
     parser.add_argument('--augmentation-factor', default=1, help='Define number of LR-HR pairs created for each data sample', type=int)
+    parser.add_argument('--scale-factor', default=2, help='Scale factor used to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()
 
     main()

@@ -24,6 +24,16 @@ def main():
             for row in reader:
                 if row[modality_index] != 'CT':
                     shutil.rmtree(parse_path(row[path_index]))
+
+        # Remove metadata and license files
+        license_file_path = os.path.join(args.dir, 'LIDC-IDRI', 'LICENSE')
+        metadata_file_path = os.path.join(args.dir, 'metadata.csv')
+
+        if os.path.exists(license_file_path):
+            os.remove(license_file_path)
+
+        if os.path.exists(metadata_file_path):
+            os.remove(metadata_file_path)
     except Exception as e:
         print(f'An error occurred: {e}.\n' + 'If error remains download data again.')
 

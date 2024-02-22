@@ -12,7 +12,7 @@
 
 #### Overview
 
-Every low-resolution image should have a corresponding high-resolution image. The pair of low-res and high-res images should have the same filename
+Every low-resolution image should have a corresponding high-resolution image. The image files of each LR-HR pair should have the same filename.
 
 ```
 ├───data
@@ -115,11 +115,19 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 #### Prepare Other Dataset
 
-BE SURE DATA FILE FORMAT IS NIFTI... channel dim required to be first... accepted data shapes: (D, H, W) or (C, D, H, W)
+Supported file formats:
 
-Supported file types: NifTI...
+* NifTI;
 
-Every low-resolution image should have a corresponding high-resolution image. The pair of low-res and high-res images should have the same filename. The following illustrates a valid dataset structure:
+Accepted data shapes are as follows:
+
+* `(W, H, D)`.
+
+* `(W, H, D, C)`.
+
+> Note: The dimensions order is reversed during execution to align with PyTorch. 
+
+Every low-resolution image should have a corresponding high-resolution image. The image files of each LR-HR pair should have the same filename. The following illustrates a valid dataset structure:
 
 ```
 ├───example_dataset

@@ -39,8 +39,8 @@ class VGGLoss(nn.Module):
             NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True),
             transforms.SpatialPad(spatial_size=(32, 32, 32)),
             EnsureExactChannels(num_channels=3),
-            transforms.ToTensor(),
             NormalizeIntensity(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], channel_wise=True),
+            transforms.ToTensor(),
         ])
 
         # Set patch size
@@ -230,8 +230,8 @@ class GANDLoss(nn.Module):
         self.discriminator_transforms = transforms.Compose([
             NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True),
             EnsureExactChannels(num_channels=checkpoint['discriminator_num_features']),
-            transforms.ToTensor(),
             NormalizeIntensity(mean=checkpoint['training_data_mean'], std=checkpoint['training_data_std'], channel_wise=True),
+            transforms.ToTensor(),
         ])
 
         # Define network inferer
