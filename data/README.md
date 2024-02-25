@@ -3,7 +3,7 @@
 #### Table of Contents
 
 1) [Overview](#overview)
-2) [Prepare Low Dose CT Grand Challenge Dataset](#prepare-low-dose-ct-grand-challenge-dataset)
+2) [Prepare Mayo Grand Challenge Dataset](#prepare-mayo-grand-challenge-dataset)
 3) [Prepare ??Low-Field MRI?? Dataset](#prepare-??Low-Field-MRI??-dataset)
 4) [Prepare LIDC-IDRI Dataset](#prepare-lidc-idri-dataset)
 5) [Prepare Other Dataset](#prepare-other-dataset)
@@ -55,11 +55,29 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
-#### Prepare Low Dose CT Grand Challenge Dataset
+#### Prepare Mayo Grand Challenge Dataset
 
-1) Download [Low Dose CT Grand Challenge](https://www.aapm.org/grandchallenge/lowdosect/) dataset.
+1) Download [Mayo Grand Challenge](https://www.aapm.org/grandchallenge/lowdosect/) dataset. If applicable, unzip the folder.
 
-`... download_some_name.sh... clean_some_name.py... simulate_ldct.py... split_data.py`
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_mayo_gc> --dataset-name="Mayo-GC"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_mayo_gc.py --dir="../../data/Mayo-GC"
+   ```
+
+5) Run data formatting script:
+   ```
+   python format_mayo_gc.py --dir="../../data/Mayo-GC"
+   ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
 

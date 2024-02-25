@@ -51,40 +51,38 @@ def main():
         os.makedirs(hr_dir_path)
 
         # Fetch all data file paths
-        dataset_file_paths = sorted(glob(os.path.join(args.dir, '*')))
+        dataset_file_paths = sorted(glob(os.path.join(args.dir, '*.nii.gz')))
 
         for file_index, file_path in enumerate(dataset_file_paths):
-            if file_path.endswith('.nii.gz'):
-                for augmentation_index in range(args.augmentation_factor):
-                    # Set transforms seed
-                    lr_transforms.set_random_state(seed=augmentation_index + file_index * args.augmentation_factor)
-                    lr_transforms.set_random_state(seed=augmentation_index + file_index * args.augmentation_factor)
+            for augmentation_index in range(args.augmentation_factor):
+                # Set transforms seed
+                lr_transforms.set_random_state(seed=augmentation_index + file_index * args.augmentation_factor)
+                lr_transforms.set_random_state(seed=augmentation_index + file_index * args.augmentation_factor)
 
-                    # Load the NIfTI file
-                    nifti_img = nib.load(file_path)
-                    volume = initial_transforms(nifti_img.get_fdata())
+                # Load the NIfTI file
+                nifti_img = nib.load(file_path)
+                volume = initial_transforms(nifti_img.get_fdata())
 
-                    # Compute voxel size in meters
-                    voxel_size = sum(nifti_img.header.get_zooms()[:2]) / len(nifti_img.header.get_zooms()[:2]) / 1000 / args.scale_factor
+                # Compute voxel size in meters
+                voxel_size = sum(nifti_img.header.get_zooms()[:2]) / len(nifti_img.header.get_zooms()[:2]) / 1000 / args.scale_factor
 
-                    # Apply the transformations
-                    lr_volume = np.around(final_transforms(lr_transforms((volume, voxel_size)))).astype(np.int16)
-                    hr_volume = np.around(final_transforms(hr_transforms(volume))).astype(np.int16)
+                # Apply the transformations
+                lr_volume = np.around(final_transforms(lr_transforms((volume, voxel_size)))).astype(np.int16)
+                hr_volume = np.around(final_transforms(hr_transforms(volume))).astype(np.int16)
 
-                    # Create NIfTI images
-                    lr_nifti_img = nib.Nifti1Image(lr_volume, nifti_img.affine.copy(), nifti_img.header.copy())
-                    hr_nifti_img = nib.Nifti1Image(hr_volume, nifti_img.affine.copy(), nifti_img.header.copy())
+                # Create NIfTI images
+                lr_nifti_img = nib.Nifti1Image(lr_volume, nifti_img.affine.copy(), nifti_img.header.copy())
+                hr_nifti_img = nib.Nifti1Image(hr_volume, nifti_img.affine.copy(), nifti_img.header.copy())
 
-                    # Save volumes
-                    filename, file_extension = re.match(r'(.*?)(\.[^.]+(?:\.[^.]+)*)?$', os.path.basename(file_path)).groups()
+                # Save volumes
+                filename, file_extension = re.match(r'(.*?)(\.[^.]+(?:\.[^.]+)*)?$', os.path.basename(file_path)).groups()
 
-                    nib.save(lr_nifti_img, os.path.join(args.dir, 'LR', filename + f'-{augmentation_index}' + file_extension))
-                    nib.save(hr_nifti_img, os.path.join(args.dir, 'HR', filename + f'-{augmentation_index}' + file_extension))
+                nib.save(lr_nifti_img, os.path.join(args.dir, 'LR', filename + f'-{augmentation_index}' + file_extension))
+                nib.save(hr_nifti_img, os.path.join(args.dir, 'HR', filename + f'-{augmentation_index}' + file_extension))
 
         # Remove root NIfTI files
         for file_path in dataset_file_paths:
-            if file_path.endswith('.nii.gz'):
-                os.remove(file_path)
+            os.remove(file_path)
     except Exception as e:
         print(f'An error occurred: {e}.\n' + 'If error remains download data again.')
 

@@ -3,17 +3,14 @@ import torch
 import warnings
 import math
 import numpy as np
-import monai.transforms as transforms
 import torch.nn.functional as F
 from typing import Any, Optional, Tuple, Sequence, Union
-from monai.config import DtypeLike
 from monai.utils import ensure_tuple, ensure_tuple_rep
 from monai.data.meta_obj import get_track_meta
-from monai.utils.misc import ensure_tuple_size
 from monai.utils.enums import TransformBackends
 from monai.config.type_definitions import NdarrayOrTensor
 from monai.transforms.transform import Transform, RandomizableTransform
-from monai.utils.type_conversion import convert_data_type, convert_to_dst_type, convert_to_tensor
+from monai.utils.type_conversion import convert_to_dst_type, convert_to_tensor
 from skimage.transform import radon, iradon
 
 
@@ -431,49 +428,6 @@ class ThresholdIntensity(Transform):
         return ret
 
 
-class RandGaussianSmooth(RandomizableTransform):
-    """
-    Apply Gaussian smooth to the input data based on randomly selected `sigma` parameters.
-
-    Args:
-        sigma: Sigma range to randomly select value for Gaussian smoothing.
-        approx: Discrete Gaussian kernel type, available options are "erf", "sampled", and "scalespace".
-        prob: Probability of Gaussian smooth.
-    """
-
-    backend = [TransformBackends.TORCH]
-
-    def __init__(self, prob: float = 0.1, sigma: Tuple[float, float] = (0.25, 1.5), approx: str = "erf") -> None:
-        RandomizableTransform.__init__(self, prob)
-        self.sigma = sigma
-        self.rand_sigma = self.sigma[0]
-        self.approx = approx
-
-    def randomize(self, data: Optional[Any] = None) -> None:
-        super().randomize(None)
-
-        if not self._do_transform:
-            return None
-
-        self.rand_sigma = self.R.uniform(low=self.sigma[0], high=self.sigma[1])
-
-    def __call__(self, volume: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
-        volume = convert_to_tensor(volume, track_meta=get_track_meta())
-
-        if randomize:
-            self.randomize()
-
-        if not self._do_transform:
-            return volume
-
-        sigma = ensure_tuple_size(vals=(self.rand_sigma, self.rand_sigma, self.rand_sigma), dim=volume.ndim - 1)
-
-        # Apply Gaussian smooth
-        volume = transforms.GaussianSmooth(sigma=sigma, approx=self.approx)(volume)
-
-        return volume
-
-
 class RandGaussianNoise(RandomizableTransform):
     """
     Apply Gaussian noise to the input data.
@@ -482,20 +436,17 @@ class RandGaussianNoise(RandomizableTransform):
         mean: Mean (centre) of the distribution.
         std: Standard deviation (spread) of distribution.
         scale: Whether to scale the standard deviation based on the data range.
-        dtype: Output data type, if None, same as input image. defaults to float32.
         prob: Probability of Gaussian noise.
     """
 
     backend = [TransformBackends.TORCH]
 
-    def __init__(self, prob: float = 0.1, mean: float = 0.0, std: Tuple[float, float] = (0, 0.1), scale: bool = False, dtype: DtypeLike = np.float32) -> None:
+    def __init__(self, prob: float = 0.1, mean: float = 0.0, std: Tuple[float, float] = (1.0, 5.0), scale: bool = False) -> None:
         RandomizableTransform.__init__(self, prob)
         self.mean = mean
         self.std = std
         self.rand_std = self.std[0]
         self.scale = scale
-        self.dtype = dtype
-        self.noise: Optional[np.ndarray] = None
 
     def randomize(self, data: Optional[Any] = None) -> None:
         super().randomize(None)
@@ -507,8 +458,6 @@ class RandGaussianNoise(RandomizableTransform):
         data_range = (torch.max(data) - torch.min(data)) if self.scale else 1.0
 
         self.rand_std = self.R.uniform(low=self.std[0] * data_range, high=self.std[1] * data_range)
-        noise = self.R.normal(self.mean, self.rand_std, size=data.shape)
-        self.noise, *_ = convert_data_type(noise, dtype=self.dtype)
 
     def __call__(self, volume: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
@@ -519,246 +468,8 @@ class RandGaussianNoise(RandomizableTransform):
         if not self._do_transform:
             return volume
 
-        volume, *_ = convert_data_type(volume, dtype=self.dtype)
-        noise, *_ = convert_to_dst_type(self.noise, volume)
-
         # Add Gaussian noise
-        volume = volume + noise
-
-        return volume
-
-
-class RandPoissonNoise(RandomizableTransform):
-    """
-    Apply Poisson noise to the input data.
-
-    Args:
-        noise_strength: Value range to control strength of the Poisson noise.
-        prob: Probability of Poisson noise.
-    """
-
-    backend = [TransformBackends.TORCH]
-
-    def __init__(self, prob: float = 0.1, noise_strength: Tuple[float, float] = (1, 5)) -> None:
-        RandomizableTransform.__init__(self, prob)
-        self.noise_strength = noise_strength
-        self.rand_noise_strength = self.noise_strength[0]
-
-    def randomize(self, data: Optional[Any] = None) -> None:
-        super().randomize(None)
-
-        if not self._do_transform:
-            return None
-
-        self.rand_noise_strength = self.R.uniform(low=self.noise_strength[0], high=self.noise_strength[1])
-
-    def __call__(self, volume: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
-        volume = convert_to_tensor(volume, track_meta=get_track_meta())
-
-        if randomize:
-            self.randomize()
-
-        if not self._do_transform or self.rand_noise_strength == 0:
-            return volume
-
-        # Compute scale factor based on noise strength
-        scale_factor = 1 / self.rand_noise_strength
-
-        # Get volume minimum
-        _min = torch.min(volume)
-
-        # Ensure all values are strictly non-negative
-        volume = volume - _min
-
-        # Apply Poisson noise
-        volume = torch.poisson(volume * scale_factor) / scale_factor
-
-        # Revert volume range
-        volume = volume + _min
-
-        return volume
-
-
-class RandForegroundGaussianNoise(RandomizableTransform):
-    """
-    Add Gaussian noise to volume.
-
-    Args:
-        mean: Mean (centre) of the distribution.
-        std: Standard deviation (spread) of distribution.
-        scale: Whether to scale the standard deviation based on the data range.
-        dtype: Output data type, if None, same as input image. defaults to float32.
-        prob: Probability to add Gaussian noise.
-    """
-
-    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
-
-    def __init__(self, prob: float = 0.1, mean: float = 0.0, std: Tuple[float, float] = (0, 0.1), scale: bool = False, dtype: DtypeLike = np.float32) -> None:
-        RandomizableTransform.__init__(self, prob)
-        self.mean = mean
-        self.std = std
-        self.rand_std = self.std[0]
-        self.scale = scale
-        self.dtype = dtype
-        self.noise: Optional[np.ndarray] = None
-
-    def randomize(self, volume: NdarrayOrTensor, mean: Optional[float] = None) -> None:
-        super().randomize(None)
-
-        if not self._do_transform:
-            return None
-
-        # Get the data range
-        data_range = (torch.max(volume) - torch.min(volume)) if self.scale else 1.0
-
-        self.rand_std = self.R.uniform(low=self.std[0] * data_range, high=self.std[1] * data_range)
-        noise = self.R.normal((self.mean if mean is None else mean), self.rand_std, size=volume.shape)
-        self.noise, *_ = convert_data_type(noise, dtype=self.dtype)
-
-    def __call__(self, volume: NdarrayOrTensor, mean: Optional[float] = None, randomize: bool = True) -> NdarrayOrTensor:
-        # Calculate foreground and background masks
-        foreground_mask = transforms.ForegroundMask(invert=True)(volume)
-        background_mask = torch.logical_not(foreground_mask)
-
-        volume = convert_to_tensor(volume, track_meta=get_track_meta())
-
-        if randomize:
-            self.randomize(volume=volume, mean=self.mean if mean is None else mean)
-
-        if not self._do_transform:
-            return volume
-
-        if self.noise is None:
-            raise RuntimeError("please call the `randomize()` function first.")
-
-        volume, *_ = convert_data_type(volume, dtype=self.dtype)
-        noise, *_ = convert_to_dst_type(self.noise, volume)
-
-        # Calculate the noisy foreground
-        noisy_foreground = (volume + noise) * foreground_mask
-
-        # Join noisy foreground with original background
-        volume = volume * background_mask + noisy_foreground
-
-        return volume
-
-
-class RandForegroundStreakNoise(RandomizableTransform):
-    """
-    Add random streaks to a volume from a set of origins along a circular path, using Poisson noise.
-
-    Args:
-        intensity: The intensity of the streaks.
-        line_thickness: The thickness of the lines that form the streaks.
-        num_origins: The number or range of origins along the circular path.
-        num_streaks: The number or range of streaks to generate from each origin.
-        origin_radius_ratio: The ratio to scale the circular path radius for the origins.
-                                If it's greater than 1, the origins will be outside the volume.
-                                If it's less than 1, the origins will be inside the volume.
-                                Default is 1 (no scaling, origins lie on the volume boundary).
-        slope_variation: Control streak slope variation.
-        white_noise: Define streaks color range.
-                                If true streaks are brighter.
-                                If false streaks both dark and bright (span grayscale range).
-        dtype: Output data type, if None, same as input image.
-        prob: Probability to add streak noise.
-    """
-
-    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
-
-    def __init__(self, prob: float = 0.1, intensity: float = 0.1, line_thickness: int = 3, num_origins: tuple[int, int] | int = 360, num_streaks: tuple[int, int] | int = 10, origin_radius_ratio: float = 1.5, slope_variation: float = 1.0,  white_noise: bool = True, dtype: DtypeLike = np.float32) -> None:
-        RandomizableTransform.__init__(self, prob)
-        self.intensity = intensity
-        self.line_thickness = line_thickness
-        self.num_origins = num_origins
-        self.num_streaks = num_streaks
-        self.origin_radius_ratio = origin_radius_ratio
-        self.slope_variation = slope_variation
-        self.white_noise = white_noise
-        self.dtype = dtype
-        self.streak: Optional[np.ndarray] = None
-        self.min = None
-        self.max = None
-
-    def randomize(self, volume: NdarrayOrTensor) -> None:
-        super().randomize(None)
-        if not self._do_transform:
-            return
-
-        # Get the volume min and max
-        self.min = torch.min(volume)
-        self.max = torch.max(volume)
-        volume_range = self.max - self.min
-
-        # Create an empty array for streaks
-        self.streak = np.zeros_like(volume, dtype=self.dtype)
-
-        # Center of the volume
-        center_y, center_x = volume.shape[-2] // 2, volume.shape[-1] // 2
-
-        rand_num_origins = self.R.randint(0, self.num_origins) if isinstance(self.num_origins, int) else self.R.randint(self.num_origins[0], self.num_origins[1])
-
-        for origin in range(rand_num_origins):
-            # angle for current origin
-            theta = 2 * np.pi * origin / rand_num_origins
-
-            rand_num_streaks = self.R.randint(0, self.num_streaks) if isinstance(self.num_streaks, int) else self.R.randint(self.num_streaks[0], self.num_streaks[1])
-
-            for _ in range(rand_num_streaks):
-                # Random intensity of the streak within the volume range
-                intensity = self.R.uniform(0 if self.white_noise else -volume_range, volume_range) * self.intensity / 50
-
-                # Generate streaks along the line y = slope * x
-                slope = self.R.uniform(-self.slope_variation, self.slope_variation)
-                x_line = np.arange(-center_x * self.origin_radius_ratio, volume.shape[-1] * self.origin_radius_ratio - center_x)
-                y_line = (slope * x_line).astype(int)
-
-                # Reduce intensity from streaks that are far from the volume center
-                intensity = intensity / 2 if np.abs(slope) > 0.2 else intensity
-
-                # Rotate the line by the angle theta and shift the origin to the edge of the circle
-                radius = min(center_x, center_y) * self.origin_radius_ratio
-                origin_x = int(center_x + radius * np.cos(theta))
-                origin_y = int(center_y + radius * np.sin(theta))
-                x = origin_x + x_line * np.cos(theta) - y_line * np.sin(theta)
-                y = origin_y + x_line * np.sin(theta) + y_line * np.cos(theta)
-
-                # Adjust line thickness and intensity
-                line_thickness = self.R.randint(low=0, high=self.line_thickness + 1)
-
-                for i in range(-line_thickness + 1, line_thickness):
-                    # Generate streaks with varying intensity and thickness
-                    x_coords = np.clip(x + i, 0, volume.shape[-1] - 1).astype(int)
-                    y_coords = np.clip(y + i, 0, volume.shape[-2] - 1).astype(int)
-                    self.streak[..., y_coords, x_coords] += intensity / (np.abs(i) * (3 / 2) + 1)
-
-        # Convert streak to desired type
-        self.streak, *_ = convert_data_type(np.clip(self.streak, self.min, self.max), dtype=self.dtype)
-
-    def __call__(self, volume: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
-        # Calculate foreground and background masks
-        foreground_mask = transforms.ForegroundMask(invert=True)(volume)
-        background_mask = torch.logical_not(foreground_mask)
-
-        volume = convert_to_tensor(volume, track_meta=get_track_meta())
-
-        if randomize:
-            self.randomize(volume=volume)
-
-        if not self._do_transform:
-            return volume
-
-        if self.streak is None:
-            raise RuntimeError("please call the `randomize()` function first.")
-
-        volume, *_ = convert_data_type(volume, dtype=self.dtype)
-        streak, *_ = convert_data_type(self.streak, dtype=self.dtype)
-
-        # Add the streak to the volume
-        volume = torch.tensor(self.R.poisson(volume - self.min + streak - streak.min()) + self.min + streak.min()) * foreground_mask + volume * background_mask
-
-        # Clamp values to the min and max of the original volume to keep the same range
-        volume = torch.clamp(volume, self.min, self.max)
+        volume = volume + self.R.normal(self.mean, self.rand_std, size=volume.shape)
 
         return volume
 
@@ -1006,7 +717,6 @@ class RandSimulateLowDose(RandomizableTransform):
         self.rand_std = self.std[0]
         self.scale = scale
         self.clamp = clamp
-        self.gaussian_noise = 0.0
 
     def randomize(self, data: Optional[Any] = None) -> None:
         super().randomize(None)
@@ -1019,7 +729,6 @@ class RandSimulateLowDose(RandomizableTransform):
 
         self.rand_incident_flux_level = self.R.uniform(low=self.incident_flux_level[0], high=self.incident_flux_level[1])
         self.rand_std = self.R.uniform(low=self.std[0] * data_range, high=self.std[1] * data_range)
-        self.gaussian_noise = self.R.normal(self.mean, self.rand_std, size=data.shape)
 
     def __call__(self, volume: NdarrayOrTensor, voxel_size: int = 1e-3, randomize: bool = True) -> NdarrayOrTensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
@@ -1047,7 +756,7 @@ class RandSimulateLowDose(RandomizableTransform):
             self.randomize(normal_dose_transmission_data)
 
         # Compute the low-dose transmission data
-        low_dose_transmission_data = torch.poisson(self.rand_incident_flux_level * normal_dose_transmission_data) + self.gaussian_noise
+        low_dose_transmission_data = torch.tensor(self.R.poisson(self.rand_incident_flux_level * normal_dose_transmission_data) + self.R.normal(self.mean, self.rand_std, size=normal_dose_transmission_data.shape))
 
         # Ensure all non-negative values
         low_dose_transmission_data = torch.where(low_dose_transmission_data >= 0, low_dose_transmission_data, 0)
