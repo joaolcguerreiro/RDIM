@@ -15,15 +15,12 @@ def main():
 
             # Desired index
             modality_index = 10
-            path_index = 15
-
-            # Parse path function
-            parse_path = lambda path: os.path.join(args.dir, os.path.dirname(path)[2:])
+            file_path_index = 15
 
             # Clean data
             for row in reader:
                 if row[modality_index] != 'CT':
-                    shutil.rmtree(parse_path(row[path_index]))
+                    shutil.rmtree(os.path.join(args.dir, os.path.dirname(row[file_path_index][2:])))
 
         # Remove metadata and license files
         license_file_path = os.path.join(args.dir, 'LIDC-IDRI', 'LICENSE')

@@ -121,7 +121,7 @@ def format_volume(volume, _min=None, _max=None):
     """
 
     # Scale volume to the valid range for imshow with RGB data ([0, 1] for floats or [0, 255] for integers).
-    volume = (min_max_scaling(volume, _min=_min, _max=_max) if (_min is not None and _max is not None) else ((volume - volume.min()) / (volume.max() - volume.min()))) * (255 if not torch.is_floating_point(volume) else 1.0)
+    volume = min_max_scaling(volume, _min=(_min or volume.min()), _max=(_max or volume.max())) * (255 if not torch.is_floating_point(volume) else 1.0)
 
     # Ensure valid number of channels (Grayscale: 1, RGB: 3, RGBA: 4)
     if volume.shape[0] not in (1, 3, 4):
@@ -147,7 +147,7 @@ def draw_image_2d(imgs, n_rows=1, n_cols=1, labels=None, show=True, ax=None, fig
         ax[index // ax.shape[1], index % ax.shape[1]].axis('off')
 
     for index, img in enumerate(imgs):
-        ax[index // ax.shape[1], index % ax.shape[1]].imshow(img, cmap='gray')
+        ax[index // ax.shape[1], index % ax.shape[1]].imshow(img, cmap='gray', vmin=0, vmax=(255 if not torch.is_floating_point(img) else 1.0))
 
         if labels and index < len(labels):
             legend_elements = [Patch(label=labels[index])]

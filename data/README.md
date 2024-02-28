@@ -3,9 +3,9 @@
 #### Table of Contents
 
 1) [Overview](#overview)
-2) [Prepare Mayo Grand Challenge Dataset](#prepare-mayo-grand-challenge-dataset)
-3) [Prepare ??Low-Field MRI?? Dataset](#prepare-??Low-Field-MRI??-dataset)
+2) [Prepare LDCT-and-Projection-Data Dataset](#prepare-ldct-and-projection-data-dataset)
 4) [Prepare LIDC-IDRI Dataset](#prepare-lidc-idri-dataset)
+3) [Prepare ??Low-Field MRI?? Dataset](#prepare-??Low-Field-MRI??-dataset)
 5) [Prepare Other Dataset](#prepare-other-dataset)
 
 <hr style="border:1px solid gray">
@@ -55,9 +55,9 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
-#### Prepare Mayo Grand Challenge Dataset
+#### Prepare LDCT-and-Projection-Data Dataset
 
-1) Download [Mayo Grand Challenge](https://www.aapm.org/grandchallenge/lowdosect/) dataset. If applicable, unzip the folder.
+1) Download [LDCT-and-Projection-Data](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=52758026) dataset.
 
 2) Navigate to `preprocessing` directory:
    ```
@@ -66,26 +66,23 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 3) Run clone data script to duplicate dataset into `data` directory:
    ```
-   python clone_data.py --dir=<path_to_raw_mayo_gc> --dataset-name="Mayo-GC"
+   python clone_data.py --dir=<path_to_raw_ldct_pd> --dataset-name="LDCT-PD"
    ```
 
 4) Run data cleaning script:
    ```
-   python clean_mayo_gc.py --dir="../../data/Mayo-GC"
+   python clean_ldct_pd.py --dir="../../data/LDCT-PD"
    ```
 
-5) Run data formatting script:
+5) Run data splitting script:
    ```
-   python format_mayo_gc.py --dir="../../data/Mayo-GC"
+   python split_data.py --dir="../../data/LDCT-PD"
    ```
 
-> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
-
-<hr style="border:1px solid gray">
-
-#### Prepare ??Low-Field MRI?? Dataset
-
-`... download_some_name.sh... clean_some_name.py... simulate_lfmri.py... split_data.py`
+6) Run data formatting script:
+   ```
+   python format_ldct_pd.py --dir="../../data/LDCT-PD"
+   ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
 
@@ -122,10 +119,18 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 7) Run data downsampling script to create LR-HR pairs:
    ```
-   python simulate_ldct.py --dir="../../data/LIDC-IDRI/training" --augmentation-factor=2
+   python simulate_ldct.py --dir="../../data/LIDC-IDRI/training"
    python simulate_ldct.py --dir="../../data/LIDC-IDRI/validation"
    python simulate_ldct.py --dir="../../data/LIDC-IDRI/testing"
    ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
+#### Prepare ??Low-Field MRI?? Dataset
+
+`... download_some_name.sh... clean_some_name.py... simulate_lfmri.py... split_data.py`
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
 
@@ -194,9 +199,17 @@ If the dataset does not include data splits or lacks LR-HR pairs, run the follow
 
 * Downsample data to create LR-HR pairs:
    ```
-   python simulate_ldct.py --dir="../../data/<dataset_name>/training" --augmentation-factor=2
+   # Simulate Low-Dose CT
+   python simulate_ldct.py --dir="../../data/<dataset_name>/training"
    python simulate_ldct.py --dir="../../data/<dataset_name>/validation"
    python simulate_ldct.py --dir="../../data/<dataset_name>/testing"
+   ```
+
+   ```
+   # Simulate Low-Field MRI
+   python simulate_lfmri.py --dir="../../data/<dataset_name>/training"
+   python simulate_lfmri.py --dir="../../data/<dataset_name>/validation"
+   python simulate_lfmri.py --dir="../../data/<dataset_name>/testing"
    ```
 
 > Note: Expects `training`, `validation`, and `testing` directories inside `<dataset_name>` directory.

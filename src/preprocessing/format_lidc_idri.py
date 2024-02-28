@@ -120,11 +120,13 @@ def main():
         uniform_transforms = transforms.Compose([
             ReverseDimensions(),
             EnsureChannelExists(),
-            transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max - _min)),
+            transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max-_min)),
             transforms.SpatialPad(spatial_size=args.uniform_shape),
             transforms.CenterSpatialCrop(roi_size=args.uniform_shape),
-            transforms.Zoom(zoom=(1 / args.scale_factor), mode="trilinear", keep_size=False),
-            transforms.NormalizeIntensity(subtrahend=-_min / (_max - _min), divisor=1 / (_max - _min)),
+            transforms.Zoom(zoom=1/args.scale_factor, mode="trilinear", keep_size=False),
+            transforms.NormalizeIntensity(subtrahend=-_min/(_max-_min), divisor=1/(_max-_min)),
+            transforms.ThresholdIntensity(threshold=args.min, above=True, cval=args.min),
+            transforms.ThresholdIntensity(threshold=args.max, above=False, cval=args.max),
             ReverseDimensions(),
             transforms.ToNumpy()
         ])
@@ -164,6 +166,8 @@ if __name__ == '__main__':
     parser.add_argument('--dir', required=True, help='Path to directory with raw data', type=str)
     parser.add_argument('--min-slices', default=256, help='Minimum number of slices per volume', type=int)
     parser.add_argument('--max-slice-thick', default=1.25, help='Maximum slice thickness per volume', type=float)
+    parser.add_argument('--min', default=-1000, help='Minimum HU scale value', type=int)
+    parser.add_argument('--max', default=1000, help='Maximum HU scale value', type=int)
     parser.add_argument('--uniform-shape', default=(512, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
     parser.add_argument('--scale-factor', default=2, help='Scale factor to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()

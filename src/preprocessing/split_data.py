@@ -19,7 +19,7 @@ def main():
             os.makedirs(dir_path)
 
         # Fetch all data file paths
-        dataset_file_paths = sorted(glob(os.path.join(args.dir, '*.nii.gz')))
+        dataset_file_paths = sorted(file_path for file_path in glob(os.path.join(args.dir, '*')) if os.path.basename(file_path) not in ['.DS_Store', 'training', 'validation', 'testing'])
 
         # Split dataset
         train, test = train_test_split(dataset_file_paths, test_size=(args.test_size * 2 if args.val else args.test_size), shuffle=True, random_state=20)
@@ -37,7 +37,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Split data')
     parser.add_argument('--dir', required=True, help='Path to directory with data', type=str)
     parser.add_argument('--val', default=True, help='Build validation split', type=(lambda arg: (str(arg).lower() == 'true')))
-    parser.add_argument('--test-size', default=0.05, help='Fraction of data for evaluation', type=int)
+    parser.add_argument('--test-size', default=0.05, help='Fraction of data for evaluation', type=float)
     args = parser.parse_args()
 
     main()

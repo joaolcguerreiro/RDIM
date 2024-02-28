@@ -21,15 +21,13 @@ def main():
 
         final_transforms = transforms.Compose([
             EnsureChannelExists(),
-            transforms.ThresholdIntensity(threshold=args.min, above=True, cval=args.min),
-            transforms.ThresholdIntensity(threshold=args.max, above=False, cval=args.max),
             ReverseDimensions(),
             transforms.ToNumpy()
         ])
 
         # Low-Resolution Transforms
         lr_transforms = transforms.Compose([
-            RandSimulateLowDose(prob=1.0, incident_flux_level=(2000, 5000), std=(2.5, 2.5), clamp=True),
+            RandSimulateLowDose(prob=1.0, incident_flux_level=(10000, 10000), std=(15, 15), clamp=True),
         ], map_items=False, unpack_items=True)
 
         # High-Resolution Transforms
@@ -91,8 +89,6 @@ if __name__ == '__main__':
     # Define argument parser
     parser = argparse.ArgumentParser(description='Simulate Low-Dode CT')
     parser.add_argument('--dir', required=True, help='Path to directory with data', type=str)
-    parser.add_argument('--min', default=-1000, help='Minimum HU scale value', type=int)
-    parser.add_argument('--max', default=1000, help='Maximum HU scale value', type=int)
     parser.add_argument('--augmentation-factor', default=1, help='Define number of LR-HR pairs created for each data sample', type=int)
     parser.add_argument('--scale-factor', default=2, help='Scale factor used to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()

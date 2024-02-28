@@ -701,9 +701,9 @@ class RandSimulateLowDose(RandomizableTransform):
         Voxel size units are expected to be meters.
 
     Usage:
-        Weak noise: incident_flux_level = (1e4, 2e4) and std = (5.0, 10.0)
-        Medium noise: incident_flux_level = (5e3, 1e4) and std = (5.0, 10.0)
-        Strong noise: incident_flux_level = (2e3, 5e3) and std = (1.0, 2.5)
+        Weak noise: incident_flux_level = 2e4 and std = 5.0
+        Medium noise: incident_flux_level = 1.5e4 and std = 10.0
+        Strong noise: incident_flux_level = 1e4 and std = 15.0
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
