@@ -431,7 +431,7 @@ if __name__ == '__main__':
 
     # Build experiment directory
     if not args.resume:
-        experiment_path = os.path.join('..', '..', '..', 'experiments', "esrgan", f'x{config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]}_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
+        experiment_path = os.path.join('..', '..', '..', 'experiments', "esrgan", datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
 
         # Create experiment folder
         create_experiment_directory(experiment_path=experiment_path, config_path=config_path)
