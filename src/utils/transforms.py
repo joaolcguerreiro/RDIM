@@ -701,14 +701,13 @@ class RandSimulateLowDose(RandomizableTransform):
         Voxel size units are expected to be meters.
 
     Usage:
-        Weak noise: incident_flux_level = 2e4 and std = 5.0
-        Medium noise: incident_flux_level = 1.5e4 and std = 10.0
-        Strong noise: incident_flux_level = 1e4 and std = 15.0
+        Weak noise: incident_flux_level = 4e4 and std = 5.0
+        Strong noise: incident_flux_level = 3e4 and std = 10.0
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, prob: float = 0.1, incident_flux_level: Tuple[int, int] = (5e3, 1e4), mean: float = 0.0, std: Tuple[float, float] = (2.0, 5.0), scale: bool = False, clamp: bool = False) -> None:
+    def __init__(self, prob: float = 0.1, incident_flux_level: Tuple[int, int] = (3e4, 4e4), mean: float = 0.0, std: Tuple[float, float] = (5.0, 10.0), scale: bool = False, clamp: bool = False) -> None:
         RandomizableTransform.__init__(self, prob)
         self.incident_flux_level = incident_flux_level
         self.rand_incident_flux_level = self.incident_flux_level[0]
@@ -759,10 +758,10 @@ class RandSimulateLowDose(RandomizableTransform):
         low_dose_transmission_data = torch.tensor(self.R.poisson(self.rand_incident_flux_level * normal_dose_transmission_data) + self.R.normal(self.mean, self.rand_std, size=normal_dose_transmission_data.shape))
 
         # Ensure all non-negative values
-        low_dose_transmission_data = torch.where(low_dose_transmission_data >= 0, low_dose_transmission_data, 0)
+        low_dose_transmission_data = torch.where(low_dose_transmission_data > 0, low_dose_transmission_data, 1.0)
 
         # Compute low-dose projection data
-        low_dose_projection_data = torch.log(self.rand_incident_flux_level / (low_dose_transmission_data + sys.float_info.epsilon))
+        low_dose_projection_data = torch.log(self.rand_incident_flux_level / low_dose_transmission_data)
 
         # Filter projection of added Poisson noise
         poisson_noise_projection_data = normal_dose_projection_data - low_dose_projection_data

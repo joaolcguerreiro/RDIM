@@ -430,7 +430,7 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
 
 
 def save_samples(save_dir_path, volumes_metadata, lr_volumes, gen_volumes, gt_volumes=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=False, bound_range=False):
-    save_filenames = [os.path.join(save_dir_path, f'{os.path.splitext(filename)[0]}') for filename in volumes_metadata['filename']]
+    save_filenames = [os.path.join(save_dir_path, f'{filename.split(".")[0]}') for filename in volumes_metadata['filename']]
 
     for lr_volume, gen_volume, gt_volume, save_filename in zip(lr_volumes, gen_volumes, (gt_volumes if gt_volumes is not None else [gt_volumes] * len(gen_volumes)), save_filenames):
         save_sample(

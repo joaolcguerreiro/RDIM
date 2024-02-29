@@ -27,7 +27,7 @@ def main():
 
         # Low-Resolution Transforms
         lr_transforms = transforms.Compose([
-            RandSimulateLowDose(prob=1.0, incident_flux_level=(10000, 10000), std=(15, 15), clamp=True),
+            RandSimulateLowDose(prob=1.0, incident_flux_level=(30000, 30000), std=(10.0, 10.0), clamp=True),
         ], map_items=False, unpack_items=True)
 
         # High-Resolution Transforms
@@ -62,7 +62,7 @@ def main():
                 volume = initial_transforms(nifti_img.get_fdata())
 
                 # Compute voxel size in meters
-                voxel_size = sum(nifti_img.header.get_zooms()[:2]) / len(nifti_img.header.get_zooms()[:2]) / 1000 / args.scale_factor
+                voxel_size = sum(nifti_img.header.get_zooms()[:2]) / len(nifti_img.header.get_zooms()[:2]) / 1000
 
                 # Apply the transformations
                 lr_volume = np.around(final_transforms(lr_transforms((volume, voxel_size)))).astype(np.int16)
@@ -90,7 +90,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Simulate Low-Dode CT')
     parser.add_argument('--dir', required=True, help='Path to directory with data', type=str)
     parser.add_argument('--augmentation-factor', default=1, help='Define number of LR-HR pairs created for each data sample', type=int)
-    parser.add_argument('--scale-factor', default=2, help='Scale factor used to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()
 
     main()
