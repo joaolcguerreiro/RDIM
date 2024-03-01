@@ -1,9 +1,11 @@
 import os
 import sys
+import ast
 import argparse
+import datetime
 import logging
 import torch
-import datetime
+import numpy as np
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
@@ -76,10 +78,10 @@ def main():
 
             # Plot sample figures
             save_samples(
-                lr_volumes=lr_volumes,
-                gen_volumes=gen_volumes,
+                lr_volumes=torch.stack([clamp(lr_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for lr_volume in lr_volumes]),
+                gen_volumes=torch.stack([clamp(gen_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for gen_volume in gen_volumes]),
                 bins=100,
-                _min=_min, _max=_max, mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'samples'),
                 volumes_metadata=sr_volumes_metadata,
                 fig_size=(3, 3)
@@ -101,6 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr-dir', required=True, help='Path to low-resolution data directory', type=str)
     parser.add_argument('--save-dir', required=True, help='Path to directory where results are saved', type=str)
     parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))
+    parser.add_argument('--sample-pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=lambda arg: np.array(ast.literal_eval(arg)))
     parser.add_argument('--batch-size', default=2, help='Number of samples per batch', type=int)
     parser.add_argument('--num-workers', default=4, help='Number of subprocesses used for data loading', type=int)
     args = parser.parse_args()

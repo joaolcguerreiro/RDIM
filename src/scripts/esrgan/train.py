@@ -8,6 +8,7 @@ import yaml
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import numpy as np
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from torchview import draw_graph
@@ -329,11 +330,11 @@ def main():
         # Plot reference sample figure
         if epoch == 0:
             save_sample(
-                lr_volume=lr_volumes[-1],
-                gen_volume=upsample(lr_volumes[-1], config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]),
-                gt_volume=hr_volumes[-1],
+                lr_volume=clamp(lr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                gen_volume=clamp(clamp(upsample(lr_volumes[-1], config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]), _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                gt_volume=clamp(hr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 bins=100,
-                _min=_min, _max=_max, mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
                 save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),
                 fig_size=(3, 3)
             ) if args.val else None
@@ -373,11 +374,11 @@ def main():
 
             # Plot sample figure
             save_sample(
-                lr_volume=lr_volumes[-1],
-                gen_volume=(lambda volume: clamp(volume, _min=_min, _max=_max, mean=mean, std=std) if args.clamp else volume)(gen_volumes[-1]),
-                gt_volume=hr_volumes[-1],
+                lr_volume=clamp(lr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                gen_volume=clamp(clamp(gen_volumes[-1], _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                gt_volume=clamp(hr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 bins=100,
-                _min=_min, _max=_max, mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
                 save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}'),
                 fig_size=(3, 3)
             ) if args.val else None
@@ -416,6 +417,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume', default=None, help="Path to experiment directory to be resumed", type=str)
     parser.add_argument('--lr-patch-size', default=(-1, -1, -1), help="Low-resolution training patch size to reduce computation", type=ast.literal_eval)
     parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))
+    parser.add_argument('--sample-pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=lambda arg: np.array(ast.literal_eval(arg)))
     args = parser.parse_args()
 
     if args.resume:

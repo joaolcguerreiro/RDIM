@@ -120,8 +120,8 @@ def format_volume(volume, _min=None, _max=None):
     Expected Volume Dimensions Order is Flexible, but Channel Dimension is required to be First (Channel, ...) = (C, ...).
     """
 
-    # Scale volume to the valid range for imshow with RGB data ([0, 1] for floats or [0, 255] for integers).
-    volume = min_max_scaling(volume, _min=(_min or volume.min()), _max=(_max or volume.max())) * (255 if not torch.is_floating_point(volume) else 1.0)
+    # Scale volume to the valid range for imshow ([0, 1] for floats or [0, 255] for integers)
+    volume = min_max_scaling(volume, _min=min(_min or volume.min(), volume.min()), _max=max(_max or volume.max(), volume.max())) * (255 if not torch.is_floating_point(volume) else 1.0)
 
     # Ensure valid number of channels (Grayscale: 1, RGB: 3, RGBA: 4)
     if volume.shape[0] not in (1, 3, 4):
@@ -268,7 +268,10 @@ def clamp(volume, _min, _max, mean=None, std=None):
     _min = _min if (mean is None or std is None) else ((_min - mean) / std)
     _max = _max if (mean is None or std is None) else ((_max - mean) / std)
 
-    return ThresholdIntensity(threshold=_max, above=False, channel_wise=True, cval=_max)(ThresholdIntensity(threshold=_min, above=True, channel_wise=True, cval=_min)(volume))
+    volume = ThresholdIntensity(threshold=_min, above=True, channel_wise=True, cval=_min)(volume) if _min is not None else volume
+    volume = ThresholdIntensity(threshold=_max, above=False, channel_wise=True, cval=_max)(volume) if _max is not None else volume
+
+    return volume
 
 
 def force_valid_channels(volume, num_channel):
@@ -332,12 +335,15 @@ def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):
         save_volume(volume.to('cpu').numpy(), affine, header, filename, save_dir_path)
 
 
-def collect_batch_pixels(volumes, mean=None, std=None):
+def collect_batch_pixels(volumes, _min=None, _max=None, mean=None, std=None):
     volumes_pixels = []
 
     for volume in volumes:
         # Denormalize volume
         volume = volume if (mean is None or std is None) else denormalize(volume, mean=mean, std=std)
+
+        # Clamp volume to the original range
+        volume = clamp(volume, _min=_min, _max=_max)
 
         volumes_pixels.extend(volume.to('cpu').flatten().tolist())
 
@@ -417,8 +423,8 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
             hue='Data Type',
             bins=bins,
             bin_range=None if (_min is None or _max is None) else parse_bin_range(_min=_min, _max=_max),
-            frequency_range=(None, (compute_max_frequency(gt_pixel_values, bins=bins, _min=_min, _max=_max) * 1.15) if (_min is not None and _max is not None) else None) if bound_range else None,
-            element='step',
+            frequency_range=(None, (compute_max_frequency(gt_pixel_values, bins=bins, _min=_min, _max=_max) * 1.10) if (_min is not None and _max is not None) else None) if bound_range else None,
+            element='poly',
             fill=False,
             ax=ax_hist,
             theme=theme

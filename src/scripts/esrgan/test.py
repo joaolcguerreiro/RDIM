@@ -1,9 +1,11 @@
 import os
 import sys
+import ast
 import argparse
 import logging
 import yaml
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
@@ -87,11 +89,11 @@ def main():
 
             # Plot sample figures
             save_samples(
-                lr_volumes=lr_volumes,
-                gen_volumes=gen_volumes,
-                gt_volumes=hr_volumes,
+                lr_volumes=torch.stack([clamp(lr_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for lr_volume in lr_volumes]),
+                gen_volumes=torch.stack([clamp(gen_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for gen_volume in gen_volumes]),
+                gt_volumes=torch.stack([clamp(hr_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for hr_volume in hr_volumes]),
                 bins=100,
-                _min=_min, _max=_max, mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'test', 'samples'),
                 volumes_metadata=sr_volumes_metadata,
                 fig_size=(3, 3)
@@ -104,8 +106,8 @@ def main():
                 test_pbar.set_postfix()
 
                 # Track last batch pixel intensities
-                hr_pixel_values = collect_batch_pixels(hr_volumes, mean=mean, std=std)
-                gen_pixel_values = collect_batch_pixels(gen_volumes, mean=mean, std=std)
+                hr_pixel_values = collect_batch_pixels(hr_volumes, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std)
+                gen_pixel_values = collect_batch_pixels(gen_volumes, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std)
 
         # Logging the testing progress bar
         logging.info(test_pbar)
@@ -138,9 +140,9 @@ def main():
         x_label='Pixel Intensity',
         hue='Data Type',
         bins=100,
-        bin_range=parse_bin_range(_min=_min, _max=_max),
-        frequency_range=(None, compute_max_frequency(pixel_values=hr_pixel_values, bins=100, _min=_min, _max=_max) * 1.15),
-        element='step',
+        bin_range=parse_bin_range(_min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max)),
+        frequency_range=(None, compute_max_frequency(pixel_values=hr_pixel_values, bins=100, _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max)) * 1.10),
+        element='poly',
         fill=False,
         save_filename=os.path.join(experiment_path, 'figures', 'test', 'pixel_distribution', f'{args.epoch}')
     )
@@ -152,6 +154,7 @@ if __name__ == '__main__':
     parser.add_argument('--exp', required=True, help="Path to experiment directory", type=str)
     parser.add_argument('--epoch', required=True, help="Epoch to be tested", type=str)
     parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))
+    parser.add_argument('--sample-pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=lambda arg: np.array(ast.literal_eval(arg)))
     args = parser.parse_args()
 
     # Define experiment folder
