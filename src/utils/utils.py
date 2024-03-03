@@ -10,6 +10,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 import monai.transforms as transforms
+from monai.utils import ensure_tuple, ensure_tuple_rep
 from glob import glob
 from tqdm import tqdm
 from matplotlib.patches import Patch
@@ -121,7 +122,10 @@ def format_volume(volume, _min=None, _max=None):
     """
 
     # Scale volume to the valid range for imshow ([0, 1] for floats or [0, 255] for integers)
-    volume = min_max_scaling(volume, _min=min(_min or volume.min(), volume.min()), _max=max(_max or volume.max(), volume.max())) * (255 if not torch.is_floating_point(volume) else 1.0)
+    _min = ensure_tuple(_min or volume.min())
+    _max = ensure_tuple(_max or volume.max())
+
+    volume = min_max_scaling(volume, _min=np.minimum(_min, ensure_tuple_rep(volume.min(), len(_min))), _max=np.maximum(_max, ensure_tuple_rep(volume.max(), len(_max)))) * (255 if not torch.is_floating_point(volume) else 1.0)
 
     # Ensure valid number of channels (Grayscale: 1, RGB: 3, RGBA: 4)
     if volume.shape[0] not in (1, 3, 4):
@@ -252,30 +256,34 @@ def reverse_dimensions(volume):
     return ReverseDimensions()(volume)
 
 
-def min_max_scaling(volume, _min, _max):
-    return NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True)(volume)
-
-
-def denormalize(volume, mean, std):
-    return NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True)(volume)
+def force_valid_channels(volume, num_channel):
+    return EnsureExactChannels(num_channels=num_channel)(volume)
 
 
 def upsample(volume, scale_factor):
     return transforms.Zoom(zoom=scale_factor, mode="trilinear", keep_size=False)(volume)
 
 
-def clamp(volume, _min, _max, mean=None, std=None):
-    _min = _min if (mean is None or std is None) else ((_min - mean) / std)
-    _max = _max if (mean is None or std is None) else ((_max - mean) / std)
+def min_max_scaling(volume, _min=None, _max=None):
+    volume = NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True)(volume) if (_min is not None and _max is not None) else volume
+
+    return volume
+
+
+def denormalize(volume, mean=None, std=None):
+    volume = NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True)(volume) if (mean is not None and std is not None) else volume
+
+    return volume
+
+
+def clamp(volume, _min=None, _max=None, mean=None, std=None):
+    _min = _min if (_min is None or mean is None or std is None) else ((_min - mean) / std)
+    _max = _max if (_max is None or mean is None or std is None) else ((_max - mean) / std)
 
     volume = ThresholdIntensity(threshold=_min, above=True, channel_wise=True, cval=_min)(volume) if _min is not None else volume
     volume = ThresholdIntensity(threshold=_max, above=False, channel_wise=True, cval=_max)(volume) if _max is not None else volume
 
     return volume
-
-
-def force_valid_channels(volume, num_channel):
-    return EnsureExactChannels(num_channels=num_channel)(volume)
 
 
 def compute_scale_factor(lr_volume, hr_volume):
@@ -315,7 +323,7 @@ def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, _min=None, 
     # Number of series (volume types) and samples per series (batch size)
     num_volume_types = sum(1 for _array in [lr_volumes, sr_volumes, gt_volumes] if _array)
     batch_size = len(lr_volumes or sr_volumes or gt_volumes)
-    _labels = list(label for label, _array in zip(['Downsampled', 'Synthetic', 'Ground Truth'], [lr_volumes, sr_volumes, gt_volumes]) if _array) * batch_size if labels else None
+    _labels = list(label for label, _array in zip(['Low-Quality', 'Synthetic', 'Ground Truth'], [lr_volumes, sr_volumes, gt_volumes]) if _array) * batch_size if labels else None
 
     print_divisor(width=50)
 
@@ -327,7 +335,7 @@ def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, _min=None, 
 def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):
     for volume, filename, affine, header in zip(volumes, volumes_metadata['filename'], volumes_metadata['affine'], volumes_metadata['header']):
         # Denormalize volume
-        volume = volume if (mean is None or std is None) else denormalize(volume, mean=mean, std=std)
+        volume = denormalize(volume, mean=mean, std=std)
 
         # Reverse volume dimension order
         volume = reverse_dimensions(volume)
@@ -340,7 +348,7 @@ def collect_batch_pixels(volumes, _min=None, _max=None, mean=None, std=None):
 
     for volume in volumes:
         # Denormalize volume
-        volume = volume if (mean is None or std is None) else denormalize(volume, mean=mean, std=std)
+        volume = denormalize(volume, mean=mean, std=std)
 
         # Clamp volume to the original range
         volume = clamp(volume, _min=_min, _max=_max)
@@ -358,23 +366,26 @@ def compute_max_frequency(pixel_values, bins, _min=None, _max=None):
     return torch.histc(torch.tensor(pixel_values), bins=bins, min=float(torch.tensor(_min if _min is not None else 0).min()), max=float(torch.tensor(_max if _max is not None else 0).max())).max().item() if (torch.tensor(pixel_values).numel() > 0 and isinstance(bins, int)) else None
 
 
-def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=True, bound_range=True):
+def save_sample(save_filename, lr_volume=None, gen_volume=None, gt_volume=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=True, bound_range=True):
+    if all(volume is None for volume in [lr_volume, gen_volume, gt_volume]):
+        raise ValueError("It is required at least one volume type.")
+
     # Denormalize volumes
-    lr_volume = lr_volume if (mean is None or std is None) else denormalize(lr_volume, mean=mean, std=std)
-    gen_volume = gen_volume if (mean is None or std is None) else denormalize(gen_volume, mean=mean, std=std)
-    gt_volume = gt_volume if (mean is None or std is None or gt_volume is None) else denormalize(gt_volume, mean=mean, std=std)
+    lr_volume = denormalize(lr_volume, mean=mean, std=std) if lr_volume is not None else lr_volume
+    gen_volume = denormalize(gen_volume, mean=mean, std=std) if gen_volume is not None else gen_volume
+    gt_volume = denormalize(gt_volume, mean=mean, std=std) if gt_volume is not None else gt_volume
 
     # Compute scale factor
-    hr_volume = gen_volume if gen_volume is not None else gt_volume
+    hr_volume = gt_volume if gt_volume is not None else gen_volume
     scale_factor = compute_scale_factor(lr_volume, hr_volume) if (lr_volume is not None and hr_volume is not None) else (1, 1, 1)
 
     # Adjust volumes for visualization
-    lr_volume = format_volume(raw_lr_volume := upsample(lr_volume, scale_factor).to('cpu'), _min=_min, _max=_max)
-    gen_volume = format_volume(raw_gen_volume := gen_volume.to('cpu'), _min=_min, _max=_max)
+    lr_volume = format_volume(raw_lr_volume := upsample(lr_volume, scale_factor).to('cpu'), _min=_min, _max=_max) if lr_volume is not None else (raw_lr_volume := lr_volume)
+    gen_volume = format_volume(raw_gen_volume := gen_volume.to('cpu'), _min=_min, _max=_max) if gen_volume is not None else (raw_gen_volume := gen_volume)
     gt_volume = format_volume(raw_gt_volume := gt_volume.to('cpu'), _min=_min, _max=_max) if gt_volume is not None else (raw_gt_volume := gt_volume)
 
     # Define slice index
-    slice_index = (get_num_plane_slices(plane=plane, volume=gen_volume) // 2) if dimension == '2D' else None
+    slice_index = (get_num_plane_slices(plane=plane, volume=(hr_volume if hr_volume is not None else lr_volume)) // 2) if dimension == '2D' else None
 
     # Create a new figure
     n_columns = sum(1 for volume in [lr_volume, gen_volume, gt_volume] if volume is not None)
@@ -399,12 +410,12 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
     ax_img = np.array([[fig.add_subplot(grid_img[row, column]) for row in range(n_img_rows) for column in range(n_columns)]])
 
     # Draw slices
-    volumes, labels = zip(*filter(lambda slice_label_pair: slice_label_pair[0] is not None, zip([lr_volume, gen_volume, gt_volume], ['Downsampled', 'Synthetic', 'Ground Truth'])))
+    volumes, labels = zip(*filter(lambda slice_label_pair: slice_label_pair[0] is not None, zip([lr_volume, gen_volume, gt_volume], ['Low-Quality', 'Synthetic', 'Ground Truth'])))
     display_volumes(volumes, plane=plane, dimension=dimension, slice_index=slice_index, labels=labels, show=False, ax=ax_img, theme=theme)
 
     if with_histogram:
-        lr_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_lr_volume)) if dimension == '2D' else raw_lr_volume).flatten().tolist()
-        gen_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_gen_volume)) if dimension == '2D' else raw_gen_volume).flatten().tolist()
+        lr_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_lr_volume)) if dimension == '2D' else raw_lr_volume).flatten().tolist() if raw_lr_volume is not None else list()
+        gen_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_gen_volume)) if dimension == '2D' else raw_gen_volume).flatten().tolist() if raw_gen_volume is not None else list()
         gt_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_gt_volume)) if dimension == '2D' else raw_gt_volume).flatten().tolist() if raw_gt_volume is not None else list()
 
         # Create grid for histogram
@@ -414,8 +425,8 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
         # Draw pixel distribution histogram
         draw_histogram(
             data=[
-                {'Pixel Intensity': lr_pixel_values, 'Data Type': ['Downsampled'] * len(lr_pixel_values)},
-                {'Pixel Intensity': gen_pixel_values, 'Data Type': ['Synthetic'] * len(gen_pixel_values)},
+                *({'Pixel Intensity': lr_pixel_values, 'Data Type': ['Low-Quality'] * len(lr_pixel_values)} for lr_pixel_values in [lr_pixel_values] if lr_pixel_values),
+                *({'Pixel Intensity': gen_pixel_values, 'Data Type': ['Synthetic'] * len(gen_pixel_values)} for gen_pixel_values in [gen_pixel_values] if gen_pixel_values),
                 *({'Pixel Intensity': gt_pixel_values, 'Data Type': ['Ground Truth'] * len(gt_pixel_values)} for gt_pixel_values in [gt_pixel_values] if gt_pixel_values),
             ],
             title='Sample Pixel Distribution',
@@ -435,10 +446,17 @@ def save_sample(save_filename, lr_volume, gen_volume, gt_volume=None, bins='auto
     plt.savefig(save_filename)
 
 
-def save_samples(save_dir_path, volumes_metadata, lr_volumes, gen_volumes, gt_volumes=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=False, bound_range=False):
+def save_samples(save_dir_path, volumes_metadata, lr_volumes=None, gen_volumes=None, gt_volumes=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=False, bound_range=False):
     save_filenames = [os.path.join(save_dir_path, f'{filename.split(".")[0]}') for filename in volumes_metadata['filename']]
 
-    for lr_volume, gen_volume, gt_volume, save_filename in zip(lr_volumes, gen_volumes, (gt_volumes if gt_volumes is not None else [gt_volumes] * len(gen_volumes)), save_filenames):
+    # Parse samples
+    num_samples = max([len(volumes) for volumes in [lr_volumes, gen_volumes, gt_volumes] if volumes is not None], default=0)
+
+    lr_volumes = lr_volumes if lr_volumes is not None else [lr_volumes] * num_samples
+    gen_volumes = gen_volumes if gen_volumes is not None else [gen_volumes] * num_samples
+    gt_volumes = gt_volumes if gt_volumes is not None else [gt_volumes] * num_samples
+
+    for lr_volume, gen_volume, gt_volume, save_filename in zip(lr_volumes, gen_volumes, gt_volumes, save_filenames):
         save_sample(
             lr_volume=lr_volume,
             gen_volume=gen_volume,
