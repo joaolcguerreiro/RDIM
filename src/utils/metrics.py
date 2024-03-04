@@ -2,7 +2,7 @@ import os
 import sys
 import torch
 import numpy as np
-from monai.metrics import MSEMetric, PSNRMetric, SSIMMetric
+from monai.metrics import PSNRMetric, SSIMMetric
 from tabulate import tabulate
 sys.path.append(os.path.join('..', '..'))
 from src.utils.logger import print_divisor
@@ -20,15 +20,15 @@ class Metrics:
         predictions, ground_truths = self.preprocess(predictions=predictions, ground_truths=ground_truths)
 
         for metric in self.metrics:
-            # Compute metric score
-            score = np.mean(metric['func'](y_pred=predictions, y=ground_truths).to('cpu').numpy())
+            # Compute metric scores
+            scores = metric['func'](y_pred=predictions, y=ground_truths).to('cpu').squeeze().tolist()
 
             # Store metric score
-            metric['scores'].append(score)
+            metric['scores'] += scores
 
-        return {metric['name']: metric['scores'][-1] for metric in self.metrics}
+        return {metric['name']: np.mean(metric['scores'][-len(scores)]) for metric in self.metrics}
 
-    def get(self):
+    def get_scores(self):
         return {metric['name']: metric['scores'] for metric in self.metrics}
 
     def summary(self):
@@ -61,7 +61,6 @@ class SuperResolutionMetrics(Metrics):
 
         # Define metrics
         self.metrics = [
-            {'name': 'MSE', 'scores': [], 'func': MSEMetric()},
             {'name': 'PSNR', 'scores': [], 'func': PSNRMetric(max_val=1.0)},
             {'name': 'SSIM', 'scores': [], 'func': SSIMMetric(spatial_dims=num_spatial_dims, data_range=1.0)}
         ]

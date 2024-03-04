@@ -20,6 +20,7 @@ sys.path.append(os.path.join('..', '..', '..'))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
 from src.utils.losses import VGGLoss, GANLoss, RangeLoss
+from src.utils.metrics import SuperResolutionMetrics
 from src.utils.utils import upsample, clamp, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
@@ -99,6 +100,9 @@ def main():
     content_criterion = nn.L1Loss().to(device)
     range_criterion = RangeLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)
 
+    # Define metrics
+    metrics = SuperResolutionMetrics(num_spatial_dims=len(train_dataset.get_high_resolution_shape(only_spatial_dims=True)), _min=_min, _max=_max, mean=mean, std=std)
+
     # Load pre-trained models
     if config['MODEL']['GENERATOR']['PRE_TRAINED_PATH']:
         # Load the pre-trained checkpoint
@@ -132,12 +136,16 @@ def main():
         generator_val_losses = checkpoint['generator_val_losses']
         discriminator_train_losses = checkpoint['discriminator_train_losses']
         discriminator_val_losses = checkpoint['discriminator_val_losses']
+        train_metric_scores = checkpoint['train_metric_scores']
+        val_metric_scores = checkpoint['val_metric_scores']
     else:
         start_epoch = 0
         generator_train_losses = dict()
         generator_val_losses = dict()
         discriminator_train_losses = dict()
         discriminator_val_losses = dict()
+        train_metric_scores = dict()
+        val_metric_scores = dict()
 
     end_epoch = config['TRAINING']['EPOCHS']
 
@@ -150,6 +158,7 @@ def main():
         discriminator.train()
         generator_train_loss = 0.0
         discriminator_train_loss = 0.0
+        train_metric_score = {metric_name: 0.0 for metric_name in metrics.get_scores()}
 
         # Define training progress bar
         train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch}/{end_epoch}")
@@ -216,23 +225,35 @@ def main():
             discriminator_total_loss.backward()
             discriminator_optimizer.step()
 
-            # Update the training loss
+            # Compute metrics
+            scores = metrics.compute_scores(torch.stack([clamp(gen_volume, _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std) for gen_volume in gen_volumes]), hr_volumes)
+
+            # Update the training loss and metrics
             generator_train_loss += generator_total_loss.item()
             discriminator_train_loss += discriminator_total_loss.item()
+            train_metric_score = {metric_name: metric_scores + scores[metric_name] for metric_name, metric_scores in train_metric_score.items()}
             train_pbar.set_postfix({
-                'Gen. Train. Loss': f'{generator_total_loss.item():.4f}',
-                'Disc. Train. Loss': f'{discriminator_total_loss.item():.4f}'
+                **{
+                    'Gen. Train. Loss': f'{generator_total_loss.item():.4f}',
+                    'Disc. Train. Loss': f'{discriminator_total_loss.item():.4f}'
+                },
+                **scores
             })
 
-            # Compute average training loss for this epoch
+            # Compute average training loss and metrics for this epoch
             if batch_index + 1 == len(train_pbar):
                 generator_train_loss /= len(train_dataloader)
                 generator_train_losses[epoch + 1] = generator_train_loss
                 discriminator_train_loss /= len(train_dataloader)
                 discriminator_train_losses[epoch + 1] = discriminator_train_loss
+                train_metric_score = {metric_name: metric_scores / len(train_dataloader) for metric_name, metric_scores in train_metric_score.items()}
+                train_metric_scores[epoch + 1] = train_metric_score
                 train_pbar.set_postfix({
-                    "Avg. Gen. Train. Loss": f"{generator_train_loss:.4f}",
-                    "Avg. Disc. Train. Loss": f"{discriminator_train_loss:.4f}"
+                    **{
+                        "Avg. Gen. Train. Loss": f"{generator_train_loss:.4f}",
+                        "Avg. Disc. Train. Loss": f"{discriminator_train_loss:.4f}"
+                    },
+                    **train_metric_score
                 })
 
         # Logging the training progress bar
@@ -244,6 +265,7 @@ def main():
             discriminator.eval()
             generator_val_loss = 0.0
             discriminator_val_loss = 0.0
+            val_metric_score = {metric_name: 0.0 for metric_name in metrics.get_scores()}
 
             # Define validation progress bar
             val_pbar = tqdm(val_dataloader, desc="Validating")
@@ -297,23 +319,35 @@ def main():
                     # Discriminator Total loss
                     discriminator_total_loss = adversarial_loss
 
-                    # Update the validation loss
+                    # Compute metrics
+                    scores = metrics.compute_scores(torch.stack([clamp(gen_volume, _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std) for gen_volume in gen_volumes]), hr_volumes)
+
+                    # Update the validation loss and metrics
                     generator_val_loss += generator_total_loss.item()
                     discriminator_val_loss += discriminator_total_loss.item()
+                    val_metric_score = {metric_name: metric_scores + scores[metric_name] for metric_name, metric_scores in val_metric_score.items()}
                     val_pbar.set_postfix({
-                        "Gen. Val. Loss": f"{generator_total_loss.item():.4f}",
-                        "Disc. Val. Loss": f"{discriminator_total_loss.item():.4f}"
+                        **{
+                            "Gen. Val. Loss": f"{generator_total_loss.item():.4f}",
+                            "Disc. Val. Loss": f"{discriminator_total_loss.item():.4f}"
+                        },
+                        **scores
                     })
 
-                    # Compute average validation loss for this epoch
+                    # Compute average validation loss and metrics for this epoch
                     if batch_index + 1 == len(val_pbar):
                         generator_val_loss /= len(val_dataloader)
                         generator_val_losses[epoch + 1] = generator_val_loss
                         discriminator_val_loss /= len(val_dataloader)
                         discriminator_val_losses[epoch + 1] = discriminator_val_loss
+                        val_metric_score = {metric_name: metric_scores / len(val_dataloader) for metric_name, metric_scores in val_metric_score.items()}
+                        val_metric_scores[epoch + 1] = val_metric_score
                         val_pbar.set_postfix({
-                            "Avg. Gen. Val. Loss": f"{generator_val_loss:.4f}",
-                            "Avg. Disc. Val. Loss": f"{discriminator_val_loss:.4f}"
+                            **{
+                                "Avg. Gen. Val. Loss": f"{generator_val_loss:.4f}",
+                                "Avg. Disc. Val. Loss": f"{discriminator_val_loss:.4f}"
+                            },
+                            **val_metric_score
                         })
 
                 # Logging the validation progress bar
@@ -364,6 +398,8 @@ def main():
                 'generator_val_losses': generator_val_losses,
                 'discriminator_train_losses': discriminator_train_losses,
                 'discriminator_val_losses': discriminator_val_losses,
+                'train_metric_scores': train_metric_scores,
+                'val_metric_scores': val_metric_scores,
                 'epoch': epoch,
                 'training_lr_patch_size': args.lr_patch_size,
                 'training_data_min': _min,
@@ -406,6 +442,19 @@ def main():
                 y_label='Loss',
                 save_filename=os.path.join(experiment_path, 'figures', 'train', 'discriminator_loss')
             )
+
+            # Plot metric scores
+            for metric_name in metrics.get_scores():
+                draw_line_chart(
+                    data=[
+                        {'Epoch': train_metric_scores.keys(), metric_name: [_dict[metric_name] for _dict in train_metric_scores.values()], 'Label': 'Train Scores'},
+                        {'Epoch': val_metric_scores.keys(), metric_name: [_dict[metric_name] for _dict in val_metric_scores.values()], 'Label': 'Validation Scores'},
+                    ],
+                    title=f'Training and Validation {metric_name} Scores',
+                    x_label='Epoch',
+                    y_label=metric_name,
+                    save_filename=os.path.join(experiment_path, 'figures', 'train', metric_name.lower())
+                )
 
     print_divisor()
 

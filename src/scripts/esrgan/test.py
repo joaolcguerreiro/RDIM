@@ -118,7 +118,7 @@ def main():
     metrics.summary()
 
     # Plot metric scores
-    for metric_name, metric_scores in metrics.get().items():
+    for metric_name, metric_scores in metrics.get_scores().items():
         draw_box_plot(
             data=[
                 {'Model': ['ESRGAN'] * len(metric_scores), 'Scale factor': [checkpoint['generator_scale_factor']] * len(metric_scores), metric_name: metric_scores}
