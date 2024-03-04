@@ -385,7 +385,7 @@ def save_sample(save_filename, lr_volume=None, gen_volume=None, gt_volume=None, 
     gt_volume = format_volume(raw_gt_volume := gt_volume.to('cpu'), _min=_min, _max=_max) if gt_volume is not None else (raw_gt_volume := gt_volume)
 
     # Define slice index
-    slice_index = (get_num_plane_slices(plane=plane, volume=(hr_volume if hr_volume is not None else lr_volume)) // 2) if dimension == '2D' else None
+    slice_index = (get_num_plane_slices(plane=plane, volume=(gt_volume if gt_volume is not None else (gen_volume if gen_volume is not None else lr_volume))) // 2) if dimension == '2D' else None
 
     # Create a new figure
     n_columns = sum(1 for volume in [lr_volume, gen_volume, gt_volume] if volume is not None)

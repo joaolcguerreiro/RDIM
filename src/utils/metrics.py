@@ -21,7 +21,7 @@ class Metrics:
 
         for metric in self.metrics:
             # Compute metric scores
-            scores = metric['func'](y_pred=predictions, y=ground_truths).to('cpu').squeeze().tolist()
+            scores = metric['func'](y_pred=predictions, y=ground_truths).to('cpu').squeeze(dim=-1).tolist()
 
             # Store metric score
             metric['scores'] += scores
