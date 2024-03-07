@@ -8,7 +8,7 @@ import numpy as np
 import nibabel as nib
 import monai.transforms as transforms
 from glob import glob
-sys.path.append(os.path.join('..', '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.transforms import EnsureChannelExists, ReverseDimensions
 
 
@@ -165,7 +165,7 @@ if __name__ == '__main__':
     parser.add_argument('--min', default=-1024, help='Minimum HU scale value', type=int)
     parser.add_argument('--max', default=3071, help='Maximum HU scale value', type=int)
     parser.add_argument('--uniform-shape', default=(512, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
-    parser.add_argument('--scale-factor', default=2, help='Scale factor to reduce data resolution and alleviate computation', type=int)
+    parser.add_argument('--scale-factor', default=1, help='Scale factor to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()
 
     main()

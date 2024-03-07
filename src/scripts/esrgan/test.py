@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
 from monai.inferers.inferer import SlidingWindowInferer
-sys.path.append(os.path.join('..', '..', '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics

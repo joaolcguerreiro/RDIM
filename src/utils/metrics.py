@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from monai.metrics import PSNRMetric, SSIMMetric
 from tabulate import tabulate
-sys.path.append(os.path.join('..', '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.logger import print_divisor
 from src.utils.utils import denormalize, min_max_scaling
 

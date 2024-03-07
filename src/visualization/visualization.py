@@ -5,7 +5,7 @@ import random
 import argparse
 import numpy as np
 from torch.utils.data import DataLoader
-sys.path.append(os.path.join('..', '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.utils.utils import display_batch, set_seed
 from src.utils.logger import print_divisor

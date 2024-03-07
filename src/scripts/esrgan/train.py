@@ -16,7 +16,7 @@ from tqdm import tqdm
 from glob import glob
 from monai.inferers.inferer import SlidingWindowInferer, PatchInferer
 from monai.inferers import SlidingWindowSplitter
-sys.path.append(os.path.join('..', '..', '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator, Discriminator
 from src.utils.losses import VGGLoss, GANLoss, RangeLoss

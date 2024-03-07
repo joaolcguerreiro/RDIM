@@ -7,7 +7,7 @@ import monai.transforms as transforms
 from torchvision.models import vgg19, VGG19_Weights
 from monai.inferers.inferer import SlidingWindowInferer, PatchInferer
 from monai.inferers import SlidingWindowSplitter
-sys.path.append(os.path.join('..', '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.transforms import NormalizeIntensity, EnsureExactChannels
 from src.models.esrgan import Discriminator
 

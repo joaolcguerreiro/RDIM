@@ -14,7 +14,7 @@ from monai.utils import ensure_tuple, ensure_tuple_rep
 from glob import glob
 from tqdm import tqdm
 from matplotlib.patches import Patch
-sys.path.append(os.path.join('..', '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.logger import print_divisor
 from src.utils.transforms import PermuteDimensions, ReverseDimensions, NormalizeIntensity, ThresholdIntensity, EnsureExactChannels
 

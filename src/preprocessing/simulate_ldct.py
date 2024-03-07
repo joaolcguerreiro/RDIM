@@ -7,7 +7,7 @@ import numpy as np
 import nibabel as nib
 import monai.transforms as transforms
 from glob import glob
-sys.path.append(os.path.join('..', '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.transforms import RemoveChannelDimension, EnsureChannelExists, ReverseDimensions, RandSimulateLowDose
 
 

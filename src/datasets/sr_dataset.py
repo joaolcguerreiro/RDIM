@@ -4,7 +4,7 @@ import math
 import monai.transforms as transforms
 import torch
 from torch.utils.data import Dataset
-sys.path.append(os.path.join('..', '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.utils import get_volume_data, get_volume_metadata, compute_super_resolution_volume_metadata
 from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, NormalizeIntensity, RandSpatialCrop, RandTranslate
 
