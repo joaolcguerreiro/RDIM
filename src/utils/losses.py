@@ -44,7 +44,7 @@ class VGGLoss(nn.Module):
         ])
 
         # Set patch size
-        self.patch_size = patch_size
+        self.patch_size = np.maximum(patch_size, (32, 32, 32))
 
         # Define processing planes
         self.planes = [
@@ -58,10 +58,10 @@ class VGGLoss(nn.Module):
         transformed_predictions = torch.stack([self.vgg_transforms(prediction) for prediction in predictions], dim=0)
         transformed_ground_truths = torch.stack([self.vgg_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
 
-        # Handle 2.5D processing
-        vgg_features_predictions = []
-        vgg_features_ground_truths = []
+        # Define VGG loss
+        vgg_loss = 0.0
 
+        # Handle plane-wise processing (2.5D)
         for plane in self.planes:
             # Define network inferer
             inferer = SlidingWindowInferer(roi_size=list(self.patch_size[dim] for dim in plane['coplanar_axes_dims']), overlap=0.25, mode='gaussian')
@@ -71,10 +71,16 @@ class VGGLoss(nn.Module):
             transformed_ground_truths_2d = transformed_ground_truths.permute(-5, plane['orthogonal_axis_dim'], -4, *plane['coplanar_axes_dims']).contiguous().view(-1, 3, *(transformed_ground_truths.shape[dim] for dim in plane['coplanar_axes_dims']))
 
             # Compute VGG features
-            vgg_features_predictions.append(inferer(inputs=transformed_predictions_2d, network=self.vgg))
-            vgg_features_ground_truths.append(inferer(inputs=transformed_ground_truths_2d, network=self.vgg).detach())
+            vgg_features_predictions_2d = inferer(inputs=transformed_predictions_2d, network=self.vgg)
+            vgg_features_ground_truths_2d = inferer(inputs=transformed_ground_truths_2d, network=self.vgg).detach()
 
-        return self.criterion(torch.stack(vgg_features_predictions), torch.stack(vgg_features_ground_truths))
+            # Accumulate and compute plane VGG loss
+            vgg_loss += self.criterion(vgg_features_predictions_2d, vgg_features_ground_truths_2d)
+
+        # Compute mean plane VGG loss
+        vgg_loss = vgg_loss / len(self.planes)
+
+        return vgg_loss
 
 
 class Med3DLoss(nn.Module):
