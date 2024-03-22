@@ -147,8 +147,8 @@ In the following instructions, replace `<model>` by one of the options below:
    ```
 
    ```
-   # Without Validation
-   python train.py --val=False
+   # With Validation
+   python train.py --val=True
    ```
 
 > Note: If `lr_patch_size="[-1, -1, -1]"` then no cropping is employed (more computationally expensive)... Also, for `lr_patch_size` equal or smaller than `"[8, 8, 8]"` the `batch_size` is required to be greater than `1` because of discriminator batch norm.

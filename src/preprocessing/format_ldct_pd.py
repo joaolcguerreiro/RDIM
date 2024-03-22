@@ -20,6 +20,9 @@ def main():
         test_dir_path = os.path.join(args.dir, 'testing')
 
         for dir_path in [train_dir_path, val_dir_path, test_dir_path]:
+            if not os.path.exists(dir_path):
+                continue
+
             # Remove and create LR and HR directories
             lr_dir_path = os.path.join(dir_path, 'LR')
             hr_dir_path = os.path.join(dir_path, 'HR')
@@ -164,7 +167,7 @@ if __name__ == '__main__':
     parser.add_argument('--dir', required=True, help='Path to directory with raw data', type=str)
     parser.add_argument('--min', default=-1024, help='Minimum HU scale value', type=int)
     parser.add_argument('--max', default=3071, help='Maximum HU scale value', type=int)
-    parser.add_argument('--uniform-shape', default=(512, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
+    parser.add_argument('--uniform-shape', default=(256, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
     parser.add_argument('--scale-factor', default=1, help='Scale factor to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()
 

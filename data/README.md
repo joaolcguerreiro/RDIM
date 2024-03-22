@@ -51,7 +51,7 @@ Every low-resolution image should have a corresponding high-resolution image. Th
       ...
 ```
 
-> Note: Validation data is optional. Use flag `--val=False` during training...
+> Note: Validation data split is optional.
 
 <hr style="border:1px solid gray">
 
@@ -85,6 +85,8 @@ Every low-resolution image should have a corresponding high-resolution image. Th
    ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py`.
 
 <hr style="border:1px solid gray">
 
@@ -126,13 +128,17 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
 
+> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py` and ignore `simulate_ldct.py` for `validation` directory.
+
 <hr style="border:1px solid gray">
 
 #### Prepare ??Low-Field MRI?? Dataset
 
-`... download_some_name.sh... clean_some_name.py... simulate_lfmri.py... split_data.py`
+`... download_some_name.sh... clean_some_name.py... split_data.py... simulate_lfmri.py`
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py` and ignore `simulate_lfmri.py` for `validation` directory.
 
 <hr style="border:1px solid gray">
 
@@ -213,5 +219,7 @@ If the dataset does not include data splits or lacks LR-HR pairs, run the follow
    ```
 
 > Note: Expects `training`, `validation`, and `testing` directories inside `<dataset_name>` directory.
+
+> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py` and ignore `simulate_ldct.py`/`simulate_lfmri.py` for `validation` directory.
 
 > Note: It is assumed that the dataset is stored in the `data` directory, aligned with the structure in [Overview](#overview). The aforementioned is not mandatory and the dataset directory location is arbitrary. In such case adjust the `-dir` options in the commands above.

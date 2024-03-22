@@ -34,6 +34,9 @@ def main():
         hr_transforms = transforms.Compose([
         ])
 
+        if not os.path.exists(args.dir):
+            raise FileNotFoundError(f"Directory with data '{args.dir}' does not exist")
+
         # Remove and create LR and HR directories
         lr_dir_path = os.path.join(args.dir, 'LR')
         hr_dir_path = os.path.join(args.dir, 'HR')

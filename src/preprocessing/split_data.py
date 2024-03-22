@@ -9,10 +9,13 @@ def main():
     try:
         # Remove and create training, validation, and testing directories
         train_dir_path = os.path.join(args.dir, 'training')
-        val_dir_path = os.path.join(args.dir, 'validation')
+        val_dir_path = os.path.join(args.dir, 'validation') if args.val else None
         test_dir_path = os.path.join(args.dir, 'testing')
 
         for dir_path in [train_dir_path, val_dir_path, test_dir_path]:
+            if not dir_path:
+                continue
+
             if os.path.exists(dir_path):
                 shutil.rmtree(dir_path)
 
@@ -26,6 +29,9 @@ def main():
         val, test = train_test_split(test, test_size=0.5, shuffle=True, random_state=20) if args.val else ([], test)
 
         for split, dir_path in zip([train, val, test], [train_dir_path, val_dir_path, test_dir_path]):
+            if not dir_path:
+                continue
+
             for file_path in split:
                 shutil.move(file_path, dir_path)
     except Exception as e:
@@ -37,7 +43,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Split data')
     parser.add_argument('--dir', required=True, help='Path to directory with data', type=str)
     parser.add_argument('--val', default=True, help='Build validation split', type=(lambda arg: (str(arg).lower() == 'true')))
-    parser.add_argument('--test-size', default=0.05, help='Fraction of data for evaluation', type=float)
+    parser.add_argument('--test-size', default=0.1, help='Fraction of data for evaluation', type=float)
     args = parser.parse_args()
 
     main()

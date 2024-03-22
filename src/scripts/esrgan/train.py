@@ -413,7 +413,7 @@ def main():
 if __name__ == '__main__':
     # Define argument parser
     parser = argparse.ArgumentParser(description='Training Script')
-    parser.add_argument('--val', default=True, help='Apply validation during training', type=(lambda arg: (str(arg).lower() == 'true')))
+    parser.add_argument('--val', default=False, help='Apply validation during training', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--resume', default=None, help="Path to experiment directory to be resumed", type=str)
     parser.add_argument('--lr-patch-size', default=(-1, -1, -1), help="Low-resolution training patch size to reduce computation", type=ast.literal_eval)
     parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))

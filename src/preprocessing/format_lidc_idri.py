@@ -168,8 +168,8 @@ if __name__ == '__main__':
     parser.add_argument('--max-slice-thick', default=1.25, help='Maximum slice thickness per volume', type=float)
     parser.add_argument('--min', default=-1024, help='Minimum HU scale value', type=int)
     parser.add_argument('--max', default=3071, help='Maximum HU scale value', type=int)
-    parser.add_argument('--uniform-shape', default=(512, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
-    parser.add_argument('--scale-factor', default=2, help='Scale factor to reduce data resolution and alleviate computation', type=int)
+    parser.add_argument('--uniform-shape', default=(256, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)
+    parser.add_argument('--scale-factor', default=1, help='Scale factor to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()
 
     main()
