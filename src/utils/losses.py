@@ -58,8 +58,8 @@ class VGGLoss(nn.Module):
         transformed_predictions = torch.stack([self.vgg_transforms(prediction) for prediction in predictions], dim=0)
         transformed_ground_truths = torch.stack([self.vgg_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
 
-        # Define VGG loss
-        vgg_loss = 0.0
+        # Define total VGG loss
+        vgg_total_loss = 0.0
 
         # Handle plane-wise processing (2.5D)
         for plane in self.planes:
@@ -75,12 +75,9 @@ class VGGLoss(nn.Module):
             vgg_features_ground_truths_2d = inferer(inputs=transformed_ground_truths_2d, network=self.vgg).detach()
 
             # Accumulate and compute plane VGG loss
-            vgg_loss += self.criterion(vgg_features_predictions_2d, vgg_features_ground_truths_2d)
+            vgg_total_loss += self.criterion(vgg_features_predictions_2d, vgg_features_ground_truths_2d)
 
-        # Compute mean plane VGG loss
-        vgg_loss = vgg_loss / len(self.planes)
-
-        return vgg_loss
+        return vgg_total_loss / len(self.planes)
 
 
 class Med3DLoss(nn.Module):

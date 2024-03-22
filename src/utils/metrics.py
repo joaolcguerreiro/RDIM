@@ -26,7 +26,7 @@ class Metrics:
             # Store metric score
             metric['scores'] += scores
 
-        return {metric['name']: np.mean(metric['scores'][-len(scores)]) for metric in self.metrics}
+        return {metric['name']: np.mean(metric['scores'][-len(scores):]) for metric in self.metrics}
 
     def get_scores(self):
         return {metric['name']: metric['scores'] for metric in self.metrics}
