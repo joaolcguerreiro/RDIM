@@ -160,8 +160,8 @@ def main():
             hr_volumes = hr_volumes.to(device)
 
             # Define adversarial ground truths labels
-            real_labels_true = torch.ones((config["TRAINING"]["BATCH_SIZE"], 1), requires_grad=False).to(device)
-            fake_labels_true = torch.zeros((config["TRAINING"]["BATCH_SIZE"], 1), requires_grad=False).to(device)
+            real_labels_true = torch.ones((len(hr_volumes), 1), requires_grad=False).to(device)
+            fake_labels_true = torch.zeros((len(lr_volumes), 1), requires_grad=False).to(device)
 
             #=========================#
             #     Train Generator     #
@@ -255,8 +255,8 @@ def main():
                     hr_volumes = hr_volumes.to(device)
 
                     # Define adversarial ground truths labels
-                    real_labels_true = torch.ones((config["VALIDATION"]["BATCH_SIZE"], 1)).to(device)
-                    fake_labels_true = torch.zeros((config["VALIDATION"]["BATCH_SIZE"], 1)).to(device)
+                    real_labels_true = torch.ones((len(hr_volumes), 1)).to(device)
+                    fake_labels_true = torch.zeros((len(lr_volumes), 1)).to(device)
 
                     #=========================#
                     #    Validate Generator   #
