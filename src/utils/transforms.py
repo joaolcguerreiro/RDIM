@@ -700,13 +700,14 @@ class RandSimulateLowDose(RandomizableTransform):
         Voxel size units are expected to be meters.
 
     Usage:
-        Medium noise: incident_flux_level = 5e4 and std = 5.0
-        Strong noise: incident_flux_level = 3e4 and std = 10.0
+        Weak noise: incident_flux_level = 5e4 and std = 0.0
+        Medium noise: incident_flux_level = 3e4 and std = 5.0
+        Strong noise: incident_flux_level = 1e4 and std = 10.0
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, prob: float = 0.1, incident_flux_level: Tuple[int, int] = (3e4, 5e4), mean: float = 0.0, std: Tuple[float, float] = (5.0, 10.0), scale: bool = False, clamp: bool = False) -> None:
+    def __init__(self, prob: float = 0.1, incident_flux_level: Tuple[int, int] = (1e4, 3e4), mean: float = 0.0, std: Tuple[float, float] = (0.0, 5.0), scale: bool = False, clamp: bool = False) -> None:
         RandomizableTransform.__init__(self, prob)
         self.incident_flux_level = incident_flux_level
         self.rand_incident_flux_level = self.incident_flux_level[0]

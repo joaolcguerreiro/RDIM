@@ -27,7 +27,7 @@ def main():
 
         # Low-Resolution Transforms
         lr_transforms = transforms.Compose([
-            RandSimulateLowDose(prob=1.0, incident_flux_level=(30000, 30000), std=(10.0, 10.0), clamp=True),
+            RandSimulateLowDose(prob=1.0, incident_flux_level=(10000, 10000), std=(5.0, 5.0), clamp=True),
         ], map_items=False, unpack_items=True)
 
         # High-Resolution Transforms
