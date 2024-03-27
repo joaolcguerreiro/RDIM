@@ -35,7 +35,7 @@ def main():
     _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_channels=config["MODEL"]["GENERATOR"]["IN_CHANNEL"])
 
     # Define datasets and data loaders
-    train_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], lr_patch_size=args.lr_patch_size, _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
+    train_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], lr_patch_size=config["TRAINING"]["LR_PATCH_SIZE"], _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
     train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
     val_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["VALIDATION"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["VALIDATION"]["HR_DIR_PATH"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False) if args.val else None
     val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate) if args.val else None
@@ -73,8 +73,8 @@ def main():
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferers
-    generator_inferer = SlidingWindowInferer(roi_size=args.lr_patch_size, overlap=0.25, mode='gaussian', sw_device=device, device=device)
-    discriminator_inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=list(map(lambda patch_dim, original_dim: (patch_dim if patch_dim > 0 else original_dim) * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], args.lr_patch_size, train_dataset.get_low_resolution_shape(only_spatial_dims=True))), overlap=0.25, device=device), match_spatial_shape=True, device=device)
+    generator_inferer = SlidingWindowInferer(roi_size=config["TRAINING"]["LR_PATCH_SIZE"], overlap=0.25, mode='gaussian', sw_device=device, device=device)
+    discriminator_inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=list(map(lambda patch_dim, original_dim: (patch_dim if patch_dim > 0 else original_dim) * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], config["TRAINING"]["LR_PATCH_SIZE"], train_dataset.get_low_resolution_shape(only_spatial_dims=True))), overlap=0.25, device=device), match_spatial_shape=True, device=device)
 
     # Define optimizers and schedulers
     generator_optimizer = optim.Adam(
@@ -94,7 +94,7 @@ def main():
     discriminator_scheduler = optim.lr_scheduler.StepLR(discriminator_optimizer, step_size=config['SCHEDULER']['DISCRIMINATOR']['STEP_SIZE'], gamma=config['SCHEDULER']['DISCRIMINATOR']['GAMMA'])
 
     # Define the loss function
-    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], args.lr_patch_size))).to(device)
+    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], config["TRAINING"]["LR_PATCH_SIZE"]))).to(device)
     adversarial_criterion = GANLoss(_type=config['MODEL']['GAN_TYPE'], with_logits=True).to(device)
     content_criterion = nn.L1Loss().to(device)
     range_criterion = RangeLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)
@@ -365,7 +365,7 @@ def main():
                 'discriminator_train_losses': discriminator_train_losses,
                 'discriminator_val_losses': discriminator_val_losses,
                 'epoch': epoch,
-                'training_lr_patch_size': args.lr_patch_size,
+                'training_lr_patch_size': np.maximum(config["TRAINING"]["LR_PATCH_SIZE"], train_dataset.get_low_resolution_shape(only_spatial_dims=True)),
                 'training_data_min': _min,
                 'training_data_max': _max,
                 'training_data_mean': mean,
@@ -415,7 +415,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training Script')
     parser.add_argument('--val', default=False, help='Apply validation during training', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--resume', default=None, help="Path to experiment directory to be resumed", type=str)
-    parser.add_argument('--lr-patch-size', default=(-1, -1, -1), help="Low-resolution training patch size to reduce computation", type=ast.literal_eval)
     parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--sample-pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=lambda arg: np.array(ast.literal_eval(arg)))
     args = parser.parse_args()

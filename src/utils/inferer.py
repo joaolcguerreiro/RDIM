@@ -23,9 +23,9 @@ tqdm, _ = optional_import("tqdm", name="tqdm")
 _nearest_mode = "nearest-exact" if pytorch_after(1, 11) else "nearest"
 
 
-class AdaptiveConditionalSlidingWindowInferer(Inferer):
+class MultiScaleConditionalSlidingWindowInferer(Inferer):
     """
-    Sliding window method for model inference,
+    Multi-scale conditional sliding window method for model inference,
     with `sw_batch_size` windows for every model.forward().
     Usage example can be found in the :py:class:`monai.inferers.Inferer` base class.
 

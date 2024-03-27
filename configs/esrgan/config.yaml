@@ -50,8 +50,9 @@ GAN_TYPE_OPTIONS:
 #=================================================================================================================#
 
 TRAINING:
-  EPOCHS: 500
-  BATCH_SIZE: 8
+  EPOCHS: 300
+  BATCH_SIZE: 2
+  LR_PATCH_SIZE: [-1, -1, -1]
   AUGMENTATION: True
   SAVE_INTERVAL: 5
 
@@ -88,7 +89,7 @@ LOSS_WEIGHTS:
 #=================================================================================================================#
 
 VALIDATION:
-  BATCH_SIZE: 8
+  BATCH_SIZE: 1
 
 TESTING:
-  BATCH_SIZE: 8
+  BATCH_SIZE: 1
