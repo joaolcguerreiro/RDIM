@@ -73,8 +73,8 @@ def main():
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferers
-    generator_inferer = SlidingWindowInferer(roi_size=config["TRAINING"]["LR_PATCH_SIZE"], overlap=0.25, mode='gaussian', sw_device=device, device=device)
-    discriminator_inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=list(map(lambda patch_dim, original_dim: (patch_dim if patch_dim > 0 else original_dim) * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], config["TRAINING"]["LR_PATCH_SIZE"], train_dataset.get_low_resolution_shape(only_spatial_dims=True))), overlap=0.25, device=device), match_spatial_shape=True, device=device)
+    generator_inferer = SlidingWindowInferer(roi_size=train_dataset.get_low_resolution_shape(only_spatial_dims=True), overlap=0.25, mode='gaussian', sw_device=device, device=device)
+    discriminator_inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True), overlap=0.25, device=device), match_spatial_shape=True, device=device)
 
     # Define optimizers and schedulers
     generator_optimizer = optim.Adam(
@@ -94,7 +94,7 @@ def main():
     discriminator_scheduler = optim.lr_scheduler.StepLR(discriminator_optimizer, step_size=config['SCHEDULER']['DISCRIMINATOR']['STEP_SIZE'], gamma=config['SCHEDULER']['DISCRIMINATOR']['GAMMA'])
 
     # Define the loss function
-    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=list(map(lambda dim: dim * config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], config["TRAINING"]["LR_PATCH_SIZE"]))).to(device)
+    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True)).to(device)
     adversarial_criterion = GANLoss(_type=config['MODEL']['GAN_TYPE'], with_logits=True).to(device)
     content_criterion = nn.L1Loss().to(device)
     range_criterion = RangeLoss(_min=_min, _max=_max, mean=mean, std=std).to(device)
@@ -365,7 +365,7 @@ def main():
                 'discriminator_train_losses': discriminator_train_losses,
                 'discriminator_val_losses': discriminator_val_losses,
                 'epoch': epoch,
-                'training_lr_patch_size': np.maximum(config["TRAINING"]["LR_PATCH_SIZE"], train_dataset.get_low_resolution_shape(only_spatial_dims=True)),
+                'training_lr_patch_size': train_dataset.get_low_resolution_shape(only_spatial_dims=True),
                 'training_data_min': _min,
                 'training_data_max': _max,
                 'training_data_mean': mean,
