@@ -48,7 +48,7 @@ def main():
     ).to(device)
 
     # Log Generator
-    summary(generator, input_size=(1, test_dataset.get_num_channels(), *checkpoint['training_lr_patch_size']), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    summary(generator, input_size=(1, checkpoint['generator_in_channels'], *checkpoint['training_lr_patch_size']), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferer

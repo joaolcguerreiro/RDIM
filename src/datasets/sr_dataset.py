@@ -95,11 +95,6 @@ class SuperResolutionDataset(Dataset):
 
         return hr_volume.shape[(1 if only_spatial_dims else None):] if self.hr_data_dir else None
 
-    def get_num_channels(self):
-        lr_volume, hr_volume, _ = self[0]
-
-        return lr_volume.shape[0] if self.lr_data_dir else (hr_volume.shape[0] if self.hr_data_dir else None)
-
     def increment_epoch(self):
         self.epoch += 1
 
