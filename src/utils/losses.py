@@ -5,8 +5,7 @@ import numpy as np
 import torch.nn as nn
 import monai.transforms as transforms
 from torchvision.models import vgg19, VGG19_Weights
-from monai.inferers.inferer import SlidingWindowInferer, PatchInferer
-from monai.inferers import SlidingWindowSplitter
+from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.transforms import NormalizeIntensity, EnsureExactChannels
 from src.models.esrgan import Discriminator
@@ -81,7 +80,7 @@ class VGGLoss(nn.Module):
 
 
 class Med3DLoss(nn.Module):
-    def __init__(self, original_size, patch_size=(-1, -1, -1), mean=None, std=None):
+    def __init__(self, mean=None, std=None, patch_size=(-1, -1, -1)):
         super().__init__()
 
         # Define Criterion
@@ -106,8 +105,8 @@ class Med3DLoss(nn.Module):
             transforms.ToTensor(),
         ])
 
-        # Define network inferer with minimum patch size of 8x8x8
-        self.inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=np.maximum(list(map(lambda patch_dim, original_dim: patch_dim if patch_dim > 0 else original_dim, patch_size, original_size)), [8, 8, 8]).tolist(), overlap=0.25), match_spatial_shape=True)
+        # Define network inferer
+        self.inferer = SlidingWindowInferer(roi_size=patch_size, overlap=0.25, mode='gaussian')
 
     def to(self, *args, **kwargs):
         # Required to move non-parameter attributes to device
@@ -203,7 +202,7 @@ class GANDLoss(nn.Module):
     GANDLoss (Generative Adversarial Network Discriminator Loss), computes perceptual loss based on the features from a GAN discriminator.
     """
 
-    def __init__(self, checkpoint, mean, std, patch_size=(-1, -1, -1)):
+    def __init__(self, checkpoint, mean=None, std=None, patch_size=(-1, -1, -1)):
         super().__init__()
 
         # Define Criterion
@@ -231,8 +230,8 @@ class GANDLoss(nn.Module):
 
         # Discriminator transforms
         self.discriminator_transforms = transforms.Compose([
-            NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True),
-            EnsureExactChannels(num_channels=checkpoint['discriminator_num_features']),
+            NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
+            EnsureExactChannels(num_channels=checkpoint['discriminator_in_channels']),
             NormalizeIntensity(mean=checkpoint['training_data_mean'], std=checkpoint['training_data_std'], channel_wise=True),
             transforms.ToTensor(),
         ])
