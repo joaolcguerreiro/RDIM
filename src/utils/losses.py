@@ -5,7 +5,8 @@ import numpy as np
 import torch.nn as nn
 import monai.transforms as transforms
 from torchvision.models import vgg19, VGG19_Weights
-from monai.inferers.inferer import SlidingWindowInferer
+from monai.inferers.inferer import PatchInferer
+from monai.inferers import SlidingWindowSplitter
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.transforms import NormalizeIntensity, EnsureExactChannels
 from src.models.esrgan import Discriminator
@@ -17,8 +18,9 @@ class VGGLoss(nn.Module):
     Expected volume dimensions order is arbitrary.
     """
 
-    def __init__(self, _min, _max, mean=None, std=None, patch_size=(-1, -1, -1)):
+    def __init__(self, _min, _max, mean=None, std=None, original_size=None, patch_size=(-1, -1, -1), min_spatial_size=(16, 16, 16)):
         super().__init__()
+        assert not (original_size is None and np.any(np.array(patch_size) < 0)), f'Original size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
 
         # Define Criterion
         self.criterion = nn.L1Loss()
@@ -36,14 +38,14 @@ class VGGLoss(nn.Module):
         self.vgg_transforms = transforms.Compose([
             NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
             NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True),
-            transforms.SpatialPad(spatial_size=(32, 32, 32)),
+            transforms.SpatialPad(spatial_size=min_spatial_size),
             EnsureExactChannels(num_channels=3),
             NormalizeIntensity(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], channel_wise=True),
             transforms.ToTensor(),
         ])
 
         # Set patch size
-        self.patch_size = np.maximum(patch_size, (32, 32, 32))
+        self.patch_size = np.maximum(np.where(np.array(patch_size) >= 0, patch_size, original_size), min_spatial_size)
 
         # Define processing planes
         self.planes = [
@@ -63,7 +65,7 @@ class VGGLoss(nn.Module):
         # Handle plane-wise processing (2.5D)
         for plane in self.planes:
             # Define network inferer
-            inferer = SlidingWindowInferer(roi_size=list(self.patch_size[dim] for dim in plane['coplanar_axes_dims']), overlap=0.25, mode='gaussian')
+            inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=list(self.patch_size[dim] for dim in plane['coplanar_axes_dims']), overlap=0.25), match_spatial_shape=True)
 
             # Convert 3D data to 2D
             transformed_predictions_2d = transformed_predictions.permute(-5, plane['orthogonal_axis_dim'], -4, *plane['coplanar_axes_dims']).contiguous().view(-1, 3, *(transformed_predictions.shape[dim] for dim in plane['coplanar_axes_dims']))
@@ -80,8 +82,9 @@ class VGGLoss(nn.Module):
 
 
 class Med3DLoss(nn.Module):
-    def __init__(self, mean=None, std=None, patch_size=(-1, -1, -1)):
+    def __init__(self, _min, _max, mean=None, std=None, original_size=None, patch_size=(-1, -1, -1), min_spatial_size=(8, 8, 8)):
         super().__init__()
+        assert not (original_size is None and np.any(np.array(patch_size) < 0)), f'Original size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
 
         # Define Criterion
         self.criterion = nn.L1Loss()
@@ -100,13 +103,20 @@ class Med3DLoss(nn.Module):
 
         # Med3D transforms
         self.med3d_transforms = transforms.Compose([
-            NormalizeIntensity(mean=mean, std=std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
+            NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
+            NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True),
+            transforms.SpatialPad(spatial_size=min_spatial_size),
             EnsureExactChannels(num_channels=1),
+            NormalizeIntensity(mean=-_min/(_max-_min), std=1/(_max-_min), channel_wise=True),
+            NormalizeIntensity(mean=mean, std=std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
             transforms.ToTensor(),
         ])
 
+        # Set patch size
+        self.patch_size = np.maximum(np.where(np.array(patch_size) >= 0, patch_size, original_size), min_spatial_size)
+
         # Define network inferer
-        self.inferer = SlidingWindowInferer(roi_size=patch_size, overlap=0.25, mode='gaussian')
+        self.inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=self.patch_size, overlap=0.25), match_spatial_shape=True)
 
     def to(self, *args, **kwargs):
         # Required to move non-parameter attributes to device
@@ -202,8 +212,9 @@ class GANDLoss(nn.Module):
     GANDLoss (Generative Adversarial Network Discriminator Loss), computes perceptual loss based on the features from a GAN discriminator.
     """
 
-    def __init__(self, checkpoint, mean=None, std=None, patch_size=(-1, -1, -1)):
+    def __init__(self, checkpoint, _min, _max, mean=None, std=None, original_size=None, patch_size=(-1, -1, -1), min_spatial_size=(16, 16, 16)):
         super().__init__()
+        assert not (original_size is None and np.any(np.array(patch_size) < 0)), f'Original size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
 
         # Define Criterion
         self.criterion = nn.L1Loss()
@@ -231,13 +242,19 @@ class GANDLoss(nn.Module):
         # Discriminator transforms
         self.discriminator_transforms = transforms.Compose([
             NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
+            NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True),
+            transforms.SpatialPad(spatial_size=min_spatial_size),
             EnsureExactChannels(num_channels=checkpoint['discriminator_in_channels']),
+            NormalizeIntensity(mean=-_min/(_max-_min), std=1/(_max-_min), channel_wise=True),
             NormalizeIntensity(mean=checkpoint['training_data_mean'], std=checkpoint['training_data_std'], channel_wise=True),
             transforms.ToTensor(),
         ])
 
+        # Set patch size
+        self.patch_size = np.maximum(np.where(np.array(patch_size) >= 0, patch_size, original_size), min_spatial_size)
+
         # Define network inferer
-        self.inferer = SlidingWindowInferer(roi_size=patch_size, overlap=0.25, mode='gaussian')
+        self.inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=self.patch_size, overlap=0.25), match_spatial_shape=True)
 
     def forward(self, predictions, ground_truths):
         # Preprocess data as expected by Discriminator
