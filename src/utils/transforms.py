@@ -563,7 +563,7 @@ class RandSpatialCrop(RandomizableTransform):
 
         start_pos = []
         for i in range(num_spatial_dims):
-            if self.lr_roi_size[i] > 0:
+            if 0 < self.lr_roi_size[i] <= lr_shape[i]:
                 max_val = lr_shape[-num_spatial_dims + i] - self.lr_roi_size[i] + 1
                 start_pos.append(self.R.randint(max_val))
             else:
@@ -592,7 +592,7 @@ class RandSpatialCrop(RandomizableTransform):
         volume_start_pos = tuple(pos * scale_factor for pos in self._start_pos)
         volume_roi_size = tuple(size * scale_factor if size > 0 else size for size in self.lr_roi_size)
 
-        # Crop HR
+        # Crop volume
         slicer = [slice(None)] + [slice(start, start + size) if size > 0 else slice(None) for start, size in zip(volume_start_pos, volume_roi_size)]
         volume_crop = volume[slicer]
 

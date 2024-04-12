@@ -146,7 +146,7 @@ In the following instructions, replace `<model>` by one of the options below:
    python train.py --val=True
    ```
 
-> Note: Set `LR_PATCH_SIZE` for patch-based training (recommended)... When `LR_PATCH_SIZE=[-1, -1, -1]` then no cropping is employed (more computationally expensive)... Also, for `LR_PATCH_SIZE` equal or smaller than `"[8, 8, 8]"` the `batch_size` is required to be greater than `1` because of discriminator batch norm.
+> Note: Set `LR_PATCH_SIZE` for patch-based training (recommended)... When `LR_PATCH_SIZE=[-1, -1, -1]` then no cropping is employed (more computationally expensive)... Also, for `LR_PATCH_SIZE` equal or smaller than `[8, 8, 8]` the `batch_size` is required to be greater than `1` because of discriminator batch norm.
 
 > Note: For VoxRDiff the dimensions of the `LR_PATCH_SIZE` are recommended to be powers of 2...
 
