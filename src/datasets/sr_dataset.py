@@ -52,7 +52,7 @@ class SuperResolutionDataset(Dataset):
         ]) if augmentation else transforms.Compose([])
 
         # Patch-based computation transform
-        self.patch_transform = RandSpatialCrop(lr_roi_size=lr_patch_size)
+        self.patch_transform = RandSpatialCrop(lr_patch_size=lr_patch_size)
 
     def __len__(self):
         return len(self.lr_files) if self.lr_data_dir else (len(self.hr_files) if self.hr_data_dir else 0)

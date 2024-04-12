@@ -509,8 +509,7 @@ class RandTranslate(RandomizableTransform):
         # Process translate_range based on volume dimensions
         if isinstance(self.translate_range, (float, int)):
             self.translate_range = ((-self.translate_range, self.translate_range),) * num_spatial_dims
-        elif isinstance(self.translate_range, (list, tuple)) and all(
-                isinstance(item, (float, int)) for item in self.translate_range):
+        elif isinstance(self.translate_range, (list, tuple)) and all(isinstance(item, (float, int)) for item in self.translate_range):
             self.translate_range = tuple((-val, val) for val in self.translate_range)
         else:
             self.translate_range = self.translate_range
@@ -536,64 +535,64 @@ class RandTranslate(RandomizableTransform):
 
 class RandSpatialCrop(RandomizableTransform):
     """
-    Randomly crop a volume. The ROI (Region of Interest) size is computed based on a provided low-resolution size and scale factor.
+    Randomly crop a volume. The patch size (ROI - Region of Interest) is computed based on a provided low-resolution size and scale factor.
 
     Args:
-        lr_roi_size: Low resolution region of interest size for the crop.
+        lr_patch_size: Low resolution region of interest size for the crop.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, lr_roi_size: Union[Sequence[int], int]) -> None:
+    def __init__(self, lr_patch_size: Union[Sequence[int], int]) -> None:
         RandomizableTransform.__init__(self, 1.0)
-        self.lr_roi_size = ensure_tuple(lr_roi_size)
-        self._start_pos = (0,) * len(self.lr_roi_size)
+        self.lr_patch_size = ensure_tuple(lr_patch_size)
+        self.start_pos = (0,) * len(self.lr_patch_size)
 
-    def randomize(self, lr_shape: Union[Sequence[int], int]) -> None:
+    def randomize(self, lr_size: Union[Sequence[int], int]) -> None:
         super().randomize(None)
 
         if not self._do_transform:
             return None
 
-        # Ensure lr_roi_size matches with spatial dimensions
-        num_spatial_dims = len(lr_shape)
+        # Ensure low-resolution patch size matches with spatial dimensions
+        num_spatial_dims = len(lr_size)
 
-        if len(self.lr_roi_size) < num_spatial_dims:
-            self.lr_roi_size = ensure_tuple_rep(self.lr_roi_size, num_spatial_dims)
+        if len(self.lr_patch_size) < num_spatial_dims:
+            self.lr_patch_size = ensure_tuple_rep(self.lr_patch_size, num_spatial_dims)
 
         start_pos = []
-        for i in range(num_spatial_dims):
-            if 0 < self.lr_roi_size[i] <= lr_shape[i]:
-                max_val = lr_shape[-num_spatial_dims + i] - self.lr_roi_size[i] + 1
+        for dim_index in range(num_spatial_dims):
+            if 0 < self.lr_patch_size[dim_index] <= lr_size[dim_index]:
+                max_val = lr_size[dim_index] - self.lr_patch_size[dim_index] + 1
                 start_pos.append(self.R.randint(max_val))
             else:
                 # Start from the beginning for negative ROI sizes
                 start_pos.append(0)
 
-        self._start_pos = tuple(start_pos)
+        self.start_pos = tuple(start_pos)
 
     def __call__(self, volume: torch.Tensor, scale_factor: int = None, randomize: bool = True) -> torch.Tensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
-        if torch.where(torch.tensor(self.lr_roi_size) <= 0, True, False).all():
+        if torch.where(torch.tensor(self.lr_patch_size) <= 0, True, False).all():
             return volume
 
         if scale_factor is None:
             return volume
 
         if randomize:
-            lr_shape = tuple(dim // scale_factor for dim in volume.shape[-3:]) if scale_factor > 1 else volume.shape[-3:]
-            self.randomize(lr_shape=lr_shape)
+            lr_size = tuple(dim // scale_factor for dim in volume.shape[-3:]) if scale_factor > 1 else volume.shape[-3:]
+            self.randomize(lr_size=lr_size)
 
         if not self._do_transform:
             return volume
 
-        # Scale start coordinates and size for the volume
-        volume_start_pos = tuple(pos * scale_factor for pos in self._start_pos)
-        volume_roi_size = tuple(size * scale_factor if size > 0 else size for size in self.lr_roi_size)
+        # Scale start coordinates and patch size for the volume
+        volume_start_pos = tuple(pos * scale_factor for pos in self.start_pos)
+        volume_patch_size = tuple(size * scale_factor if size > 0 else size for size in self.lr_patch_size)
 
         # Crop volume
-        slicer = [slice(None)] + [slice(start, start + size) if size > 0 else slice(None) for start, size in zip(volume_start_pos, volume_roi_size)]
+        slicer = [slice(None)] + [slice(start, start + size) if size > 0 else slice(None) for start, size in zip(volume_start_pos, volume_patch_size)]
         volume_crop = volume[slicer]
 
         return volume_crop
