@@ -152,7 +152,7 @@ def main():
         discriminator_train_loss = 0.0
 
         # Define training progress bar
-        train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch}/{end_epoch}")
+        train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch + 1}/{end_epoch}")
 
         for batch_index, (lr_volumes, hr_volumes, _) in enumerate(train_pbar):
             # Move inputs to the designated device
