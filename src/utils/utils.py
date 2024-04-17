@@ -248,6 +248,15 @@ def compute_super_resolution_volume_metadata(lr_metadata, scale_factor=None):
     }
 
 
+def parse_patch_size(lr_patch_size, lr_volume_size, scale_factor=1):
+    patch_size = lr_patch_size
+
+    if lr_patch_size:
+        patch_size = np.where(np.array(lr_patch_size) >= 0, lr_patch_size, lr_volume_size) * scale_factor
+
+    return patch_size
+
+
 def permute_dimensions(volume, axes):
     return PermuteDimensions(axes=axes)(volume)
 

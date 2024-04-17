@@ -8,6 +8,7 @@ from torchvision.models import vgg19, VGG19_Weights
 from monai.inferers.inferer import PatchInferer
 from monai.inferers import SlidingWindowSplitter
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from src.utils.utils import parse_patch_size
 from src.utils.transforms import NormalizeIntensity, EnsureExactChannels
 from src.models.esrgan import Discriminator
 
@@ -18,9 +19,9 @@ class VGGLoss(nn.Module):
     Expected volume dimensions order is arbitrary.
     """
 
-    def __init__(self, _min, _max, mean=None, std=None, original_size=None, patch_size=(-1, -1, -1), min_spatial_size=(16, 16, 16)):
+    def __init__(self, _min, _max, mean=None, std=None, volume_size=None, patch_size=(-1, -1, -1), min_spatial_size=(16, 16, 16)):
         super().__init__()
-        assert not (original_size is None and np.any(np.array(patch_size) < 0)), f'Original size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
+        assert not (volume_size is None and np.any(np.array(patch_size) < 0)), f'Volume size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
 
         # Define Criterion
         self.criterion = nn.L1Loss()
@@ -45,7 +46,7 @@ class VGGLoss(nn.Module):
         ])
 
         # Set patch size
-        self.patch_size = np.maximum(np.where(np.array(patch_size) >= 0, patch_size, original_size), min_spatial_size)
+        self.patch_size = np.maximum(parse_patch_size(patch_size, volume_size), min_spatial_size)
 
         # Define processing planes
         self.planes = [
@@ -82,9 +83,9 @@ class VGGLoss(nn.Module):
 
 
 class Med3DLoss(nn.Module):
-    def __init__(self, _min, _max, mean=None, std=None, original_size=None, patch_size=(-1, -1, -1), min_spatial_size=(8, 8, 8)):
+    def __init__(self, _min, _max, mean=None, std=None, volume_size=None, patch_size=(-1, -1, -1), min_spatial_size=(8, 8, 8)):
         super().__init__()
-        assert not (original_size is None and np.any(np.array(patch_size) < 0)), f'Original size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
+        assert not (volume_size is None and np.any(np.array(patch_size) < 0)), f'Volume size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
 
         # Define Criterion
         self.criterion = nn.L1Loss()
@@ -113,7 +114,7 @@ class Med3DLoss(nn.Module):
         ])
 
         # Set patch size
-        self.patch_size = np.maximum(np.where(np.array(patch_size) >= 0, patch_size, original_size), min_spatial_size)
+        self.patch_size = np.maximum(parse_patch_size(patch_size, volume_size), min_spatial_size)
 
         # Define network inferer
         self.inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=self.patch_size, overlap=0.25), match_spatial_shape=True)
@@ -212,9 +213,9 @@ class GANDLoss(nn.Module):
     GANDLoss (Generative Adversarial Network Discriminator Loss), computes perceptual loss based on the features from a GAN discriminator.
     """
 
-    def __init__(self, checkpoint, _min, _max, mean=None, std=None, original_size=None, patch_size=(-1, -1, -1), min_spatial_size=(16, 16, 16)):
+    def __init__(self, checkpoint, _min, _max, mean=None, std=None, volume_size=None, patch_size=(-1, -1, -1), min_spatial_size=(16, 16, 16)):
         super().__init__()
-        assert not (original_size is None and np.any(np.array(patch_size) < 0)), f'Original size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
+        assert not (volume_size is None and np.any(np.array(patch_size) < 0)), f'Volume size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
 
         # Define Criterion
         self.criterion = nn.L1Loss()
@@ -251,7 +252,7 @@ class GANDLoss(nn.Module):
         ])
 
         # Set patch size
-        self.patch_size = np.maximum(np.where(np.array(patch_size) >= 0, patch_size, original_size), min_spatial_size)
+        self.patch_size = np.maximum(parse_patch_size(patch_size, volume_size), min_spatial_size)
 
         # Define network inferer
         self.inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=self.patch_size, overlap=0.25), match_spatial_shape=True)

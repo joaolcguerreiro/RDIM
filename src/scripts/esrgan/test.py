@@ -14,7 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.esrgan import Generator
 from src.utils.metrics import SuperResolutionMetrics
-from src.utils.utils import clamp, save_samples, save_batch, collect_batch_pixels, parse_bin_range, compute_max_frequency, draw_box_plot, draw_histogram, set_seed
+from src.utils.utils import parse_patch_size, clamp, save_samples, save_batch, collect_batch_pixels, parse_bin_range, compute_max_frequency, draw_box_plot, draw_histogram, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
 
@@ -48,11 +48,11 @@ def main():
     ).to(device)
 
     # Log Generator
-    summary(generator, input_size=(1, checkpoint['generator_in_channels'], *checkpoint['training_lr_patch_size']), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    summary(generator, input_size=(1, checkpoint['generator_in_channels'], *(parse_patch_size(args.lr_patch_size, test_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferer
-    generator_inferer = SlidingWindowInferer(roi_size=checkpoint['training_lr_patch_size'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
+    generator_inferer = SlidingWindowInferer(roi_size=(args.lr_patch_size or checkpoint['training_lr_patch_size']), overlap=0.25, mode='gaussian', sw_device=device, device=device)
 
     # Define metrics
     metrics = SuperResolutionMetrics(num_spatial_dims=len(checkpoint['training_lr_patch_size']), _min=_min, _max=_max, mean=mean, std=std)
@@ -155,6 +155,7 @@ if __name__ == '__main__':
     parser.add_argument('--epoch', required=True, help="Epoch to be tested", type=str)
     parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--sample-pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=lambda arg: np.array(ast.literal_eval(arg)))
+    parser.add_argument('--lr-patch-size', default=None, help="Override low-resolution training patch size", type=ast.literal_eval)
     args = parser.parse_args()
 
     # Define experiment folder

@@ -111,7 +111,7 @@ def main():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data Visualizer')
-    parser.add_argument('--mode', default=None, help='Display mode {}'.format(modes), type=str)
+    parser.add_argument('--mode', required=True, help='Display mode {}'.format(modes), type=str)
     parser.add_argument('--lr-dir', default=None, help='Path to low-resolution data directory', type=str)
     parser.add_argument('--sr-dir', default=None, help='Path to super-resolution data directory', type=str)
     parser.add_argument('--gt-dir', default=None, help='Path to ground truth data directory', type=str)

@@ -190,10 +190,12 @@ In the following instructions, replace `<model>` by one of the options below:
 
 3) Run ...
    ```
-   python test.py --exp=<experiment_path> --epoch=<epoch>
+   python test.py --exp=<experiment_path> --epoch=<epoch> [--lr-patch-size=lr_patch_size]
    ```
 
 > Note: Results are in <experiment_path/results>... additionally check <experiment_path/logs/test> and <experiment_path/figures/test> for more details...
+
+> Note: Set `--lr-patch-size` to override the training low-resolution patch size. Higher patch sizes will accelerate the execution, but use more memory.
 
 ---
 
@@ -205,8 +207,10 @@ In the following instructions, replace `<model>` by one of the options below:
 
 3) Run ...
    ```
-    python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--num-workers=<num_workers>]
+    python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--lr-patch-size=lr_patch_size]
    ```
+
+> Note: Set `--lr-patch-size` to override the training low-resolution patch size. Higher patch sizes will accelerate the execution, but use more memory.
 
 <hr style="border:1px solid gray">
 
@@ -229,7 +233,7 @@ Image visualization file...
 
 1) Run visualization script:
    ```
-   python visualization.py --mode=<mode> --lr-dir=<lr_dir | None> --sr-dir=<sr_dir | None> --gt-dir=<gt_dir | None> [--augmentation=<bool>] [--plane=<plane>] [--dim=<dimension>] [--volume=<volume_index>] [--slice=<slice_index>] [--batch-size=<batch_size>] [--num-workers=<num_workers>] [--labels=<bool>]
+   python visualization.py --mode=<mode> [--lr-dir=<lr_dir>] [--sr-dir=<sr_dir>] [--gt-dir=<gt_dir>] [--augmentation=<bool>] [--plane=<plane>] [--dim=<dimension>] [--volume=<volume_index>] [--slice=<slice_index>] [--batch-size=<batch_size>] [--num-workers=<num_workers>] [--labels=<bool>]
    ```
 
 ---
