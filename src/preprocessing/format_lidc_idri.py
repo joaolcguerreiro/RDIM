@@ -165,7 +165,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Format data')
     parser.add_argument('--dir', required=True, help='Path to directory with raw data', type=str)
     parser.add_argument('--min-slices', default=256, help='Minimum number of slices per volume', type=int)
-    parser.add_argument('--max-slice-thick', default=1.25, help='Maximum slice thickness per volume', type=float)
+    parser.add_argument('--max-slice-thick', default=1.0, help='Maximum slice thickness per volume', type=float)
     parser.add_argument('--min', default=-1024, help='Minimum HU scale value', type=int)
     parser.add_argument('--max', default=3071, help='Maximum HU scale value', type=int)
     parser.add_argument('--uniform-shape', default=(256, 512, 512), help='Uniform shape for volume standardization', type=ast.literal_eval)

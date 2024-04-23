@@ -141,7 +141,7 @@ def main():
         hue='Data Type',
         bins=100,
         bin_range=parse_bin_range(_min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max)),
-        frequency_range=(None, compute_max_frequency(pixel_values=hr_pixel_values, bins=100, _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max)) * 1.10),
+        frequency_range=(None, compute_max_frequency(pixel_values=hr_pixel_values, bins=100, _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max)) * 1.1),
         element='poly',
         fill=False,
         save_filename=os.path.join(experiment_path, 'figures', 'test', 'pixel_distribution', f'{args.epoch}')
