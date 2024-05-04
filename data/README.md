@@ -5,7 +5,7 @@
 1) [Overview](#overview)
 2) [Prepare LDCT-and-Projection-Data Dataset](#prepare-ldct-and-projection-data-dataset)
 4) [Prepare LIDC-IDRI Dataset](#prepare-lidc-idri-dataset)
-3) [Prepare ??Low-Field MRI?? Dataset](#prepare-??Low-Field-MRI??-dataset)
+3) [Prepare BraTS 2023 Dataset](#prepare-brats-2023-dataset)
 5) [Prepare Other Dataset](#prepare-other-dataset)
 
 <hr style="border:1px solid gray">
@@ -132,9 +132,41 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
-#### Prepare ??Low-Field MRI?? Dataset
+#### Prepare BraTS 2023 Dataset
 
-`... download_some_name.sh... clean_some_name.py... split_data.py... simulate_lfmri.py`
+1) Download [BraTS 2023](https://www.synapse.org/#!Synapse:syn51156910/wiki/621282) dataset training split.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_brats_2023> --dataset-name="BraTS-2023"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_brats_2023.py --dir="../../data/BraTS-2023"
+   ```
+
+5) Run data formatting script:
+   ```
+   python format_brats_2023.py --dir="../../data/BraTS-2023"
+   ```
+
+6) Run data splitting script:
+   ```
+   python split_data.py --dir="../../data/BraTS-2023"
+   ```
+
+7) Run data downsampling script to create LR-HR pairs:
+   ```
+   python simulate_lfmri.py --dir="../../data/BraTS-2023/training"
+   python simulate_lfmri.py --dir="../../data/BraTS-2023/validation"
+   python simulate_lfmri.py --dir="../../data/BraTS-2023/testing"
+   ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
 
