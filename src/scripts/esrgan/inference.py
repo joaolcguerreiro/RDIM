@@ -106,7 +106,7 @@ if __name__ == '__main__':
     parser.add_argument('--sample-pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=lambda arg: np.array(ast.literal_eval(arg)))
     parser.add_argument('--batch-size', default=1, help='Number of samples per batch', type=int)
     parser.add_argument('--lr-patch-size', default=None, help="Override low-resolution training patch size", type=ast.literal_eval)
-    parser.add_argument('--num-workers', default=4, help='Number of subprocesses used for data loading', type=int)
+    parser.add_argument('--num-workers', default=8, help='Number of subprocesses used for data loading', type=int)
     args = parser.parse_args()
 
     # Define experiment folder

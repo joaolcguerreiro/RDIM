@@ -58,7 +58,7 @@ def main():
             for augmentation_index in range(args.augmentation_factor):
                 # Set transforms seed
                 lr_transforms.set_random_state(seed=augmentation_index + file_index * args.augmentation_factor)
-                lr_transforms.set_random_state(seed=augmentation_index + file_index * args.augmentation_factor)
+                hr_transforms.set_random_state(seed=augmentation_index + file_index * args.augmentation_factor)
 
                 # Load the NIfTI file
                 nifti_img = nib.load(file_path)
