@@ -41,39 +41,12 @@ def main():
     val_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["VALIDATION"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["VALIDATION"]["HR_DIR_PATH"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False) if args.val else None
     val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate) if args.val else None
 
-    # Define pre-trained LR encoder model
-    condition_encoding = True if config['MODEL']['LR_ENCODER']['PRE_TRAINED_PATH'] else False
-
-    if condition_encoding:
-        # Load the pre-trained checkpoint
-        checkpoint = torch.load(config['MODEL']['LR_ENCODER']['PRE_TRAINED_PATH'])
-
-        # Fetch number of features in LR Encoder
-        num_cond_features = checkpoint['generator_num_features']
-
-        lr_encoder = Generator(
-            in_channels=checkpoint['generator_in_channels'],
-            out_channels=checkpoint['generator_out_channels'],
-            num_features=checkpoint['generator_num_features'],
-            num_rrdb_blocks=checkpoint['generator_num_rrdb_blocks'],
-            num_rrdb_db_blocks=checkpoint['generator_num_rrdb_db_blocks'],
-            num_rrdb_db_conv_blocks=checkpoint['generator_num_rrdb_db_conv_blocks'],
-            num_rrdb_db_growth_features=checkpoint['generator_num_rrdb_db_growth_features'],
-            scale_factor=checkpoint['generator_scale_factor'],
-        ).to(device)
-
-        # Initialize LR Encoder weights
-        lr_encoder.load_state_dict(checkpoint['generator_state_dict'])
-
-        # Replace forward method to extract features
-        lr_encoder.forward = lr_encoder.extract_features
-
     # Define models
     gaussian_diffusion = GaussianDiffusion(
         num_timesteps=config["MODEL"]["NUM_TIMESTEPS"],
         beta_schedule=config["MODEL"]["BETA_SCHEDULE"],
         residual_prediction=config["MODEL"]["RESIDUAL_PREDICTION"],
-        condition_encoding=condition_encoding,
+        condition_encoding=config["MODEL"]["CONDITION_ENCODING"],
         scale_factor=config["MODEL"]["SCALE_FACTOR"],
         **{key.lower(): value for key, value in config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]].items()}
     ).to(device)
@@ -81,7 +54,7 @@ def main():
     noise_predictor = NoisePredictor(
         in_channels=config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"],
         out_channels=config["MODEL"]["NOISE_PREDICTOR"]["OUT_CHANNEL"],
-        num_cond_features=(num_cond_features if condition_encoding else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"]),
+        num_cond_features=(config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["CONDITION_ENCODING"] else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"]),
         num_inner_features=config["MODEL"]["NOISE_PREDICTOR"]["NUM_INNER_FEATURES"],
         feature_multipliers=config["MODEL"]["NOISE_PREDICTOR"]["FEATURE_MULTIPLIERS"],
         num_rdb_blocks=config["MODEL"]["NOISE_PREDICTOR"]["NUM_RDB_BLOCKS"],
@@ -93,22 +66,38 @@ def main():
         scale_factor=config["MODEL"]["SCALE_FACTOR"]
     ).to(device)
 
+    if config["MODEL"]["CONDITION_ENCODING"]:
+        lr_encoder = Generator(
+            in_channels=config["MODEL"]["LR_ENCODER"]["IN_CHANNEL"],
+            out_channels=config["MODEL"]["LR_ENCODER"]["OUT_CHANNEL"],
+            num_features=config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"],
+            num_rrdb_blocks=config["MODEL"]["LR_ENCODER"]["NUM_RRDB_BLOCKS"],
+            num_rrdb_db_blocks=config["MODEL"]["LR_ENCODER"]["NUM_RRDB_DB_BLOCKS"],
+            num_rrdb_db_conv_blocks=config["MODEL"]["LR_ENCODER"]["NUM_RRDB_DB_CONV_BLOCKS"],
+            num_rrdb_db_growth_features=config["MODEL"]["LR_ENCODER"]["NUM_RRDB_DB_GROWTH_FEATURES"],
+            scale_factor=config["MODEL"]["SCALE_FACTOR"]
+        ).to(device)
+
+        # Replace forward method to extract features
+        lr_encoder.forward = lr_encoder.extract_features
+
     # Initialize weights
     noise_predictor.initialize_weights()
+    lr_encoder.initialize_weights() if config["MODEL"]["CONDITION_ENCODING"] else None
 
     # Log Noise Predictor and LR Encoder
-    summary(noise_predictor, input_data=[torch.randn(1, *train_dataset.get_high_resolution_shape()), torch.randn(1, (num_cond_features if condition_encoding else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"]), *train_dataset.get_low_resolution_shape(only_spatial_dims=True)), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
-    draw_graph(noise_predictor, input_data=[torch.randn(1, *train_dataset.get_high_resolution_shape()), torch.randn(1, (num_cond_features if condition_encoding else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"]), *train_dataset.get_low_resolution_shape(only_spatial_dims=True)), gaussian_diffusion.sample_timesteps(1)], depth=3, expand_nested=True, filename='noise_predictor_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
+    summary(noise_predictor, input_data=[torch.randn(1, *train_dataset.get_high_resolution_shape()), torch.randn(1, (config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["CONDITION_ENCODING"] else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"]), *train_dataset.get_low_resolution_shape(only_spatial_dims=True)), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    draw_graph(noise_predictor, input_data=[torch.randn(1, *train_dataset.get_high_resolution_shape()), torch.randn(1, (config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["CONDITION_ENCODING"] else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"]), *train_dataset.get_low_resolution_shape(only_spatial_dims=True)), gaussian_diffusion.sample_timesteps(1)], depth=3, expand_nested=True, filename='noise_predictor_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
-    if condition_encoding:
+    if config["MODEL"]["CONDITION_ENCODING"]:
         summary(lr_encoder, input_size=(1, *train_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
         draw_graph(lr_encoder, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=3, expand_nested=True, filename='lr_encoder_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
         print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferers
     noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True), scale_factor=config["MODEL"]["SCALE_FACTOR"], overlap=0.25, mode='gaussian', sw_device=device, device=device)
-    lr_encoder_inferer = SlidingWindowInferer(roi_size=train_dataset.get_low_resolution_shape(only_spatial_dims=True), overlap=0.25, mode='gaussian', sw_device=device, device=device) if condition_encoding else None
+    lr_encoder_inferer = SlidingWindowInferer(roi_size=train_dataset.get_low_resolution_shape(only_spatial_dims=True), overlap=0.25, mode='gaussian', sw_device=device, device=device) if config["MODEL"]["CONDITION_ENCODING"] else None
 
     # Define optimizer and scheduler
     noise_predictor_optimizer = optim.Adam(
@@ -124,14 +113,6 @@ def main():
     diffusion_criterion = nn.MSELoss().to(device)
     content_criterion = nn.L1Loss().to(device)
 
-    # Load pre-trained model
-    if config["MODEL"]["NOISE_PREDICTOR"]["PRE_TRAINED_PATH"]:
-        # Load the pre-trained checkpoint
-        checkpoint = torch.load(config["MODEL"]["NOISE_PREDICTOR"]["PRE_TRAINED_PATH"])
-
-        # Initialize noise predictor weights
-        noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
-
     # Define number of epochs and resume training if applicable
     if args.resume:
         # Load the saved checkpoint
@@ -139,6 +120,7 @@ def main():
 
         # Initialize weights, optimizers and epoch count
         noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
+        lr_encoder.load_state_dict(checkpoint['generator_state_dict']) if config["MODEL"]["CONDITION_ENCODING"] else None
         noise_predictor_optimizer.load_state_dict(checkpoint['noise_predictor_optimizer_state_dict'])
         noise_predictor_scheduler.load_state_dict(checkpoint['noise_predictor_scheduler_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
@@ -147,6 +129,21 @@ def main():
         noise_predictor_train_losses = checkpoint['noise_predictor_train_losses']
         noise_predictor_val_losses = checkpoint['noise_predictor_val_losses']
     else:
+        # Load pre-trained models
+        if config["MODEL"]["NOISE_PREDICTOR"]["PRE_TRAINED_PATH"]:
+            # Load the pre-trained checkpoint
+            checkpoint = torch.load(config["MODEL"]["NOISE_PREDICTOR"]["PRE_TRAINED_PATH"])
+
+            # Initialize noise predictor weights
+            noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
+
+        if config["MODEL"]["LR_ENCODER"]["PRE_TRAINED_PATH"] and config["MODEL"]["CONDITION_ENCODING"]:
+            # Load the pre-trained checkpoint
+            checkpoint = torch.load(config["MODEL"]["LR_ENCODER"]["PRE_TRAINED_PATH"])
+
+            # Initialize LR Encoder weights
+            lr_encoder.load_state_dict(checkpoint['generator_state_dict'])
+
         start_epoch = 0
         noise_predictor_train_losses = dict()
         noise_predictor_val_losses = dict()
@@ -162,7 +159,7 @@ def main():
         noise_predictor_train_loss = 0.0
 
         # Set the LR encoder to evaluation mode if applicable
-        if condition_encoding:
+        if config["MODEL"]["CONDITION_ENCODING"]:
             lr_encoder.eval()
 
         # Define training progress bar
@@ -174,7 +171,7 @@ def main():
             hr_volumes = hr_volumes.to(device)
 
             # Prepare conditioning variable
-            if condition_encoding:
+            if config["MODEL"]["CONDITION_ENCODING"]:
                 cond_volumes = lr_encoder(lr_volumes)
             else:
                 cond_volumes = lr_volumes
@@ -242,7 +239,7 @@ def main():
             noise_predictor_val_loss = 0.0
 
             # Set the LR encoder to evaluation mode if applicable
-            if condition_encoding:
+            if config["MODEL"]["CONDITION_ENCODING"]:
                 lr_encoder.eval()
 
             # Define validation progress bar
@@ -255,7 +252,7 @@ def main():
                     hr_volumes = hr_volumes.to(device)
 
                     # Prepare conditioning variable
-                    if condition_encoding:
+                    if config["MODEL"]["CONDITION_ENCODING"]:
                         cond_volumes = lr_encoder_inferer(inputs=lr_volumes, network=lr_encoder)
                     else:
                         cond_volumes = lr_volumes
@@ -340,7 +337,7 @@ def main():
                 'gaussian_diffusion_beta_schedule': config["MODEL"]["BETA_SCHEDULE"],
                 'gaussian_beta_schedule_parameters': config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]],
                 'gaussian_diffusion_residual_prediction': config["MODEL"]["RESIDUAL_PREDICTION"],
-                'gaussian_diffusion_condition_encoding': condition_encoding,
+                'gaussian_diffusion_condition_encoding': config["MODEL"]["CONDITION_ENCODING"],
                 'gaussian_diffusion_scale_factor': config["MODEL"]["SCALE_FACTOR"],
                 'noise_predictor_in_channels': config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"],
                 'noise_predictor_out_channels': config["MODEL"]["NOISE_PREDICTOR"]["OUT_CHANNEL"],
@@ -362,36 +359,22 @@ def main():
                 'training_data_std': std
             }
 
-            if condition_encoding:
-                # Load the pre-trained checkpoint
-                checkpoint = torch.load(config['MODEL']['LR_ENCODER']['PRE_TRAINED_PATH'])
-
-                checkpoint_data['generator_state_dict'] = checkpoint['generator_state_dict']
-                checkpoint_data['generator_in_channels'] = checkpoint['generator_in_channels']
-                checkpoint_data['generator_out_channels'] = checkpoint['generator_out_channels']
-                checkpoint_data['generator_num_features'] = checkpoint['generator_num_features']
-                checkpoint_data['generator_num_rrdb_blocks'] = checkpoint['generator_num_rrdb_blocks']
-                checkpoint_data['generator_num_rrdb_db_blocks'] = checkpoint['generator_num_rrdb_db_blocks']
-                checkpoint_data['generator_num_rrdb_db_conv_blocks'] = checkpoint['generator_num_rrdb_db_conv_blocks']
-                checkpoint_data['generator_num_rrdb_db_growth_features'] = checkpoint['generator_num_rrdb_db_growth_features']
-                checkpoint_data['generator_scale_factor'] = checkpoint['generator_scale_factor']
-
-            if config['MODEL']['FEATURE_EXTRACTOR']['PRE_TRAINED_PATH']:
-                # Load the pre-trained checkpoint
-                checkpoint = torch.load(config['MODEL']['FEATURE_EXTRACTOR']['PRE_TRAINED_PATH'])
-
-                checkpoint_data['discriminator_state_dict'] = checkpoint['discriminator_state_dict']
-                checkpoint_data['discriminator_in_channels'] = checkpoint['discriminator_in_channels'],
-                checkpoint_data['discriminator_num_features'] = checkpoint['discriminator_num_features'],
-                checkpoint_data['discriminator_num_conv_blocks'] = checkpoint['discriminator_num_conv_blocks'],
-                checkpoint_data['discriminator_conv_blocks_output_size'] = checkpoint['discriminator_conv_blocks_output_size']
+            if config["MODEL"]["CONDITION_ENCODING"]:
+                checkpoint_data['generator_state_dict'] = lr_encoder.state_dict(),
+                checkpoint_data['generator_in_channels'] = config["MODEL"]["LR_ENCODER"]["IN_CHANNEL"]
+                checkpoint_data['generator_out_channels'] = config["MODEL"]["LR_ENCODER"]["OUT_CHANNEL"]
+                checkpoint_data['generator_num_features'] = config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"]
+                checkpoint_data['generator_num_rrdb_blocks'] = config["MODEL"]["LR_ENCODER"]["NUM_RRDB_BLOCKS"]
+                checkpoint_data['generator_num_rrdb_db_blocks'] = config["MODEL"]["LR_ENCODER"]["NUM_RRDB_DB_BLOCKS"]
+                checkpoint_data['generator_num_rrdb_db_conv_blocks'] = config["MODEL"]["LR_ENCODER"]["NUM_RRDB_DB_CONV_BLOCKS"]
+                checkpoint_data['generator_num_rrdb_db_growth_features'] = config["MODEL"]["LR_ENCODER"]["NUM_RRDB_DB_GROWTH_FEATURES"]
 
             torch.save(checkpoint_data, os.path.join(experiment_path, 'checkpoints', f'{epoch + 1}.pth'))
 
             # Plot sample figure
             save_sample(
                 lr_volume=clamp(lr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
-                gen_volume=clamp(clamp(gaussian_diffusion.sample(lr_volumes[-1].unsqueeze(dim=0), noise_predictor, (lr_encoder if condition_encoding else None), noise_predictor_inferer, (lr_encoder_inferer if condition_encoding else None)).squeeze(dim=0), _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                gen_volume=clamp(clamp(gaussian_diffusion.sample(lr_volumes[-1].unsqueeze(dim=0), noise_predictor, (lr_encoder if config["MODEL"]["CONDITION_ENCODING"] else None), noise_predictor_inferer, (lr_encoder_inferer if config["MODEL"]["CONDITION_ENCODING"] else None)).squeeze(dim=0), _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 gt_volume=clamp(hr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 bins=100,
                 _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
