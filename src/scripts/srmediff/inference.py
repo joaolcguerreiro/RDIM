@@ -36,15 +36,12 @@ def main():
     inference_dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, scale_factor=checkpoint['gaussian_diffusion_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     inference_dataloader = DataLoader(inference_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
-    # Define usage of pre-trained LR encoder model
-    condition_encoding = checkpoint['gaussian_diffusion_condition_encoding']
-
     # Define models
     gaussian_diffusion = GaussianDiffusion(
         num_timesteps=checkpoint['gaussian_diffusion_num_timesteps'],
         beta_schedule=checkpoint['gaussian_diffusion_beta_schedule'],
         residual_prediction=checkpoint['gaussian_diffusion_residual_prediction'],
-        condition_encoding=condition_encoding,
+        condition_encoding=checkpoint['gaussian_diffusion_condition_encoding'],
         scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
         **{key.lower(): value for key, value in checkpoint['gaussian_beta_schedule_parameters'].items()}
     ).to(device)
@@ -52,7 +49,7 @@ def main():
     noise_predictor = NoisePredictor(
         in_channels=checkpoint['noise_predictor_in_channels'],
         out_channels=checkpoint['noise_predictor_out_channels'],
-        num_cond_features=(checkpoint['generator_num_features'] if condition_encoding else checkpoint['noise_predictor_in_channels']),
+        num_cond_features=(checkpoint['generator_num_features'] if checkpoint['gaussian_diffusion_condition_encoding'] else checkpoint['noise_predictor_in_channels']),
         num_inner_features=checkpoint['noise_predictor_num_inner_features'],
         feature_multipliers=checkpoint['noise_predictor_feature_multipliers'],
         num_rdb_blocks=checkpoint['noise_predictor_num_rdb_blocks'],
@@ -64,7 +61,7 @@ def main():
         scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
     ).to(device)
 
-    if condition_encoding:
+    if checkpoint['gaussian_diffusion_condition_encoding']:
         lr_encoder = Generator(
             in_channels=checkpoint['generator_in_channels'],
             out_channels=checkpoint['generator_out_channels'],
@@ -73,27 +70,27 @@ def main():
             num_rrdb_db_blocks=checkpoint['generator_num_rrdb_db_blocks'],
             num_rrdb_db_conv_blocks=checkpoint['generator_num_rrdb_db_conv_blocks'],
             num_rrdb_db_growth_features=checkpoint['generator_num_rrdb_db_growth_features'],
-            scale_factor=checkpoint['generator_scale_factor'],
+            scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
         ).to(device)
 
         # Replace forward method to extract features
         lr_encoder.forward = lr_encoder.extract_features
 
     # Log Noise Predictor and LR Encoder
-    summary(noise_predictor, input_data=[torch.randn(1, checkpoint['noise_predictor_in_channels'], *map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size']))), torch.randn(1, (checkpoint['generator_num_features'] if condition_encoding else checkpoint['noise_predictor_in_channels']), *(parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size'])), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    summary(noise_predictor, input_data=[torch.randn(1, checkpoint['noise_predictor_in_channels'], *map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size']))), torch.randn(1, (checkpoint['generator_num_features'] if checkpoint['gaussian_diffusion_condition_encoding'] else checkpoint['noise_predictor_in_channels']), *(parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size'])), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
-    if condition_encoding:
+    if checkpoint['gaussian_diffusion_condition_encoding']:
         summary(lr_encoder, input_size=(1, checkpoint['generator_in_channels'], *(parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
         print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferers
     noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size or checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
-    lr_encoder_inferer = SlidingWindowInferer(roi_size=(args.lr_patch_size or checkpoint['training_lr_patch_size']), overlap=0.25, mode='gaussian', sw_device=device, device=device) if condition_encoding else None
+    lr_encoder_inferer = SlidingWindowInferer(roi_size=(args.lr_patch_size or checkpoint['training_lr_patch_size']), overlap=0.25, mode='gaussian', sw_device=device, device=device) if checkpoint['gaussian_diffusion_condition_encoding'] else None
 
     # Initialize models weights
     noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
-    lr_encoder.load_state_dict(checkpoint['generator_state_dict']) if condition_encoding else None
+    lr_encoder.load_state_dict(checkpoint['generator_state_dict']) if checkpoint['gaussian_diffusion_condition_encoding'] else None
 
     # Inference loop
     print_divisor()
@@ -102,7 +99,7 @@ def main():
     noise_predictor.eval()
 
     # Set the LR encoder to evaluation mode if applicable
-    if condition_encoding:
+    if checkpoint['gaussian_diffusion_condition_encoding']:
         lr_encoder.eval()
 
     # Define inference progress bar
@@ -114,7 +111,7 @@ def main():
             lr_volumes = lr_volumes.to(device)
 
             # Reverse Diffusion (Forward pass xT)
-            gen_volumes = gaussian_diffusion.sample(lr_volumes, noise_predictor, (lr_encoder if condition_encoding else None), noise_predictor_inferer, (lr_encoder_inferer if condition_encoding else None))
+            gen_volumes = gaussian_diffusion.sample(lr_volumes, noise_predictor, (lr_encoder if checkpoint['gaussian_diffusion_condition_encoding'] else None), noise_predictor_inferer, (lr_encoder_inferer if checkpoint['gaussian_diffusion_condition_encoding'] else None))
 
             # Clamp generated data
             gen_volumes = torch.stack([clamp(gen_volume, _min=_min, _max=_max, mean=mean, std=std) for gen_volume in gen_volumes]) if args.clamp else gen_volumes

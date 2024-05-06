@@ -91,7 +91,7 @@ If you find this project useful, please consider citing the paper:
    pip install -r requirements.txt
    ```
 
-4) Install layout engine of Graphviz properly (https://github.com/mert-kurttutan/torchview). [REMOVE THIS]
+4) Install layout engine of Graphviz properly (https://github.com/mert-kurttutan/torchview).
    ```
    # For macOS
    brew install graphviz
