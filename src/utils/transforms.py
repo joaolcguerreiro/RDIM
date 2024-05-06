@@ -8,6 +8,7 @@ from monai.utils import ensure_tuple, ensure_tuple_rep
 from monai.data.meta_obj import get_track_meta
 from monai.utils.enums import TransformBackends
 from monai.config.type_definitions import NdarrayOrTensor
+from monai.transforms import AdjustContrast
 from monai.transforms.transform import Transform, RandomizableTransform
 from monai.utils.type_conversion import convert_to_dst_type, convert_to_tensor
 from skimage.transform import radon, iradon
@@ -692,7 +693,7 @@ class RandSimulateLowDose(RandomizableTransform):
         std: Standard deviation (spread) of distribution from the electronic noise.
         scale: Whether to scale the standard deviation based on the data range.
         clamp: Wheter to clip the output tensor with the input range.
-        prob: Probability to add Gaussian noise.
+        prob: Probability of the degradation.
 
     Note:
         The input tensor is expected to be in the form [D, H, W], where D, H, and W correspond to the Depth, Height, and Width dimensions, respectively.
@@ -770,6 +771,96 @@ class RandSimulateLowDose(RandomizableTransform):
 
         # Convert back to HU scale
         volume = 1000 * (u_low_dose - u_water) / u_water
+
+        # Clamp values if applicable
+        volume = volume if not self.clamp else ThresholdIntensity(threshold=_max, above=False, channel_wise=False, cval=_max)(ThresholdIntensity(threshold=_min, above=True, channel_wise=False, cval=_min)(volume))
+
+        return volume
+
+
+class RandSimulateLowField(RandomizableTransform):
+    """
+    Simulate Low-Field MRI from 3D input tensor.
+
+    Args:
+        scale_factor: Scale factor that defines the new matrix size, cropping out high-frequency components of the k-space.
+        gamma: Factor to reduce tissue contrast.
+        mean: Mean (centre) of the distribution from the electronic noise.
+        std: Standard deviation (spread) of distribution from the electronic noise.
+        scale: Whether to scale the standard deviation based on the data range.
+        clamp: Wheter to clip the output tensor with the input range.
+        prob: Probability of the degradation.
+
+    Note:
+        The input tensor is expected to be in the form [D, H, W], where D, H, and W correspond to the Depth, Height, and Width dimensions, respectively.
+
+    Usage:
+        Weak degradation: scale_factor = 2, gamma = 1.0, and std = 0.0
+        Medium degradation: scale_factor = 2, gamma = 0.75, and std = 3.0
+        Strong degradation: scale_factor = 4, gamma = 0.5, and std = 5.0
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, prob: float = 0.1, scale_factor: int = 2, gamma: Tuple[float, float] = (0.75, 1.0), mean: float = 0.0, std: Tuple[float, float] = (0.0, 3.0), scale: bool = False, clamp: bool = False) -> None:
+        RandomizableTransform.__init__(self, prob)
+        self.scale_factor = scale_factor
+        self.gamma = gamma
+        self.rand_gamma = self.gamma[0]
+        self.mean = mean
+        self.real_std = std
+        self.real_rand_std = self.real_std[0]
+        self.imaginary_std = std
+        self.imaginary_rand_std = self.imaginary_std[0]
+        self.scale = scale
+        self.clamp = clamp
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        super().randomize(None)
+
+        if not self._do_transform:
+            return None
+
+        # Get the data range
+        data_range = (torch.max(data) - torch.min(data)) if self.scale else 1.0
+
+        self.rand_gamma = self.R.uniform(low=self.gamma[0], high=self.gamma[1])
+        self.real_rand_std = self.R.uniform(low=self.real_std[0] * data_range, high=self.real_std[1] * data_range)
+        self.imaginary_rand_std = self.R.uniform(low=self.imaginary_std[0] * data_range, high=self.imaginary_std[1] * data_range)
+
+    def __call__(self, volume: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if not self._do_transform:
+            return volume
+
+        # Define volume range
+        _min = float(volume.min())
+        _max = float(volume.max())
+
+        # Adjust tissue contrast
+        volume = AdjustContrast(gamma=self.rand_gamma, retain_stats=True)(volume)
+
+        # Compute high-field k-space data
+        high_field_k_space_data = torch.fft.fftshift(torch.fft.fftn(torch.fft.ifftshift(volume), norm='forward'))
+
+        if randomize:
+            self.randomize(high_field_k_space_data)
+
+        # Compute the low-field k-space data by cropping out high-frequency components (Low-pass filter)
+        cropped_region_size = tuple(int(dim / self.scale_factor) for dim in high_field_k_space_data.shape)
+        start_index = tuple((dim - cropped_dim) // 2 for dim, cropped_dim in zip(high_field_k_space_data.shape, cropped_region_size))
+        end_index = tuple(start + cropped_dim for start, cropped_dim in zip(start_index, cropped_region_size))
+        slicer = [slice(start, end) for start, end in zip(start_index, end_index)]
+        low_field_k_space_data = high_field_k_space_data[slicer]
+
+        # Add Gaussian noise
+        real_noise = self.R.normal(self.mean, self.real_rand_std, size=low_field_k_space_data.shape)
+        imaginary_noise = 1j * self.R.normal(self.mean, self.imaginary_rand_std, size=low_field_k_space_data.shape)
+        low_field_k_space_data = torch.tensor(low_field_k_space_data + real_noise + imaginary_noise)
+
+        # Convert k-space to spatial data
+        volume = torch.abs(torch.fft.fftshift(torch.fft.ifftn(torch.fft.ifftshift(low_field_k_space_data), norm='forward')))
 
         # Clamp values if applicable
         volume = volume if not self.clamp else ThresholdIntensity(threshold=_max, above=False, channel_wise=False, cval=_max)(ThresholdIntensity(threshold=_min, above=True, channel_wise=False, cval=_min)(volume))
