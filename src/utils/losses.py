@@ -295,4 +295,4 @@ class RangeLoss(nn.Module):
         below = torch.relu(self._min - predictions)
         above = torch.relu(predictions - self._max)
 
-        return torch.mean(below + above)
+        return self.criterion(below + above)
