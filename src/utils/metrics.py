@@ -2,7 +2,7 @@ import os
 import sys
 import torch
 import numpy as np
-from monai.metrics import PSNRMetric, SSIMMetric
+from monai.metrics import PSNRMetric, SSIMMetric, MultiScaleSSIMMetric
 from tabulate import tabulate
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.logger import print_divisor
@@ -62,7 +62,8 @@ class SuperResolutionMetrics(Metrics):
         # Define metrics
         self.metrics = [
             {'name': 'PSNR', 'scores': [], 'func': PSNRMetric(max_val=1.0)},
-            {'name': 'SSIM', 'scores': [], 'func': SSIMMetric(spatial_dims=num_spatial_dims, data_range=1.0)}
+            {'name': 'SSIM', 'scores': [], 'func': SSIMMetric(spatial_dims=num_spatial_dims, data_range=1.0)},
+            {'name': 'MS-SSIM', 'scores': [], 'func': MultiScaleSSIMMetric(spatial_dims=num_spatial_dims, data_range=1.0)}
         ]
 
     def preprocess(self, predictions, ground_truths):
