@@ -1,111 +1,447 @@
 import os
-import torch
+import sys
+import ast
+import argparse
+import datetime
+import logging
 import yaml
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
 from torch.utils.data import DataLoader
-from src.datasets.sr_dataset import SuperResolutionDataset
 from torchinfo import summary
-from src.models.esrgan import Generator, Discriminator, ESRGAN
+from torchview import draw_graph
+from tqdm import tqdm
+from glob import glob
+from monai.inferers.inferer import SlidingWindowInferer
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
+from src.datasets.sr_dataset import SuperResolutionDataset
+from src.models.srmediff import GaussianDiffusion, NoisePredictor
+from src.models.esrgan import Generator
+from src.utils.losses import GANDLoss
+from src.utils.utils import upsample, clamp, denormalize, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
+from src.utils.logger import setup_logging, print_divisor
 
 
 def main():
-    # Define optimizers
-    optimizer = optim.SGD(gan.generator.parameters(), lr=0.01)
+    # Set seed for reproducibility
+    set_seed(20)
 
-    # Define the learning rate scheduler with warmup
-    scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda step: min((step + 1) / config["WARMUP_STEPS"], 1.0)) ### CHECK IF THIS IS RIGHT!! HOW TO DO WARMUP?? IT IS OKAY TO DO WITH GRADIENT ACCUMULATION? HOW TO DO IT?
+    # Define device
+    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
+
+    # Compute training data statistics
+    _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_channels=config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"])
+
+    # Define datasets and data loaders
+    train_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], scale_factor=config["MODEL"]["SCALE_FACTOR"], lr_patch_size=config["TRAINING"]["LR_PATCH_SIZE"], _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
+    train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
+    val_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["VALIDATION"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["VALIDATION"]["HR_DIR_PATH"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False) if args.val else None
+    val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate) if args.val else None
+
+    # Define pre-trained LR encoder model
+    condition_encoding = True if config['MODEL']['LR_ENCODER']['PRE_TRAINED_PATH'] else False
+
+    if condition_encoding:
+        # Load the pre-trained checkpoint
+        checkpoint = torch.load(config['MODEL']['LR_ENCODER']['PRE_TRAINED_PATH'])
+
+        # Fetch number of features in LR Encoder
+        num_cond_features = checkpoint['generator_num_features']
+
+        lr_encoder = Generator(
+            in_channels=checkpoint['generator_in_channels'],
+            out_channels=checkpoint['generator_out_channels'],
+            num_features=checkpoint['generator_num_features'],
+            num_rrdb_blocks=checkpoint['generator_num_rrdb_blocks'],
+            num_rrdb_db_blocks=checkpoint['generator_num_rrdb_db_blocks'],
+            num_rrdb_db_conv_blocks=checkpoint['generator_num_rrdb_db_conv_blocks'],
+            num_rrdb_db_growth_features=checkpoint['generator_num_rrdb_db_growth_features'],
+            scale_factor=checkpoint['generator_scale_factor'],
+        ).to(device)
+
+        # Initialize LR Encoder weights
+        lr_encoder.load_state_dict(checkpoint['generator_state_dict'])
+
+        # Replace forward method to extract features
+        lr_encoder.forward = lr_encoder.extract_features
+
+    # Define models
+    gaussian_diffusion = GaussianDiffusion(
+        num_timesteps=config["MODEL"]["NUM_TIMESTEPS"],
+        beta_schedule=config["MODEL"]["BETA_SCHEDULE"],
+        residual_prediction=config["MODEL"]["RESIDUAL_PREDICTION"],
+        condition_encoding=condition_encoding,
+        scale_factor=config["MODEL"]["SCALE_FACTOR"],
+        **{key.lower(): value for key, value in config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]].items()}
+    ).to(device)
+
+    noise_predictor = NoisePredictor(
+        in_channels=config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"],
+        out_channels=config["MODEL"]["NOISE_PREDICTOR"]["OUT_CHANNEL"],
+        num_cond_features=(num_cond_features if condition_encoding else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"]),
+        num_inner_features=config["MODEL"]["NOISE_PREDICTOR"]["NUM_INNER_FEATURES"],
+        feature_multipliers=config["MODEL"]["NOISE_PREDICTOR"]["FEATURE_MULTIPLIERS"],
+        num_rdb_blocks=config["MODEL"]["NOISE_PREDICTOR"]["NUM_RDB_BLOCKS"],
+        num_rdb_conv_blocks=config["MODEL"]["NOISE_PREDICTOR"]["NUM_RDB_CONV_BLOCKS"],
+        num_rdb_growth_features=config["MODEL"]["NOISE_PREDICTOR"]["NUM_RDB_GROWTH_FEATURES"],
+        attention_levels=config["MODEL"]["NOISE_PREDICTOR"]["ATTENTION_LEVELS"],
+        num_attention_heads=config["MODEL"]["NOISE_PREDICTOR"]["NUM_ATTENTION_HEADS"],
+        num_groups=config["MODEL"]["NOISE_PREDICTOR"]["NUM_GROUPS"],
+        scale_factor=config["MODEL"]["SCALE_FACTOR"]
+    ).to(device)
+
+    # Initialize weights
+    noise_predictor.initialize_weights()
+
+    # Log Noise Predictor and LR Encoder
+    summary(noise_predictor, input_data=[torch.randn(1, *train_dataset.get_high_resolution_shape()), torch.randn(1, (num_cond_features if condition_encoding else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"]), *train_dataset.get_low_resolution_shape(only_spatial_dims=True)), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    draw_graph(noise_predictor, input_data=[torch.randn(1, *train_dataset.get_high_resolution_shape()), torch.randn(1, (num_cond_features if condition_encoding else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"]), *train_dataset.get_low_resolution_shape(only_spatial_dims=True)), gaussian_diffusion.sample_timesteps(1)], depth=3, expand_nested=True, filename='noise_predictor_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
+    print_divisor(width=0, last=True, new_lines_offset=-1)
+
+    if condition_encoding:
+        summary(lr_encoder, input_size=(1, *train_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+        draw_graph(lr_encoder, input_size=(1, *train_dataset.get_low_resolution_shape()), depth=3, expand_nested=True, filename='lr_encoder_architecture', directory=os.path.join(experiment_path, 'figures', 'train'), device=device).visual_graph.view()
+        print_divisor(width=0, last=True, new_lines_offset=-1)
+
+    # Define patch-based inferers
+    noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True), scale_factor=config["MODEL"]["SCALE_FACTOR"], overlap=0.25, mode='gaussian', sw_device=device, device=device)
+    lr_encoder_inferer = SlidingWindowInferer(roi_size=train_dataset.get_low_resolution_shape(only_spatial_dims=True), overlap=0.25, mode='gaussian', sw_device=device, device=device) if condition_encoding else None
+
+    # Define optimizer and scheduler
+    noise_predictor_optimizer = optim.Adam(
+        noise_predictor.parameters(),
+        lr=config['OPTIMIZER']['LEARNING_RATE'],
+        betas=(config['OPTIMIZER']['BETA_1'], config['OPTIMIZER']['BETA_2']),
+        weight_decay=config['OPTIMIZER']['WEIGHT_DECAY']
+    )
+    noise_predictor_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(noise_predictor_optimizer, T_0=config['SCHEDULER']['T_0'], T_mult=config['SCHEDULER']['T_MULT'], eta_min=config['SCHEDULER']['ETA_MIN'])
 
     # Define the loss function
-    criterion = nn.CrossEntropyLoss()
+    perceptual_criterion = GANDLoss(checkpoint=torch.load(config['MODEL']['FEATURE_EXTRACTOR']['PRE_TRAINED_PATH']), _min=_min, _max=_max, mean=mean, std=std, patch_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True)).to(device) if config['MODEL']['FEATURE_EXTRACTOR']['PRE_TRAINED_PATH'] else None
+    diffusion_criterion = nn.MSELoss().to(device)
+    content_criterion = nn.L1Loss().to(device)
+
+    # Load pre-trained model
+    if config["MODEL"]["NOISE_PREDICTOR"]["PRE_TRAINED_PATH"]:
+        # Load the pre-trained checkpoint
+        checkpoint = torch.load(config["MODEL"]["NOISE_PREDICTOR"]["PRE_TRAINED_PATH"])
+
+        # Initialize noise predictor weights
+        noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
+
+    # Define number of epochs and resume training if applicable
+    if args.resume:
+        # Load the saved checkpoint
+        checkpoint = torch.load(checkpoint_path)
+
+        # Initialize weights, optimizers and epoch count
+        noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
+        noise_predictor_optimizer.load_state_dict(checkpoint['noise_predictor_optimizer_state_dict'])
+        noise_predictor_scheduler.load_state_dict(checkpoint['noise_predictor_scheduler_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        train_dataset.update_epoch(start_epoch)
+        val_dataset.update_epoch(start_epoch) if args.val else None
+        noise_predictor_train_losses = checkpoint['noise_predictor_train_losses']
+        noise_predictor_val_losses = checkpoint['noise_predictor_val_losses']
+    else:
+        start_epoch = 0
+        noise_predictor_train_losses = dict()
+        noise_predictor_val_losses = dict()
+
+    end_epoch = config['TRAINING']['EPOCHS']
 
     # Training and validation loop
-    for tqdm(epoch in range(100)):
-        train_loss = 0.0
-        val_loss = 0.0
-        correct = 0
-        total = 0
+    print_divisor()
 
-        # Training
-        model.train()
+    for epoch in range(start_epoch, end_epoch):
+        # Set the noise predictor to train mode
+        noise_predictor.train()
+        noise_predictor_train_loss = 0.0
 
-        # Zero the gradients
-        optimizer.zero_grad()
+        # Set the LR encoder to evaluation mode if applicable
+        if condition_encoding:
+            lr_encoder.eval()
 
-        for batch_index, (data, target) in enumerate(train_loader):
+        # Define training progress bar
+        train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch + 1}/{end_epoch}")
+
+        for batch_index, (lr_volumes, hr_volumes, _) in enumerate(train_pbar):
+            # Move inputs to the designated device
+            lr_volumes = lr_volumes.to(device)
+            hr_volumes = hr_volumes.to(device)
+
+            # Prepare conditioning variable
+            if condition_encoding:
+                cond_volumes = lr_encoder(lr_volumes)
+            else:
+                cond_volumes = lr_volumes
+
+            # Compute residual volumes
+            if config["MODEL"]["RESIDUAL_PREDICTION"]:
+                # Upsample volumes
+                lr_volumes_up = torch.stack([upsample(lr_volume, config["MODEL"]["SCALE_FACTOR"]) for lr_volume in lr_volumes])
+
+                volumes_0 = hr_volumes - lr_volumes_up
+            else:
+                volumes_0 = hr_volumes
+
+            # Sample timesteps
+            timesteps = gaussian_diffusion.sample_timesteps(len(volumes_0))
+
+            # Sample timestep volumes
+            volumes_t, volumes_t_m1_real, eps_t_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
+
+            # Zero the gradients
+            noise_predictor_optimizer.zero_grad()
+
             # Forward pass
-            output = model(data)
-            loss = criterion(output, target)
+            eps_t_pred = noise_predictor(volumes_t, cond_volumes, timesteps)
+
+            # Reverse diffusion to compute volume at previous timestep
+            volumes_t_m1_pred = gaussian_diffusion.reverse_diffusion(volumes_t, eps_t_pred, timesteps)
+
+            # Compute perceptual loss
+            perceptual_loss = perceptual_criterion(volumes_t_m1_pred, volumes_t_m1_real) if perceptual_criterion else 0.0
+
+            # Compute diffusion loss
+            diffusion_loss = diffusion_criterion(eps_t_pred, eps_t_real)
+
+            # Compute pixel-wise loss
+            content_loss = content_criterion(volumes_t_m1_pred, volumes_t_m1_real)
+
+            # Noise Predictor Total loss
+            noise_predictor_total_loss = config['LOSS_WEIGHTS']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['CONTENT_LOSS'] * content_loss
 
             # Backward pass
-            (loss / config["GRADIENT_ACCUMULATION_STEPS"]).backward()
+            noise_predictor_total_loss.backward()
+            noise_predictor_optimizer.step()
 
-            # Update the weights after accumulating gradients for the desired number of steps
-            if ((batch_index + 1) % config["GRADIENT_ACCUMULATION_STEPS"] == 0) or (batch_index + 1 == len(train_loader)):
-                optimizer.step()
+            # Update the training loss
+            noise_predictor_train_loss += noise_predictor_total_loss.item()
+            train_pbar.set_postfix({
+                'Noise Pred. Train. Loss': f'{noise_predictor_total_loss.item():.4f}',
+            })
 
-                # Zero the gradients
-                optimizer.zero_grad()
+            # Compute average training loss for this epoch
+            if batch_index + 1 == len(train_pbar):
+                noise_predictor_train_loss /= len(train_dataloader)
+                noise_predictor_train_losses[epoch + 1] = noise_predictor_train_loss
+                train_pbar.set_postfix({
+                    "Avg. Noise Pred. Train. Loss": f"{noise_predictor_train_loss:.4f}"
+                })
 
-                # Update the learning rate for the current step
-                scheduler.step()
+        # Logging the training progress bar
+        logging.info(train_pbar)
 
-            train_loss += loss.item()
+        if args.val:
+            # Set the noise predictor to evaluation mode
+            noise_predictor.eval()
+            noise_predictor_val_loss = 0.0
 
-        # Validation
-        model.eval()
-        with torch.no_grad():
-            for data, target in val_loader:
-                output = model(data)
-                loss = criterion(output, target)
-                val_loss += loss.item()
-                _, predicted = torch.max(output.data, 1)
-                total += target.size(0)
-                correct += (predicted == target).sum().item()
+            # Set the LR encoder to evaluation mode if applicable
+            if condition_encoding:
+                lr_encoder.eval()
 
-        train_loss /= len(train_loader)
-        val_loss /= len(val_loader)
-        val_acc = 100. * correct / total
+            # Define validation progress bar
+            val_pbar = tqdm(val_dataloader, desc="Validating")
 
-        print('Epoch: {}/{} | Train Loss: {:.4f} | Val Loss: {:.4f} | Val Acc: {:.2f}%'.format(epoch + 1, 100, train_loss, val_loss, val_acc))
+            with torch.no_grad():
+                for batch_index, (lr_volumes, hr_volumes, _) in enumerate(val_pbar):
+                    # Move inputs to the designated device
+                    lr_volumes = lr_volumes.to(device)
+                    hr_volumes = hr_volumes.to(device)
+
+                    # Prepare conditioning variable
+                    if condition_encoding:
+                        cond_volumes = lr_encoder_inferer(inputs=lr_volumes, network=lr_encoder)
+                    else:
+                        cond_volumes = lr_volumes
+
+                    # Compute residual volumes
+                    if config["MODEL"]["RESIDUAL_PREDICTION"]:
+                        # Upsample volumes
+                        lr_volumes_up = torch.stack([upsample(lr_volume, config["MODEL"]["SCALE_FACTOR"]) for lr_volume in lr_volumes])
+
+                        volumes_0 = hr_volumes - lr_volumes_up
+                    else:
+                        volumes_0 = hr_volumes
+
+                    # Sample timesteps
+                    timesteps = gaussian_diffusion.sample_timesteps(len(volumes_0))
+
+                    # Sample timestep volumes
+                    volumes_t, volumes_t_m1_real, eps_t_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
+
+                    # Forward pass
+                    eps_t_pred = noise_predictor_inferer(inputs=volumes_t, conditions=cond_volumes, timesteps=timesteps, network=noise_predictor)
+
+                    # Reverse diffusion to compute volume at previous timestep
+                    volumes_t_m1_pred = gaussian_diffusion.reverse_diffusion(volumes_t, eps_t_pred, timesteps)
+
+                    # Compute perceptual loss
+                    perceptual_loss = perceptual_criterion(volumes_t_m1_pred, volumes_t_m1_real) if perceptual_criterion else 0.0
+
+                    # Compute diffusion loss
+                    diffusion_loss = diffusion_criterion(eps_t_pred, eps_t_real)
+
+                    # Compute pixel-wise loss
+                    content_loss = content_criterion(volumes_t_m1_pred, volumes_t_m1_real)
+
+                    # Noise Predictor Total loss
+                    noise_predictor_total_loss = config['LOSS_WEIGHTS']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['CONTENT_LOSS'] * content_loss
+
+                    # Update the validation loss
+                    noise_predictor_val_loss += noise_predictor_total_loss.item()
+                    val_pbar.set_postfix({
+                        "Noise Pred. Val. Loss": f"{noise_predictor_total_loss.item():.4f}"
+                    })
+
+                    # Compute average validation loss for this epoch
+                    if batch_index + 1 == len(val_pbar):
+                        noise_predictor_val_loss /= len(val_dataloader)
+                        noise_predictor_val_losses[epoch + 1] = noise_predictor_val_loss
+                        val_pbar.set_postfix({
+                            "Avg. Noise Pred. Val. Loss": f"{noise_predictor_val_loss:.4f}"
+                        })
+
+                # Logging the validation progress bar
+                logging.info(val_pbar)
+
+        # Adjust learning rate
+        noise_predictor_scheduler.step(epoch)
+
+        # Increment epoch count
+        train_dataset.increment_epoch()
+        val_dataset.increment_epoch() if args.val else None
+
+        # Plot reference sample figure
+        if epoch == 0:
+            save_sample(
+                lr_volume=clamp(lr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                gen_volume=clamp(clamp(denormalize(torch.randn_like(hr_volumes[-1]), mean=mean, std=std), _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                gt_volume=clamp(hr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                bins=100,
+                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
+                save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),
+                fig_size=(3, 3)
+            ) if args.val else None
+
+        # Save checkpoint
+        if (epoch + 1) % config["TRAINING"]["SAVE_INTERVAL"] == 0:
+            # Assemble checkpoint data
+            checkpoint_data = {
+                'noise_predictor_state_dict': noise_predictor.state_dict(),
+                'noise_predictor_optimizer_state_dict': noise_predictor_optimizer.state_dict(),
+                'noise_predictor_scheduler_state_dict': noise_predictor_scheduler.state_dict(),
+                'gaussian_diffusion_num_timesteps': config["MODEL"]["NUM_TIMESTEPS"],
+                'gaussian_diffusion_beta_schedule': config["MODEL"]["BETA_SCHEDULE"],
+                'gaussian_beta_schedule_parameters': config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]],
+                'gaussian_diffusion_residual_prediction': config["MODEL"]["RESIDUAL_PREDICTION"],
+                'gaussian_diffusion_condition_encoding': condition_encoding,
+                'gaussian_diffusion_scale_factor': config["MODEL"]["SCALE_FACTOR"],
+                'noise_predictor_in_channels': config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNEL"],
+                'noise_predictor_out_channels': config["MODEL"]["NOISE_PREDICTOR"]["OUT_CHANNEL"],
+                'noise_predictor_num_inner_features': config["MODEL"]["NOISE_PREDICTOR"]["NUM_INNER_FEATURES"],
+                'noise_predictor_feature_multipliers': config["MODEL"]["NOISE_PREDICTOR"]["FEATURE_MULTIPLIERS"],
+                'noise_predictor_num_rdb_blocks': config["MODEL"]["NOISE_PREDICTOR"]["NUM_RDB_BLOCKS"],
+                'noise_predictor_num_rdb_conv_blocks': config["MODEL"]["NOISE_PREDICTOR"]["NUM_RDB_CONV_BLOCKS"],
+                'noise_predictor_num_rdb_growth_features': config["MODEL"]["NOISE_PREDICTOR"]["NUM_RDB_GROWTH_FEATURES"],
+                'noise_predictor_attention_levels': config["MODEL"]["NOISE_PREDICTOR"]["ATTENTION_LEVELS"],
+                'noise_predictor_num_attention_heads': config["MODEL"]["NOISE_PREDICTOR"]["NUM_ATTENTION_HEADS"],
+                'noise_predictor_num_groups': config["MODEL"]["NOISE_PREDICTOR"]["NUM_GROUPS"],
+                'noise_predictor_train_losses': noise_predictor_train_losses,
+                'noise_predictor_val_losses': noise_predictor_val_losses,
+                'epoch': epoch,
+                'training_lr_patch_size': train_dataset.get_low_resolution_shape(only_spatial_dims=True),
+                'training_data_min': _min,
+                'training_data_max': _max,
+                'training_data_mean': mean,
+                'training_data_std': std
+            }
+
+            if condition_encoding:
+                # Load the pre-trained checkpoint
+                checkpoint = torch.load(config['MODEL']['LR_ENCODER']['PRE_TRAINED_PATH'])
+
+                checkpoint_data['generator_state_dict'] = checkpoint['generator_state_dict']
+                checkpoint_data['generator_in_channels'] = checkpoint['generator_in_channels']
+                checkpoint_data['generator_out_channels'] = checkpoint['generator_out_channels']
+                checkpoint_data['generator_num_features'] = checkpoint['generator_num_features']
+                checkpoint_data['generator_num_rrdb_blocks'] = checkpoint['generator_num_rrdb_blocks']
+                checkpoint_data['generator_num_rrdb_db_blocks'] = checkpoint['generator_num_rrdb_db_blocks']
+                checkpoint_data['generator_num_rrdb_db_conv_blocks'] = checkpoint['generator_num_rrdb_db_conv_blocks']
+                checkpoint_data['generator_num_rrdb_db_growth_features'] = checkpoint['generator_num_rrdb_db_growth_features']
+                checkpoint_data['generator_scale_factor'] = checkpoint['generator_scale_factor']
+
+            if config['MODEL']['FEATURE_EXTRACTOR']['PRE_TRAINED_PATH']:
+                # Load the pre-trained checkpoint
+                checkpoint = torch.load(config['MODEL']['FEATURE_EXTRACTOR']['PRE_TRAINED_PATH'])
+
+                checkpoint_data['discriminator_state_dict'] = checkpoint['discriminator_state_dict']
+                checkpoint_data['discriminator_in_channels'] = checkpoint['discriminator_in_channels'],
+                checkpoint_data['discriminator_num_features'] = checkpoint['discriminator_num_features'],
+                checkpoint_data['discriminator_num_conv_blocks'] = checkpoint['discriminator_num_conv_blocks'],
+                checkpoint_data['discriminator_conv_blocks_output_size'] = checkpoint['discriminator_conv_blocks_output_size']
+
+            torch.save(checkpoint_data, os.path.join(experiment_path, 'checkpoints', f'{epoch + 1}.pth'))
+
+            # Plot sample figure
+            save_sample(
+                lr_volume=clamp(lr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                gen_volume=clamp(clamp(gaussian_diffusion.sample(lr_volumes[-1].unsqueeze(dim=0), noise_predictor, (lr_encoder if condition_encoding else None), noise_predictor_inferer, (lr_encoder_inferer if condition_encoding else None)).squeeze(dim=0), _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                gt_volume=clamp(hr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                bins=100,
+                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
+                save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}'),
+                fig_size=(3, 3)
+            ) if args.val else None
+
+            # Plot noise predictor loss
+            draw_line_chart(
+                data=[
+                    {'Epoch': noise_predictor_train_losses.keys(), 'Loss': noise_predictor_train_losses.values(), 'Label': 'Train Loss'},
+                    {'Epoch': noise_predictor_val_losses.keys(), 'Loss': noise_predictor_val_losses.values(), 'Label': 'Validation Loss'},
+                ],
+                title='Noise Predictor Training and Validation Loss',
+                x_label='Epoch',
+                y_label='Loss',
+                save_filename=os.path.join(experiment_path, 'figures', 'train', 'noise_predictor_loss')
+            )
+
+    print_divisor()
 
 
 if __name__ == '__main__':
+    # Define argument parser
+    parser = argparse.ArgumentParser(description='Training Script')
+    parser.add_argument('--val', default=False, help='Apply validation during training', type=(lambda arg: (str(arg).lower() == 'true')))
+    parser.add_argument('--resume', default=None, help="Path to experiment directory to be resumed", type=str)
+    parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))
+    parser.add_argument('--sample-pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=lambda arg: np.array(ast.literal_eval(arg)))
+    args = parser.parse_args()
+
+    if args.resume:
+        experiment_path = args.resume
+        config_path = os.path.join(args.resume, "configs", "config.yaml")
+        checkpoint_path = max(glob(os.path.join(args.resume, "checkpoints", "*.pth")), key=os.path.getctime)
+    else:
+        config_path = os.path.join('..', '..', '..', 'configs', "srmediff", 'config.yaml')
+
     # Load configuration file
-    with open(os.path.join(args.exp, "config.yaml"), 'r') as f:
+    with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
 
-    # Parse config.yml file relative paths and adapt them to work in the current directory
-    parsePath: lambda path: os.path.abspath(os.path.join(os.path.dirname(__file__), '..', path))
+    # Build experiment directory
+    if not args.resume:
+        experiment_path = os.path.join('..', '..', '..', 'experiments', "srmediff", datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
 
-    # Load model
-    generator = Generator(
-        in_channels=config["ESRGAN"]["GENERATOR"]["IN_CHANNEL"],
-        out_channels=config["ESRGAN"]["GENERATOR"]["OUT_CHANNEL"],
-        num_features=config["ESRGAN"]["GENERATOR"]["NUM_FEATURES"],
-        num_growth_features=config["ESRGAN"]["GENERATOR"]["NUM_GROWTH_FEATURES"],
-        num_rrdb_blocks=config["ESRGAN"]["GENERATOR"]["NUM_RRDB_BLOCKS"],
-        num_rdb_blocks=config["ESRGAN"]["GENERATOR"]["NUM_RDB_BLOCKS"],
-        num_rdb_conv_blocks=config["ESRGAN"]["GENERATOR"]["NUM_RDB_CONV_BLOCKS"],
-        scale_factor=config["ESRGAN"]["GENERATOR"]["SCALE_FACTOR"],
-    )
+        # Create experiment folder
+        create_experiment_directory(experiment_path=experiment_path, config_path=config_path)
 
-    discriminator = Discriminator(
-        in_channels=config["ESRGAN"]["DISCRIMINATOR"]["IN_CHANNEL"],
-        num_features=config["ESRGAN"]["DISCRIMINATOR"]["NUM_FEATURES"],
-        num_conv_blocks=config["ESRGAN"]["DISCRIMINATOR"]["NUM_CONV_BLOCKS"],
-        conv_blocks_output_size=config["ESRGAN"]["DISCRIMINATOR"]["CONV_BLOCKS_OUTPUT_SIZE"],
-    )
-
-    model = ESRGAN(generator=generator, discriminator=discriminator)
-
-    # Log model
-    summary(model, input_size=(1, 1, 240, 240), depth=1)
-
-    # Load training data
-    train_dataset = SuperResolutionDataset(data_dir=parsePath(config["TRAIN"]["DATA_DIR_PATH"]), scale_factor=TRAIN.SCALE_FACTOR, mean=config["TRAIN"]["MEAN"], std=config["TRAIN"]["STD"], augmentation=TRAIN.AUGMENTATION)
-    train_dataloader = DataLoader(train_dataset, batch_size=config["TRAIN"]["BATCH_SIZE"], shuffle=True, collate_fn=SuperResolutionDataset.sr_dataset_collate)
-
-    # Load validation data
-    val_dataset = SuperResolutionDataset(data_dir=parsePath(config["VAL"]["DATA_DIR_PATH"]), scale_factor=VALIDATION.SCALE_FACTOR, mean=config["TRAIN"]["MEAN"], std=config["TRAIN"]["STD"], augmentation=VALIDATION.AUGMENTATION)
-    val_dataloader = DataLoader(train_dataset, batch_size=config["VAL"]["BATCH_SIZE"], shuffle=True, collate_fn=SuperResolutionDataset.sr_dataset_collate)
+    # Set up logging
+    setup_logging(os.path.join(experiment_path, "logs", "train", f'{datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}.log'))
 
     main()

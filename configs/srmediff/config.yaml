@@ -4,15 +4,15 @@
 
 DATA:
   TRAINING:
-    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training/LR
-    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/training/HR
+    LR_DIR_PATH: /path/to/dataset/training/LR
+    HR_DIR_PATH: /path/to/dataset/training/HR
   VALIDATION:
-    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation/LR
-    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/validation/HR
+    LR_DIR_PATH: /path/to/dataset/validation/LR
+    HR_DIR_PATH: /path/to/dataset/validation/HR
   TESTING:
-    LR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing/LR
-    HR_DIR_PATH: /Users/joaoguerreiro/Documents/Research/SRMeDiff/code/SRMeDiff/data/testing/HR
-  NUM_WORKERS: 4
+    LR_DIR_PATH: /path/to/dataset/testing/LR
+    HR_DIR_PATH: /path/to/dataset/testing/HR
+  NUM_WORKERS: 8
 
 
 #=================================================================================================================#
@@ -23,7 +23,6 @@ MODEL:
   NUM_TIMESTEPS: 1000
   BETA_SCHEDULE: 'COSINE'
   RESIDUAL_PREDICTION: True
-  CONDITION_ENCODING: True
   SCALE_FACTOR: 2
   NOISE_PREDICTOR:
     IN_CHANNEL: 1
@@ -33,7 +32,7 @@ MODEL:
     NUM_RDB_BLOCKS: 2
     NUM_RDB_CONV_BLOCKS: 5
     NUM_RDB_GROWTH_FEATURES: 32
-    ATTENTION_LAYERS: [False, False, True, True]
+    ATTENTION_LEVELS: [False, False, True, True]
     NUM_ATTENTION_HEADS: 8
     NUM_GROUPS: 32
     PRE_TRAINED_PATH:
@@ -41,7 +40,11 @@ MODEL:
     PRE_TRAINED_PATH:
   FEATURE_EXTRACTOR:
     PRE_TRAINED_PATH:
-  PRE_TRAINED_PATH:     # Whole Network Weights
+
+BETA_SCHEDULE_OPTIONS:
+  - 'LINEAR'
+  - 'COSINE'
+  - 'SIGMOID'
 
 BETA_SCHEDULE_PARAMETERS:
   LINEAR:
@@ -64,9 +67,10 @@ BETA_SCHEDULE_PARAMETERS:
 #=================================================================================================================#
 
 TRAINING:
-  EPOCHS: 500
-  BATCH_SIZE: 8
-  AUGMENTATION: True
+  EPOCHS: 300
+  BATCH_SIZE: 2
+  LR_PATCH_SIZE: [-1, -1, -1]
+  AUGMENTATION: False
   SAVE_INTERVAL: 5
 
 OPTIMIZER:
@@ -76,11 +80,12 @@ OPTIMIZER:
   BETA_2: 0.999
 
 SCHEDULER:
-  STEP_SIZE: 50
-  GAMMA: 0.5
+  T_0: 25
+  T_MULT: 4
+  ETA_MIN: 1.0e-9
 
 LOSS_WEIGHTS:
-  PERCEPTUAL_LOSS: 1.0
+  PERCEPTUAL_LOSS: 1.0e-2
   DIFFUSION_LOSS: 1.0
   CONTENT_LOSS: 1.0e-2
 
@@ -90,7 +95,7 @@ LOSS_WEIGHTS:
 #=================================================================================================================#
 
 VALIDATION:
-  BATCH_SIZE: 8
+  BATCH_SIZE: 1
 
 TESTING:
-  BATCH_SIZE: 8
+  BATCH_SIZE: 1

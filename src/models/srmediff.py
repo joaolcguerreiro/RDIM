@@ -2,7 +2,7 @@ import os
 import sys
 import torch
 import torch.nn as nn
-sys.path.append(os.path.join('..', '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.utils import upsample
 
 
@@ -128,21 +128,23 @@ class ResidualDenseBlock(nn.Module):
 
         out = skip_connection = skip_connections = x
 
-        for index, conv_block in enumerate(self.conv_blocks):
+        for block_index, conv_block in enumerate(self.conv_blocks):
             out = conv_block(skip_connections)
 
-            if index < len(self.conv_blocks) - 1:
+            if block_index < len(self.conv_blocks) - 1:
                 out = out + t_cond
 
             skip_connections = torch.cat([skip_connections, out], dim=1)
 
-        return out * self.beta + self.residual_conv(skip_connection)
+        out = out * self.beta + self.residual_conv(skip_connection)
+
+        return out
 
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, num_embedding_dims, num_heads=8):
         super().__init__()
-        assert num_embedding_dims % num_heads != 0, f'Number of embedding dimensions ({num_embedding_dims}) must be divisible by the number of attention heads ({num_heads})'
+        assert num_embedding_dims % num_heads == 0, f'Number of embedding dimensions ({num_embedding_dims}) must be divisible by the number of attention heads ({num_heads})'
 
         self.num_heads = num_heads
         self.num_head_dims = num_embedding_dims // num_heads
@@ -207,14 +209,14 @@ class SelfAttentionBlock(nn.Module):
         # Reshape and transpose input tensor to process depth feature maps rather than spatial maps
         batch, in_channels, *spatial_shape = x.shape
 
-        # [batch, in_channels, W, H, D] => [batch, W*H*D, in_channels] = [batch, sequence_len, num_embedding_dims]
-        x = x.view(batch, in_channels, torch.prod(spatial_shape)).transpose(-2, -1).contiguous()
+        # [batch, in_channels, D, H, W] => [batch, D*H*W, in_channels] = [batch, sequence_len, num_embedding_dims]
+        x = x.view(batch, in_channels, torch.tensor(spatial_shape).prod()).transpose(-2, -1).contiguous()
 
         # Apply Attention Mechanism
         out = self.attention(x)
 
         # Transpose and reshape output tensor to match input shape
-        # [batch, W*H*D, in_channels] => [batch, in_channels, W, H, D]
+        # [batch, D*H*W, in_channels] => [batch, in_channels, D, H, W]
         out = out.transpose(-2, -1).contiguous().view(batch, in_channels, *spatial_shape)
 
         # Add skip-connection and apply normalization
@@ -228,7 +230,7 @@ class ResidualDenseAttentionBlock(nn.Module):
         super().__init__()
 
         # Residual Dense Block
-        self.time_res_dense_block = ResidualDenseBlock(
+        self.res_dense_block = ResidualDenseBlock(
             in_channels,
             out_channels,
             num_time_embedding_dims=num_time_embedding_dims,
@@ -246,11 +248,11 @@ class ResidualDenseAttentionBlock(nn.Module):
         ) if self_attention else nn.Identity()
 
     def forward(self, x, t_cond):
-        x = self.time_res_dense_block(x, t_cond)
+        out = self.res_dense_block(x, t_cond)
 
-        x = self.att_block(x)
+        out = self.att_block(out)
 
-        return x
+        return out
 
 
 class EncoderBlock(nn.Module):
@@ -275,8 +277,8 @@ class EncoderBlock(nn.Module):
                 )
             )
 
-        # Downsampling Layer
-        self.downsample_layer = DownsampleBlock(
+        # Downsampling Block
+        self.downsample_block = DownsampleBlock(
             out_channels,
             out_channels,
             scale_factor=2,
@@ -290,7 +292,7 @@ class EncoderBlock(nn.Module):
         for res_dense_att_block in self.res_dense_att_blocks:
             out = res_dense_att_block(out, t_cond)
 
-        out = self.downsample_layer(out)
+        out = self.downsample_block(out)
 
         return out
 
@@ -317,8 +319,8 @@ class DecoderBlock(nn.Module):
                 )
             )
 
-        # Upsampling Layer
-        self.upsample_layer = UpsampleBlock(
+        # Upsampling Block
+        self.upsample_block = UpsampleBlock(
             out_channels,
             out_channels,
             scale_factor=2,
@@ -333,7 +335,7 @@ class DecoderBlock(nn.Module):
         for res_dense_att_block in self.res_dense_att_blocks:
             out = res_dense_att_block(out, t_cond)
 
-        out = self.upsample_layer(out)
+        out = self.upsample_block(out)
 
         return out
 
@@ -370,9 +372,9 @@ class BottleneckBlock(nn.Module):
 
 
 class NoisePredictor(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rdb_blocks=2, num_rdb_conv_blocks=5, num_rdb_growth_features=32, attention_layers=((True,) * 4), num_attention_heads=8, num_groups=32, scale_factor=2):
+    def __init__(self, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rdb_blocks=2, num_rdb_conv_blocks=5, num_rdb_growth_features=32, attention_levels=((True,) * 4), num_attention_heads=8, num_groups=32, scale_factor=2):
         super().__init__()
-        assert len(feature_multipliers) == len(attention_layers), f'Array size of attention layers ({len(attention_layers)}) must match array size of feature multipliers ({len(feature_multipliers)})'
+        assert len(feature_multipliers) == len(attention_levels), f'Array size of attention levels ({len(attention_levels)}) must match array size of feature multipliers ({len(feature_multipliers)})'
 
         # Positional Encoding
         self.time_positional_encoding = SinusoidalPositionalEncoding(num_inner_features)
@@ -420,7 +422,7 @@ class NoisePredictor(nn.Module):
                     num_rdb_growth_features=num_rdb_growth_features,
                     num_rdb_blocks=num_rdb_blocks,
                     num_rdb_conv_blocks=num_rdb_conv_blocks,
-                    self_attention=attention_layers[block_index],
+                    self_attention=attention_levels[block_index],
                     num_attention_heads=num_attention_heads,
                     num_groups=num_groups,
                     kernel_size=3, stride=1, padding=1
@@ -443,9 +445,9 @@ class NoisePredictor(nn.Module):
         # Decoder blocks for expanding/upsampling path
         self.decoder_blocks = nn.ModuleList()
 
-        # Get reversed feature multipliers and attention layers
+        # Get reversed feature multipliers and attention levels
         reversed_feature_multipliers = list(reversed(feature_multipliers))
-        reversed_attention_layers = list(reversed(attention_layers))
+        reversed_attention_levels = list(reversed(attention_levels))
 
         for block_index in range(len(reversed_feature_multipliers)):
             # Determine the feature multipliers for current and previous layers
@@ -460,7 +462,7 @@ class NoisePredictor(nn.Module):
                     num_rdb_growth_features=num_rdb_growth_features,
                     num_rdb_blocks=num_rdb_blocks,
                     num_rdb_conv_blocks=num_rdb_conv_blocks,
-                    self_attention=reversed_attention_layers[block_index],
+                    self_attention=reversed_attention_levels[block_index],
                     num_attention_heads=num_attention_heads,
                     num_groups=num_groups,
                     kernel_size=3, stride=1, padding=1
@@ -528,7 +530,7 @@ class NoisePredictor(nn.Module):
 
         # Expanding Path
         for encoder_block_out, decoder_block in zip(reversed(skip_connections), self.decoder_blocks):
-            out = torch.cat([out, encoder_block_out])
+            out = torch.cat([out, encoder_block_out], dim=1)
             out = decoder_block(out, t_cond)
 
         # Concat skip-connection and apply output layer
@@ -569,7 +571,7 @@ class GaussianDiffusion(nn.Module):
         alphas_cum_prod = cosine_function / cosine_function[0]
         betas = 1 - (alphas_cum_prod[1:] / alphas_cum_prod[:-1])
 
-        return torch.clip(betas, min=beta_min, max=beta_max)
+        return torch.clamp(betas, min=beta_min, max=beta_max)
 
     @staticmethod
     def sigmoid_beta_schedule(num_timesteps=1000, start=-3, end=3, tau=1, beta_min=0.0, beta_max=9.99e-1):
@@ -584,7 +586,7 @@ class GaussianDiffusion(nn.Module):
         alphas_cum_prod = sigmoid_function / sigmoid_function[0]
         betas = 1 - (alphas_cum_prod[1:] / alphas_cum_prod[:-1])
 
-        return torch.clip(betas, min=beta_min, max=beta_max)
+        return torch.clamp(betas, min=beta_min, max=beta_max)
 
     def compute_beta_schedule(self, beta_schedule='COSINE', num_timesteps=1000, **kwargs):
         if beta_schedule == 'LINEAR':
@@ -619,7 +621,7 @@ class GaussianDiffusion(nn.Module):
         condition = condition.view(*timestep.shape, *([1] * num_diff_dims))
 
         # Sample random noise
-        eps = torch.rand_like(x_0)
+        eps = torch.randn_like(x_0)
 
         x_t = torch.where(condition, torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps, x_0)
 
@@ -643,7 +645,7 @@ class GaussianDiffusion(nn.Module):
         beta_t = self.betas[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
 
         # Sample random noise
-        eps_t = torch.rand_like(x_t_m1)
+        eps_t = torch.randn_like(x_t_m1)
 
         x_t = torch.sqrt(1 - beta_t) * x_t_m1 + torch.sqrt(beta_t) * eps_t
 
@@ -674,7 +676,7 @@ class GaussianDiffusion(nn.Module):
         condition = condition.view(*timestep.shape, *([1] * num_diff_dims))
 
         # Sample random noise
-        z = torch.where(condition, torch.rand_like(x_t), torch.zeros_like(x_t))
+        z = torch.where(condition, torch.randn_like(x_t), torch.zeros_like(x_t))
 
         x_t_m1 = (1 / torch.sqrt(alpha_t)) * (x_t - (beta_t / (torch.sqrt(1 - alpha_cum_prod_t))) * eps_t) + torch.sqrt(beta_t) * z
 
@@ -707,33 +709,39 @@ class GaussianDiffusion(nn.Module):
 
     @torch.no_grad()
     def sample(self, x_lr, noise_predictor, lr_encoder=None, noise_predictor_inferer=None, lr_encoder_inferer=None):
-        # Set the model to evaluation mode
-        noise_predictor.eval()
-        lr_encoder.eval() if lr_encoder else None
-
         # Get number of samples (batch size)
         num_samples = x_lr.shape[0]
 
-        # Upsample volume
-        x_lr_up = upsample(x_lr, self.scale_factor)
+        # Set the noise predictor to evaluation mode
+        noise_predictor.eval()
 
         # Prepare conditioning variable
         if self.condition_encoding:
-            _, x_cond = lr_encoder_inferer(inputs=x_lr, network=lr_encoder) if lr_encoder_inferer else lr_encoder(x_lr)
+            # Set the LR encoder to evaluation mode
+            lr_encoder.eval()
+
+            x_cond = lr_encoder_inferer(inputs=x_lr, network=lr_encoder) if lr_encoder_inferer else lr_encoder(x_lr)
         else:
             x_cond = x_lr
 
+        # Upsample volume
+        x_lr_up = torch.stack([upsample(volume, self.scale_factor) for volume in x_lr])
+
         # Compute random noise
-        x_t = torch.rand_like(x_lr_up)
+        x_t = torch.randn_like(x_lr_up)
 
         for timestep in reversed(range(1, self.num_timesteps + 1)):
             # Adapt timestep for batch processing
             timestep = torch.full((num_samples,), timestep, dtype=torch.long)
 
             # Predict noise
-            eps_t_pred = noise_predictor_inferer(inputs=x_t, network=noise_predictor, x_cond=x_cond, timestep=timestep) if noise_predictor_inferer else noise_predictor(x_t, x_cond, timestep)
+            eps_t_pred = noise_predictor_inferer(inputs=x_t, conditions=x_cond, timesteps=timestep, network=noise_predictor) if noise_predictor_inferer else noise_predictor(x_t, x_cond, timestep)
 
             # Reverse diffusion to compute volume at previous timestep
             x_t = self.reverse_diffusion(x_t, eps_t_pred, timestep)
 
         return x_t + x_lr_up if self.residual_prediction else x_t
+
+
+if __name__ == '__main__':
+    pass
