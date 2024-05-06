@@ -32,7 +32,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
     # Compute training data statistics
-    _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_channels=config["MODEL"]["GENERATOR"]["IN_CHANNEL"])
+    _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_channels=config["MODEL"]["GENERATOR"]["IN_CHANNELS"])
 
     # Define datasets and data loaders
     train_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], scale_factor=config["MODEL"]["GENERATOR"]["SCALE_FACTOR"], lr_patch_size=config["TRAINING"]["LR_PATCH_SIZE"], _min=_min, _max=_max, mean=mean, std=std, augmentation=config["TRAINING"]["AUGMENTATION"])
@@ -42,8 +42,8 @@ def main():
 
     # Define models
     generator = Generator(
-        in_channels=config["MODEL"]["GENERATOR"]["IN_CHANNEL"],
-        out_channels=config["MODEL"]["GENERATOR"]["OUT_CHANNEL"],
+        in_channels=config["MODEL"]["GENERATOR"]["IN_CHANNELS"],
+        out_channels=config["MODEL"]["GENERATOR"]["OUT_CHANNELS"],
         num_features=config["MODEL"]["GENERATOR"]["NUM_FEATURES"],
         num_rrdb_blocks=config["MODEL"]["GENERATOR"]["NUM_RRDB_BLOCKS"],
         num_rrdb_db_blocks=config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_BLOCKS"],
@@ -53,7 +53,7 @@ def main():
     ).to(device)
 
     discriminator = Discriminator(
-        in_channels=config["MODEL"]["DISCRIMINATOR"]["IN_CHANNEL"],
+        in_channels=config["MODEL"]["DISCRIMINATOR"]["IN_CHANNELS"],
         num_features=config["MODEL"]["DISCRIMINATOR"]["NUM_FEATURES"],
         num_conv_blocks=config["MODEL"]["DISCRIMINATOR"]["NUM_CONV_BLOCKS"],
         conv_blocks_output_size=config["MODEL"]["DISCRIMINATOR"]["CONV_BLOCKS_OUTPUT_SIZE"],
@@ -349,15 +349,15 @@ def main():
                 'discriminator_state_dict': discriminator.state_dict(),
                 'discriminator_optimizer_state_dict': discriminator_optimizer.state_dict(),
                 'discriminator_scheduler_state_dict': discriminator_scheduler.state_dict(),
-                'generator_in_channels': config["MODEL"]["GENERATOR"]["IN_CHANNEL"],
-                'generator_out_channels': config["MODEL"]["GENERATOR"]["OUT_CHANNEL"],
+                'generator_in_channels': config["MODEL"]["GENERATOR"]["IN_CHANNELS"],
+                'generator_out_channels': config["MODEL"]["GENERATOR"]["OUT_CHANNELS"],
                 'generator_num_features': config["MODEL"]["GENERATOR"]["NUM_FEATURES"],
                 'generator_num_rrdb_blocks': config["MODEL"]["GENERATOR"]["NUM_RRDB_BLOCKS"],
                 'generator_num_rrdb_db_blocks': config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_BLOCKS"],
                 'generator_num_rrdb_db_conv_blocks': config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_CONV_BLOCKS"],
                 'generator_num_rrdb_db_growth_features': config["MODEL"]["GENERATOR"]["NUM_RRDB_DB_GROWTH_FEATURES"],
                 'generator_scale_factor': config["MODEL"]["GENERATOR"]["SCALE_FACTOR"],
-                'discriminator_in_channels': config["MODEL"]["DISCRIMINATOR"]["IN_CHANNEL"],
+                'discriminator_in_channels': config["MODEL"]["DISCRIMINATOR"]["IN_CHANNELS"],
                 'discriminator_num_features': config["MODEL"]["DISCRIMINATOR"]["NUM_FEATURES"],
                 'discriminator_num_conv_blocks': config["MODEL"]["DISCRIMINATOR"]["NUM_CONV_BLOCKS"],
                 'discriminator_conv_blocks_output_size': config["MODEL"]["DISCRIMINATOR"]["CONV_BLOCKS_OUTPUT_SIZE"],
