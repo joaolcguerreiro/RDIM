@@ -27,7 +27,7 @@ def main():
 
         # Low-Resolution Transforms
         lr_transforms = transforms.Compose([
-            RandSimulateLowField(prob=1.0, scale_factor=args.scale_factor, gamma=(0.5, 0.5), std=(3.0, 3.0), clamp=True),
+            RandSimulateLowField(prob=1.0, scale_factor=args.scale_factor, gamma=(args.gamma, args.gamma), std=(args.noise_std, args.noise_std), clamp=True),
         ])
 
         # High-Resolution Transforms
@@ -98,6 +98,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Simulate Low-Dode CT')
     parser.add_argument('--dir', required=True, help='Path to directory with data', type=str)
     parser.add_argument('--scale-factor', default=2, help='Resolution ratio between LR and HR', type=int)
+    parser.add_argument('--gamma', default=0.6, help='Gamma factor to adjust contrast', type=float)
+    parser.add_argument('--noise-std', default=2.0, help='Standard deviation of noise', type=float)
     parser.add_argument('--augmentation-factor', default=1, help='Define number of LR-HR pairs created for each data sample', type=int)
     args = parser.parse_args()
 

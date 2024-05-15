@@ -27,7 +27,7 @@ def main():
 
         # Low-Resolution Transforms
         lr_transforms = transforms.Compose([
-            RandSimulateLowDose(prob=1.0, incident_flux_level=(10000, 10000), std=(5.0, 5.0), clamp=True),
+            RandSimulateLowDose(prob=1.0, incident_flux_level=(args.incident_flux_level, args.incident_flux_level), std=(args.noise_std, args.noise_std), clamp=True),
         ], map_items=False, unpack_items=True)
 
         # High-Resolution Transforms
@@ -92,6 +92,8 @@ if __name__ == '__main__':
     # Define argument parser
     parser = argparse.ArgumentParser(description='Simulate Low-Dode CT')
     parser.add_argument('--dir', required=True, help='Path to directory with data', type=str)
+    parser.add_argument('--incident-flux-level', default=10000, help='Number of X-ray photons in a specific area per unit time', type=int)
+    parser.add_argument('--noise-std', default=5.0, help='Standard deviation of noise', type=float)
     parser.add_argument('--augmentation-factor', default=1, help='Define number of LR-HR pairs created for each data sample', type=int)
     args = parser.parse_args()
 

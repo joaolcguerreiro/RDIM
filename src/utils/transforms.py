@@ -796,8 +796,8 @@ class RandSimulateLowField(RandomizableTransform):
 
     Usage:
         Weak degradation: scale_factor = 2, gamma = 1.0, and std = 0.0
-        Medium degradation: scale_factor = 2, gamma = 0.75, and std = 3.0
-        Strong degradation: scale_factor = 4, gamma = 0.5, and std = 5.0
+        Medium degradation: scale_factor = 2, gamma = 0.7, and std = 2.0
+        Strong degradation: scale_factor = 4, gamma = 0.5, and std = 8.0
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
