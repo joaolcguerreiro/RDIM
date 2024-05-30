@@ -48,11 +48,11 @@ def main():
     ).to(device)
 
     # Log Generator
-    summary(generator, input_size=(1, checkpoint['generator_in_channels'], *(parse_patch_size(args.lr_patch_size, test_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    summary(generator, input_size=(1, checkpoint['generator_in_channels'], *(lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, test_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferer
-    generator_inferer = SlidingWindowInferer(roi_size=(args.lr_patch_size or checkpoint['training_lr_patch_size']), overlap=0.25, mode='gaussian', sw_device=device, device=device)
+    generator_inferer = SlidingWindowInferer(roi_size=(args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']), overlap=0.25, mode='gaussian', sw_device=device, device=device)
 
     # Define metrics
     metrics = SuperResolutionMetrics(num_spatial_dims=len(checkpoint['training_lr_patch_size']), _min=_min, _max=_max, mean=mean, std=std)
@@ -93,7 +93,7 @@ def main():
                 gen_volumes=torch.stack([clamp(gen_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for gen_volume in gen_volumes]),
                 gt_volumes=torch.stack([clamp(hr_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for hr_volume in hr_volumes]),
                 bins=100,
-                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] if args.sample_pixel_range[0] is not None else _min), _max=(args.sample_pixel_range[1] if args.sample_pixel_range[1] is not None else _max), mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'test', 'samples'),
                 volumes_metadata=sr_volumes_metadata,
                 fig_size=(3, 3)
@@ -140,8 +140,8 @@ def main():
         x_label='Pixel Intensity',
         hue='Data Type',
         bins=100,
-        bin_range=parse_bin_range(_min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max)),
-        frequency_range=(None, compute_max_frequency(pixel_values=hr_pixel_values, bins=100, _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max)) * 1.1),
+        bin_range=parse_bin_range(_min=(args.sample_pixel_range[0] if args.sample_pixel_range[0] is not None else _min), _max=(args.sample_pixel_range[1] if args.sample_pixel_range[1] is not None else _max)),
+        frequency_range=(None, compute_max_frequency(pixel_values=hr_pixel_values, bins=100, _min=(args.sample_pixel_range[0] if args.sample_pixel_range[0] is not None else _min), _max=(args.sample_pixel_range[1] if args.sample_pixel_range[1] is not None else _max)) * 1.1),
         element='poly',
         fill=False,
         save_filename=os.path.join(experiment_path, 'figures', 'test', 'pixel_distribution', f'{args.epoch}')

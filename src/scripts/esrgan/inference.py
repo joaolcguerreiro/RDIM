@@ -47,11 +47,11 @@ def main():
     ).to(device)
 
     # Log Generator
-    summary(generator, input_size=(1, checkpoint['generator_in_channels'], *(parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    summary(generator, input_size=(1, checkpoint['generator_in_channels'], *(lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferer
-    generator_inferer = SlidingWindowInferer(roi_size=(args.lr_patch_size or checkpoint['training_lr_patch_size']), overlap=0.25, mode='gaussian', sw_device=device, device=device)
+    generator_inferer = SlidingWindowInferer(roi_size=(args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']), overlap=0.25, mode='gaussian', sw_device=device, device=device)
 
     # Initialize generator weights
     generator.load_state_dict(checkpoint['generator_state_dict'])
@@ -81,7 +81,7 @@ def main():
                 lr_volumes=torch.stack([clamp(lr_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for lr_volume in lr_volumes]),
                 gen_volumes=torch.stack([clamp(gen_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for gen_volume in gen_volumes]),
                 bins=100,
-                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] if args.sample_pixel_range[0] is not None else _min), _max=(args.sample_pixel_range[1] if args.sample_pixel_range[1] is not None else _max), mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'samples'),
                 volumes_metadata=sr_volumes_metadata,
                 fig_size=(3, 3)

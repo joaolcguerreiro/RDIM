@@ -321,7 +321,7 @@ def main():
                 gen_volume=clamp(clamp(denormalize(torch.randn_like(hr_volumes[-1]), mean=mean, std=std), _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 gt_volume=clamp(hr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 bins=100,
-                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] if args.sample_pixel_range[0] is not None else _min), _max=(args.sample_pixel_range[1] if args.sample_pixel_range[1] is not None else _max), mean=mean, std=std,
                 save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),
                 fig_size=(3, 3)
             ) if args.val else None
@@ -377,7 +377,7 @@ def main():
                 gen_volume=clamp(clamp(gaussian_diffusion.sample(lr_volumes[-1].unsqueeze(dim=0), noise_predictor, (lr_encoder if config["MODEL"]["CONDITION_ENCODING"] else None), noise_predictor_inferer, (lr_encoder_inferer if config["MODEL"]["CONDITION_ENCODING"] else None)).squeeze(dim=0), _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 gt_volume=clamp(hr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 bins=100,
-                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] if args.sample_pixel_range[0] is not None else _min), _max=(args.sample_pixel_range[1] if args.sample_pixel_range[1] is not None else _max), mean=mean, std=std,
                 save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}'),
                 fig_size=(3, 3)
             ) if args.val else None

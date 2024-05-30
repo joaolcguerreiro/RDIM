@@ -77,16 +77,16 @@ def main():
         lr_encoder.forward = lr_encoder.extract_features
 
     # Log Noise Predictor and LR Encoder
-    summary(noise_predictor, input_data=[torch.randn(1, checkpoint['noise_predictor_in_channels'], *map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size']))), torch.randn(1, (checkpoint['generator_num_features'] if checkpoint['gaussian_diffusion_condition_encoding'] else checkpoint['noise_predictor_in_channels']), *(parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size'])), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    summary(noise_predictor, input_data=[torch.randn(1, checkpoint['noise_predictor_in_channels'], *map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size']))), torch.randn(1, (checkpoint['generator_num_features'] if checkpoint['gaussian_diffusion_condition_encoding'] else checkpoint['noise_predictor_in_channels']), *(lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size'])), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
     if checkpoint['gaussian_diffusion_condition_encoding']:
-        summary(lr_encoder, input_size=(1, checkpoint['generator_in_channels'], *(parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True)) or checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+        summary(lr_encoder, input_size=(1, checkpoint['generator_in_channels'], *(lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
         print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferers
-    noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size or checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
-    lr_encoder_inferer = SlidingWindowInferer(roi_size=(args.lr_patch_size or checkpoint['training_lr_patch_size']), overlap=0.25, mode='gaussian', sw_device=device, device=device) if checkpoint['gaussian_diffusion_condition_encoding'] else None
+    noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
+    lr_encoder_inferer = SlidingWindowInferer(roi_size=(args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']), overlap=0.25, mode='gaussian', sw_device=device, device=device) if checkpoint['gaussian_diffusion_condition_encoding'] else None
 
     # Initialize models weights
     noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
@@ -121,7 +121,7 @@ def main():
                 lr_volumes=torch.stack([clamp(lr_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for lr_volume in lr_volumes]),
                 gen_volumes=torch.stack([clamp(gen_volume, _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std) for gen_volume in gen_volumes]),
                 bins=100,
-                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] if args.sample_pixel_range[0] is not None else _min), _max=(args.sample_pixel_range[1] if args.sample_pixel_range[1] is not None else _max), mean=mean, std=std,
                 save_dir_path=os.path.join(experiment_path, 'figures', 'samples'),
                 volumes_metadata=sr_volumes_metadata,
                 fig_size=(3, 3)

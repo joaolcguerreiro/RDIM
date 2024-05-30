@@ -335,7 +335,7 @@ def main():
                 gen_volume=clamp(clamp(upsample(lr_volumes[-1], config["MODEL"]["GENERATOR"]["SCALE_FACTOR"]), _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 gt_volume=clamp(hr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 bins=100,
-                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] if args.sample_pixel_range[0] is not None else _min), _max=(args.sample_pixel_range[1] if args.sample_pixel_range[1] is not None else _max), mean=mean, std=std,
                 save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', 'reference'),
                 fig_size=(3, 3)
             ) if args.val else None
@@ -379,7 +379,7 @@ def main():
                 gen_volume=clamp(clamp(gen_volumes[-1], _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 gt_volume=clamp(hr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 bins=100,
-                _min=(args.sample_pixel_range[0] or _min), _max=(args.sample_pixel_range[1] or _max), mean=mean, std=std,
+                _min=(args.sample_pixel_range[0] if args.sample_pixel_range[0] is not None else _min), _max=(args.sample_pixel_range[1] if args.sample_pixel_range[1] is not None else _max), mean=mean, std=std,
                 save_filename=os.path.join(experiment_path, 'figures', 'train', 'samples', f'{epoch + 1}'),
                 fig_size=(3, 3)
             ) if args.val else None
