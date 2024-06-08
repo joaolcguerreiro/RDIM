@@ -66,7 +66,7 @@ class VGGLoss(nn.Module):
         # Handle plane-wise processing (2.5D)
         for plane in self.planes:
             # Define network inferer
-            inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=list(self.patch_size[dim] for dim in plane['coplanar_axes_dims']), overlap=0.25), match_spatial_shape=True)
+            inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=list(self.patch_size[dim] for dim in plane['coplanar_axes_dims']), overlap=0.25, device=next(self.parameters()).device), match_spatial_shape=True, device=next(self.parameters()).device)
 
             # Convert 3D data to 2D
             transformed_predictions_2d = transformed_predictions.permute(-5, plane['orthogonal_axis_dim'], -4, *plane['coplanar_axes_dims']).contiguous().view(-1, 3, *(transformed_predictions.shape[dim] for dim in plane['coplanar_axes_dims']))

@@ -742,7 +742,7 @@ class RandSimulateLowDose(RandomizableTransform):
         # Define water attenuation coefficient
         u_water = 20
 
-        # Compute linear attenuation coefficients base on water attenuation
+        # Compute linear attenuation coefficients based on water attenuation
         u_normal_dose = (u_water / 1000) * volume + u_water
 
         # Compute normal-dose projection data with the setup parallel beam geometry and 1080 projection angles in one rotation
