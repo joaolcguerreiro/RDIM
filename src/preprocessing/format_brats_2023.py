@@ -58,7 +58,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Format data')
     parser.add_argument('--dir', required=True, help='Path to directory with raw data', type=str)
     parser.add_argument('--min', default=0, help='Minimum pixel value', type=int)
-    parser.add_argument('--max', default=65536, help='Maximum pixel value', type=int)
+    parser.add_argument('--max', default=65535, help='Maximum pixel value', type=int)
     parser.add_argument('--uniform-shape', default=(128, 192, 192), help='Uniform shape for volume standardization', type=ast.literal_eval)
     parser.add_argument('--scale-factor', default=1, help='Scale factor to reduce data resolution and alleviate computation', type=int)
     args = parser.parse_args()
