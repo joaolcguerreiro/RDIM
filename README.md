@@ -1,11 +1,8 @@
 # <span style="color: orange">VoxRDiff</span>
 
-Repository ....
+Official repository for VoxRDiff, a generative adversarial network for 3D medical image reconstruction. 
 
-TODO: MAKE GIF WITH SAMPLE EVERY CHECKPOINT AND ALSO DISPLAY CHART FOR SAMPLE PIXEL DISTRIBUTION VS GROUND TRUTH PIXEL DISTRIBUTION
-SINCE WE SHOW THE EVOLUTION OF ONLY ONE SAMPLE, WE ONLY SHOW THE PIXEL DISTRIBUTION OF THAT SAMPLE AND NOT THE GLOBAL PIXEL DISTRIBUTION
-
-...
+![Illustration with VoxRDiff qualitative results along every training epoch](./figures/sample.gif)
 
 <hr style="border:2px solid orange">
 
@@ -29,19 +26,19 @@ If you find this project useful, please consider citing the paper:
    from monai.inferers.inferer import SlidingWindowInferer
    
    # Set patch size (D, H, W)
-   patch_size = (32, 32, 32)
+   patch_size = (16, 16, 16)
    
    # Define inferer (Optional)
-   inferer = SlidingWindowInferer(roi_size=patch_size, overlap=0.25, mode='gaussian')
+   inferer = SlidingWindowInferer(roi_size=patch_size, overlap=0.125, mode='gaussian')
    
-   # Two random volumes (batch size of 2) with 1 channel and size of 128x128x128 (D, H, W). Mean is 0 and STD is 1.
-   volumes = torch.randn(2, 1, 128, 128, 128)
+   # Two random volumes (batch size of 2) with 1 channel and size of 64x64x64 (D, H, W). Mean is 0 and STD is 1.
+   volumes = torch.randn(2, 1, 64, 64, 64)
    
    # Avoid HTTP Error 403
    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
    
-   # Load model
-   model = torch.hub.load('???', '???', pretrained=True)
+   # Load model (check pretrained_models/README.md)
+   model = torch.hub.load(???)
    model.eval()
    
    # Generated volumes. Model expects z-score normalized input volumes.
@@ -56,10 +53,11 @@ If you find this project useful, please consider citing the paper:
    import torch
    from monai.inferers.inferer import SlidingWindowInferer
    
-   ... # Same as Reconstruction
+   # Same as Reconstruction
+   ...
    
-   # Load model
-   model = torch.hub.load('???', '???', pretrained=True)
+   # Load model (check pretrained_models/README.md)
+   model = torch.hub.load(???)
    model.forward = model.extract_features
    model.eval()
    
@@ -76,37 +74,19 @@ If you find this project useful, please consider citing the paper:
 1) Clone GitHub repository:
 
    ```
-   git clone https://github.com/??????
+   git clone https://github.com/joaolcguerreiro/VoxRDiff.git
    cd VoxRDiff
    ```
 
 2) Create environment:
    ```
-   conda create -n srmediff python=3.10.11
-   conda activate srmediff
+   conda create -n voxrdiff python=3.10.11
+   conda activate voxrdiff
    ```
 
 3) Install Python dependencies (Python 3.10 is recommended):
    ```
    pip install -r requirements.txt
-   ```
-
-4) Install layout engine of Graphviz properly (https://github.com/mert-kurttutan/torchview).
-   ```
-   # For macOS
-   brew install graphviz
-   ```
-   ```
-   # For CentOS
-   sudo yum install graphviz
-   ```
-   ```
-   # For Debian-based Linux (e.g. Ubuntu)
-   apt-get install graphviz
-   ```
-   ```
-   # For Windows
-   choco install graphviz
    ```
 
 <hr style="border:1px solid gray">
@@ -115,97 +95,81 @@ If you find this project useful, please consider citing the paper:
 
 1) See [data/README.md](data/README.md) for details.
 
-2) After preparing the data, navigate to `configs/<model>/config.yaml` and adjust data paths....
+2) After preparing the data, navigate to `configs/config.yaml` and adjust data paths.
 
 <hr style="border:1px solid gray">
 
-### Run Model
+### Train
 
-In the following instructions, replace `<model>` by one of the options below:
+1) Navigate to `configs/config.yaml` and adjust configuration parameters needed. For example configurations see [configs/examples](configs/examples).
 
-* `esrgan`
+2) Navigate to `src/scripts/`.
 
-* `srmediff`
-
----
-
-#### Train and Validation
-
-1) Navigate to `configs/<model>/config.yaml` and adjust configuration parameters needed....
-
-2) Navigate to `src/scripts/<model>/`
-
-3) Run ...
-   ```
-   # Default execution
-   python train.py
-   ```
-
-   ```
-   # With Validation
-   python train.py --val=True
-   ```
-
-> Note: Set `LR_PATCH_SIZE` for patch-based training (recommended)... When `LR_PATCH_SIZE=[-1, -1, -1]` then no cropping is employed (more computationally expensive)... Also, for `LR_PATCH_SIZE` equal or smaller than `[8, 8, 8]` the `batch_size` is required to be greater than `1` because of discriminator batch norm.
-
-> Note: For VoxRDiff the dimensions of the `LR_PATCH_SIZE` are recommended to be powers of 2...
-
----
-
-#### Load Pre-trained
-
-1) See [pretrained_models/README.md](pretrained_models/README.md) to download available pre-trained models... or use checkpoint path from a previous experiment...
-
-2) Navigate to `configs/<model>/config.yaml` and update pre-trained path parameters of model....
-
-3) Navigate to `src/scripts/<model>/`
-
-4) Run ...
+3) Run script:
    ```
    python train.py
    ```
 
----
+> Note: Validation is optional. Use option `--val=True` if validation is intended.
 
-#### Resume Train
+> Note: Set `LR_PATCH_SIZE` in `config.yaml` file for patch-based training (recommended). Patch-based training is not employed when `LR_PATCH_SIZE=[-1, -1, -1]` (more computationally expensive). Also, for `LR_PATCH_SIZE` equal or smaller than `[8, 8, 8]` the `batch_size` is required to be greater than `1` because of the discriminator batch normalization.
 
-1) Navigate to `experiments/<model>` and copy experiment path
+<hr style="border:1px solid gray">
 
-2) Navigate to `src/scripts/<model>/`
+### Load Pre-trained
 
-3) Run ...
+1) See [pretrained_models/README.md](pretrained_models/README.md) to download available pre-trained models or use checkpoint path from a previous experiment.
+
+2) Navigate to `configs/config.yaml` and update `PRE_TRAINED_PATH` parameters.
+
+3) Navigate to `src/scripts/`.
+
+4) Run script:
+   ```
+   python train.py
+   ```
+
+<hr style="border:1px solid gray">
+
+### Resume Train
+
+1) Navigate to `experiments/` and copy experiment path.
+
+2) Navigate to `src/scripts/`.
+
+3) Run script:
    ```
    python train.py --resume=<experiment_path>
    ```
 
-> Note: Load pre-trained differs from resume training since in pre-training only the model weights are loaded and the training is reset... If you resume training the last epoch checkpoint weights will be prioritized over the pre-trained weights...
+> Note: Load pre-trained differs from resume training since in pre-training only the model weights are loaded and the training is reset. If you resume training the last epoch checkpoint weights will be prioritized over the pre-trained weights.
 
----
+<hr style="border:1px solid gray">
 
-#### Test
+### Test
 
-1) Navigate to `experiments/<model>` and copy experiment path
+1) Navigate to `experiments/` and copy experiment path.
 
-2) Navigate to `src/scripts/<model>/`
+2) Navigate to `src/scripts/`.
 
-3) Run ...
+3) Run script:
    ```
    python test.py --exp=<experiment_path> --epoch=<epoch> [--lr-patch-size=lr_patch_size]
    ```
 
-> Note: Results are in <experiment_path/results>... additionally check <experiment_path/logs/test> and <experiment_path/figures/test> for more details...
+> Note: Results are in `<experiment_path>/results`. Additionally, check `<experiment_path>/logs/test` and `<experiment_path>/figures/test` for more insights.
 
 > Note: Set `--lr-patch-size` to override the training low-resolution patch size. Higher patch sizes will accelerate the execution, but use more memory.
 
----
+<hr style="border:1px solid gray">
 
-#### Inference
+### Inference
 
-1) Get path of a checkpoint file...
+1) Get model checkpoint path.
 
-2) Navigate to `src/scripts/<model>/`
+2) Navigate to `src/scripts/`.
 
-3) Run ...
+3) Run script:
    ```
     python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--lr-patch-size=lr_patch_size]
    ```
@@ -216,169 +180,9 @@ In the following instructions, replace `<model>` by one of the options below:
 
 ### Experiment Tracking
 
-Everytime you train a model.... an experiment folder is built (except if training was resumed, thereby it is used the folder of the prior run)... the global configuration file is stored in the experiment folder to fetch the original parameters during training resume.
+Everytime you train a model, an experiment folder is built (unless training is resumed, in which case the folder from the prior run is used). The configuration file for the execution is stored in the experiment folder, allowing the original parameters to be retrieved when resuming training.
 
 See [experiments/README.md](experiments/README.md) for details.
-
-<hr style="border:1px solid gray">
-
-### Visualize Results
-
-Image visualization file...
-
-0) Navigate to `visualization` directory:
-   ```
-   cd visualization
-   ```
-
-1) Run visualization script:
-   ```
-   python visualization.py --mode=<mode> [--lr-dir=<lr_dir>] [--sr-dir=<sr_dir>] [--gt-dir=<gt_dir>] [--augmentation=<bool>] [--plane=<plane>] [--dim=<dimension>] [--volume=<volume_index>] [--slice=<slice_index>] [--batch-size=<batch_size>] [--num-workers=<num_workers>] [--labels=<bool>]
-   ```
-
----
-
-#### Visualization Mode <span style="color: orange">[REQUIRED]</span>
-
-`--mode`
-
-| Option          | Description                                               |
-|-----------------|-----------------------------------------------------------|
-| `'lr_scans'`    | Display low-resolution scan counterpart                   |
-| `'sr_scans'`    | Display super-resolution scan counterpart                 |
-| `'gt_scans'`    | Display ground truth scan counterpart                     |
-| `'lr_sr_scans'` | Display low-resolution and super-resolution scans jointly |
-| `'lr_gt_scans'` | Display low-resolution and ground truth scans jointly     |
-| `'sr_gt_scans'` | Display super-resolution and ground truth scans jointly   |
-
----
-
-#### Low-Resolution Data Directory <span style="color: orange">[CONDITIONAL]</span>
-
-`--lr-dir`
-
-| Option | Description                            |
-|--------|----------------------------------------|
-| `str`  | Path to low-resolution data directory  |
-
-Required when mode is `lr_scans`, `lr_sr_scans` or `lr_gt_scans`
-
----
-
-#### Super-Resolution Data Directory <span style="color: orange">[CONDITIONAL]</span>
-
-`--sr-dir`
-
-| Option | Description                             |
-|--------|-----------------------------------------|
-| `str`  | Path to super-resolution data directory |
-
-Required when mode is `sr_scans`, `lr_sr_scans` or `sr_gt_scans`
-
----
-
-#### Ground Truth Data Directory <span style="color: orange">[CONDITIONAL]</span>
-
-`--gt-dir`
-
-| Option | Description                         |
-|--------|-------------------------------------|
-| `str`  | Path to ground truth data directory |
-
-Required when mode is `gt_scans`, `lr_gt_scans` or `sr_gt_scans`
-
----
-
-#### Data Augmentation <span style="color: orange">[OPTIONAL]</span>
-
-`--augmentation`
-
-| Option | Description                                               | Default |
-|--------|-----------------------------------------------------------|:-------:|
-| `bool` | Apply augmentation techniques to the visualization data   |  False  |
-
----
-
-#### Target Pixel Window for Visualization <span style="color: orange">[OPTIONAL]</span>
-
-`--pixel-range`
-
-| Option     | Description                                                                                     |   Default    |
-|------------|-------------------------------------------------------------------------------------------------|:------------:|
-| `sequence` | Window range of pixel values (min, max). For multi-channel scaling provide ((min...), (max...)) | (None, None) |
-
----
-
-#### View Plane <span style="color: orange">[OPTIONAL]</span>
-
-`--plane`
-
-| Option       | Description           | Default |
-|--------------|-----------------------|:-------:|
-| `'axial'`    | Your description here |    ✓    |
-| `'coronal'`  | Your description here |         |
-| `'sagittal'` | Your description here |         |
-
----
-
-#### Visualization Spacial Dimension <span style="color: orange">[OPTIONAL]</span>
-
-`--dim`
-
-| Option   | Description           | Default |
-|----------|-----------------------|:-------:|
-| `'2D'`   | Your description here |    ✓    |
-| `'3D'`   | Your description here |         |
-
----
-
-#### Volume Index <span style="color: orange">[OPTIONAL]</span>
-
-`--volume`
-
-| Option | Description                                                                  | Default |
-|--------|------------------------------------------------------------------------------|:-------:|
-| `int`  | Non-negative integer (n > 0) referencing volume. (-1 to display all volumes) |   -1    |
-
----
-
-#### Slice Index <span style="color: orange">[OPTIONAL]</span>
-
-`--slice`
-
-| Option | Description | Default |
-|--------|-------------|:-------:|
-| `int`  | ...         |   -1    |
-
----
-
-#### Batch Size <span style="color: orange">[OPTIONAL]</span>
-
-`--batch-size`
-
-| Option | Description | Default |
-|--------|-------------|:-------:|
-| `int`  | ...         |    2    |
-
----
-
-#### Data Loading Subprocesses <span style="color: orange">[OPTIONAL]</span>
-
-`--num-workers`
-
-| Option | Description | Default |
-|--------|-------------|:-------:|
-| `int`  | ...         |    4    |
-
----
-
-#### Image Labels <span style="color: orange">[OPTIONAL]</span>
-
-`--labels`
-
-| Option | Description | Default |
-|--------|-------------|:-------:|
-| `bool` | ...         |  True   |
 
 <hr style="border:2px solid orange">
 
