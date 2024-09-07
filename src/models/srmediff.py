@@ -541,7 +541,7 @@ class NoisePredictor(nn.Module):
 
 
 class GaussianDiffusion(nn.Module):
-    def __init__(self, num_timesteps=1000, beta_schedule='COSINE', residual_prediction=True, condition_encoding=True, scale_factor=2, **kwargs):
+    def __init__(self, num_timesteps=1000, beta_schedule='COSINE', residual_prediction=True, lr_condition_encoding=True, scale_factor=2, **kwargs):
         super().__init__()
 
         self.num_timesteps = num_timesteps
@@ -549,7 +549,7 @@ class GaussianDiffusion(nn.Module):
         self.alphas = 1.0 - self.betas
         self.alphas_cum_prod = torch.cumprod(self.alphas, dim=0)
         self.residual_prediction = residual_prediction
-        self.condition_encoding = condition_encoding
+        self.lr_condition_encoding = lr_condition_encoding
         self.scale_factor = scale_factor
 
     @staticmethod
@@ -716,7 +716,7 @@ class GaussianDiffusion(nn.Module):
         noise_predictor.eval()
 
         # Prepare conditioning variable
-        if self.condition_encoding:
+        if self.lr_condition_encoding:
             # Set the LR encoder to evaluation mode
             lr_encoder.eval()
 
