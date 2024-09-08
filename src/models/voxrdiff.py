@@ -13,17 +13,24 @@ class SinusoidalPositionalEncoding(nn.Module):
 
         self.num_embedding_dims = num_embedding_dims
 
-    def forward(self, position):
         # Get indexes from even embedding dimensions
         even_indexes = torch.arange(0, self.num_embedding_dims, 2)
 
-        # Compute positional embedding
+        # Compute division term for positional embedding
         log_term = torch.tensor(1e4).log() / self.num_embedding_dims
-        div_term = torch.exp(even_indexes * -log_term)
+        self.div_term = torch.exp(even_indexes * -log_term)
 
+    def to(self, *args, **kwargs):
+        # Required to move non-parameter attributes to device, change their dtype, and more
+        self.div_term = self.div_term.to(*args, **kwargs)
+
+        return super().to(*args, **kwargs)
+
+    def forward(self, position):
+        # Compute positional embedding
         position = position.unsqueeze(-1)
-        sin_emb = torch.sin(position * div_term)
-        cos_emb = torch.cos(position * div_term)
+        sin_emb = torch.sin(position * self.div_term)
+        cos_emb = torch.cos(position * self.div_term)
 
         # Interleave sine and cosine embeddings
         embedding = torch.stack([sin_emb, cos_emb], dim=-1).view(-1, 2 * ((self.num_embedding_dims + 1) // 2))
@@ -500,6 +507,12 @@ class NoisePredictor(nn.Module):
             elif isinstance(module, nn.GroupNorm):
                 nn.init.constant_(module.weight.data, 1)
                 nn.init.constant_(module.bias.data, 0)
+
+    def to(self, *args, **kwargs):
+        # Required to move non-parameter attributes to device, change their dtype, and more
+        self.time_positional_encoding = self.time_positional_encoding.to(*args, **kwargs)
+
+        return super().to(*args, **kwargs)
 
     def forward(self, x, x_cond, timestep):
         # Compute timestep embedding using sinusoidal positional encoding
