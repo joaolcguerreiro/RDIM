@@ -913,6 +913,14 @@ class GaussianDiffusion(nn.Module):
 
         return x_t + x_lr_up if self.residual_prediction else x_t
 
+    def to(self, *args, **kwargs):
+        # Required to move non-parameter attributes to device, change their dtype, and more
+        self.betas = self.betas.to(*args, **kwargs)
+        self.alphas = self.alphas.to(*args, **kwargs)
+        self.alphas_cum_prod = self.alphas_cum_prod.to(*args, **kwargs)
+
+        return super().to(*args, **kwargs)
+
 
 if __name__ == '__main__':
     pass
