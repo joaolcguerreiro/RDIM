@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
 from monai.inferers.inferer import SlidingWindowInferer
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '', '..', '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.voxrdiff import GaussianDiffusion, NoisePredictor

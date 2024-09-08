@@ -14,7 +14,7 @@ from torchinfo import summary
 from tqdm import tqdm
 from glob import glob
 from monai.inferers.inferer import SlidingWindowInferer
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '', '..', '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.voxrdiff import GaussianDiffusion, NoisePredictor
@@ -486,7 +486,7 @@ if __name__ == '__main__':
         config_path = os.path.join(args.resume, "configs", "config.yaml")
         checkpoint_path = max(glob(os.path.join(args.resume, "checkpoints", "*.pth")), key=os.path.getctime)
     else:
-        config_path = os.path.join('', '..', 'configs', 'config.yaml')
+        config_path = os.path.join('..', '..', 'configs', 'config.yaml')
 
     # Load configuration file
     with open(config_path, 'r') as f:
@@ -494,7 +494,7 @@ if __name__ == '__main__':
 
     # Build experiment directory
     if not args.resume:
-        experiment_path = os.path.join('', '..', 'experiments', datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
+        experiment_path = os.path.join('..', '..', 'experiments', datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
 
         # Create experiment folder
         create_experiment_directory(experiment_path=experiment_path, config_path=config_path)
