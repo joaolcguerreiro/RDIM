@@ -87,7 +87,7 @@ def main():
     lr_encoder.initialize_weights() if config["MODEL"]["LR_CONDITION_ENCODING"] else None
 
     # Log Noise Predictor and LR Encoder
-    summary(noise_predictor, input_data=[torch.randn(1, *train_dataset.get_high_resolution_shape()), torch.randn(1, (config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["LR_CONDITION_ENCODING"] else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"]), *train_dataset.get_low_resolution_shape(only_spatial_dims=True)), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    summary(noise_predictor, input_data=[torch.randn(1, *train_dataset.get_high_resolution_shape()).to(device), torch.randn(1, (config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["LR_CONDITION_ENCODING"] else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"]), *train_dataset.get_low_resolution_shape(only_spatial_dims=True)).to(device), gaussian_diffusion.sample_timesteps(1).to(device)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
     if config["MODEL"]["LR_CONDITION_ENCODING"]:
