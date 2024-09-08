@@ -101,11 +101,11 @@ def main():
     # Define optimizer and scheduler
     noise_predictor_optimizer = optim.Adam(
         list(noise_predictor.parameters()) + (list(lr_encoder.parameters()) if not config["TRAINING"]["FIX_LR_ENCODER"] else []),
-        lr=config['OPTIMIZER']['LEARNING_RATE'],
-        betas=(config['OPTIMIZER']['BETA_1'], config['OPTIMIZER']['BETA_2']),
-        weight_decay=config['OPTIMIZER']['WEIGHT_DECAY']
+        lr=config['OPTIMIZER']['NOISE_PREDICTOR']['LEARNING_RATE'],
+        betas=(config['OPTIMIZER']['NOISE_PREDICTOR']['BETA_1'], config['OPTIMIZER']['NOISE_PREDICTOR']['BETA_2']),
+        weight_decay=config['OPTIMIZER']['NOISE_PREDICTOR']['WEIGHT_DECAY']
     )
-    noise_predictor_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(noise_predictor_optimizer, T_0=config['SCHEDULER']['T_0'], T_mult=config['SCHEDULER']['T_MULT'], eta_min=config['SCHEDULER']['ETA_MIN'])
+    noise_predictor_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(noise_predictor_optimizer, T_0=config['SCHEDULER']['NOISE_PREDICTOR']['T_0'], T_mult=config['SCHEDULER']['NOISE_PREDICTOR']['T_MULT'], eta_min=config['SCHEDULER']['NOISE_PREDICTOR']['ETA_MIN'])
 
     if config["MODEL"]["LR_CONDITION_ENCODING"]:
         pre_train_lr_encoder_optimizer = optim.Adam(
@@ -285,7 +285,7 @@ def main():
             content_loss = content_criterion(volumes_t_m1_pred, volumes_t_m1_real)
 
             # Noise Predictor Total loss
-            noise_predictor_total_loss = config['LOSS_WEIGHTS']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['CONTENT_LOSS'] * content_loss
+            noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['CONTENT_LOSS'] * content_loss
 
             # Backward pass
             noise_predictor_total_loss.backward()
@@ -363,7 +363,7 @@ def main():
                     content_loss = content_criterion(volumes_t_m1_pred, volumes_t_m1_real)
 
                     # Noise Predictor Total loss
-                    noise_predictor_total_loss = config['LOSS_WEIGHTS']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['CONTENT_LOSS'] * content_loss
+                    noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['CONTENT_LOSS'] * content_loss
 
                     # Update the validation loss
                     noise_predictor_val_loss += noise_predictor_total_loss.item()
