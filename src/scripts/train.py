@@ -343,7 +343,7 @@ def main():
                         volumes_0 = hr_volumes
 
                     # Sample timesteps
-                    timesteps = gaussian_diffusion.sample_timesteps(len(volumes_0))
+                    timesteps = gaussian_diffusion.sample_timesteps(len(volumes_0)).to(device)
 
                     # Sample timestep volumes
                     volumes_t, volumes_t_m1_real, eps_t_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
