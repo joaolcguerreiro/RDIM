@@ -642,7 +642,7 @@ class LREncoder(nn.Module):
             num_features,
             num_features,
             scale_factor=2,
-            mode='nearest',
+            mode='trilinear',
             activation=True,
             kernel_size=3, stride=1, padding=1
         ) for _ in range(int(math.log2(scale_factor)))])
