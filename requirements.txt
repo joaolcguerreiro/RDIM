@@ -17,3 +17,4 @@ torchaudio~=2.0.2
 torchvision~=0.15
 gdown~=4.7.1
 chardet~=5.2.0
+lpips~=0.1.4
