@@ -101,7 +101,7 @@ def main():
 
     # Define optimizer and scheduler
     noise_predictor_optimizer = optim.Adam(
-        list(noise_predictor.parameters()) + (list(lr_encoder.parameters()) if not config["TRAINING"]["FIX_LR_ENCODER"] else []),
+        list(noise_predictor.parameters()) + (list(lr_encoder.parameters()) if not config["TRAINING"]["FIX_LR_ENCODER"] and config["MODEL"]["LR_CONDITION_ENCODING"] else []),
         lr=config['OPTIMIZER']['NOISE_PREDICTOR']['LEARNING_RATE'],
         betas=(config['OPTIMIZER']['NOISE_PREDICTOR']['BETA_1'], config['OPTIMIZER']['NOISE_PREDICTOR']['BETA_2']),
         weight_decay=config['OPTIMIZER']['NOISE_PREDICTOR']['WEIGHT_DECAY']
