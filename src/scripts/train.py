@@ -80,7 +80,7 @@ def main():
         ).to(device)
 
         # Replace forward method to extract features
-        lr_encoder.forward = LREncoder.extract_features
+        lr_encoder.forward = lr_encoder.extract_features
 
     # Initialize weights
     noise_predictor.initialize_weights()
@@ -166,7 +166,7 @@ def main():
         print_divisor()
 
         # Replace extract features method with forward
-        lr_encoder.forward = LREncoder.forward
+        lr_encoder.forward = lr_encoder.forward
 
         for pre_train_epoch in range(pre_train_lr_encoder_start_epoch, pre_train_lr_encoder_end_epoch):
             # Set model to train mode
@@ -223,7 +223,7 @@ def main():
             pre_train_lr_encoder_dataset.increment_epoch()
 
         # Replace forward method to extract features
-        lr_encoder.forward = LREncoder.extract_features
+        lr_encoder.forward = lr_encoder.extract_features
 
     # Training and validation loop
     print_divisor()
