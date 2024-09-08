@@ -80,6 +80,7 @@ def main():
         ).to(device)
 
         # Replace forward method to extract features
+        lr_encoder_forward_method = lr_encoder.forward
         lr_encoder.forward = lr_encoder.extract_features
 
     # Initialize weights
@@ -162,11 +163,11 @@ def main():
     pre_train_lr_encoder_end_epoch = config['PRE_TRAINING_LR_ENCODER']['EPOCHS']
 
     # Pre-train LR encoder loop
-    if not args.resume:
+    if not args.resume and config["MODEL"]["LR_CONDITION_ENCODING"]:
         print_divisor()
 
         # Replace extract features method with forward
-        lr_encoder.forward = lr_encoder.forward
+        lr_encoder.forward = lr_encoder_forward_method
 
         for pre_train_epoch in range(pre_train_lr_encoder_start_epoch, pre_train_lr_encoder_end_epoch):
             # Set model to train mode
