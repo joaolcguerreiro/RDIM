@@ -34,7 +34,7 @@ class SinusoidalPositionalEncoding(nn.Module):
 
 
 class ConvolutionalBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_groups=32, activation=True, max_pool=False, **kwargs):
+    def __init__(self, in_channels, out_channels, num_groups=32, activation=True, use_mish=True, max_pool=False, **kwargs):
         super().__init__()
 
         # Convolutional Layer
@@ -44,7 +44,7 @@ class ConvolutionalBlock(nn.Module):
         self.gn = nn.GroupNorm(num_groups, out_channels) if num_groups > 0 else nn.Identity()
 
         # Activation Function
-        self.act = nn.Mish() if activation else nn.Identity()
+        self.act = (nn.Mish() if use_mish else nn.LeakyReLU(negative_slope=0.2)) if activation else nn.Identity()
 
         # Max Polling Layer
         self.pool = nn.MaxPool3d(kernel_size=2) if max_pool else nn.Identity()
@@ -54,38 +54,38 @@ class ConvolutionalBlock(nn.Module):
 
 
 class DownsampleBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, scale_factor=2, activation=False, **kwargs):
+    def __init__(self, in_channels, out_channels, scale_factor=2, activation=False, use_mish=True, **kwargs):
         super().__init__()
 
         # Convolutional Layer
         self.conv = nn.Conv3d(in_channels, out_channels, stride=scale_factor, padding_mode='reflect', **kwargs)
 
         # Activation Function
-        self.act = nn.Mish() if activation else nn.Identity()
+        self.act = (nn.Mish() if use_mish else nn.LeakyReLU(negative_slope=0.2)) if activation else nn.Identity()
 
     def forward(self, x):
         return self.act(self.conv(x))
 
 
 class UpsampleBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, scale_factor=2, mode='trilinear', activation=False, **kwargs):
+    def __init__(self, in_channels, out_channels, scale_factor=2, mode='trilinear', activation=False, use_mish=True, **kwargs):
         super().__init__()
 
         # Upsample Layer
-        self.upsample = nn.Upsample(scale_factor=scale_factor, mode=mode, align_corners=True)
+        self.upsample = nn.Upsample(scale_factor=scale_factor, mode=mode, align_corners=False)
 
         # Convolutional Layer
         self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
 
         # Activation Function
-        self.act = nn.Mish() if activation else nn.Identity()
+        self.act = (nn.Mish() if use_mish else nn.LeakyReLU(negative_slope=0.2)) if activation else nn.Identity()
 
     def forward(self, x):
         return self.act(self.conv(self.upsample(x)))
 
 
 class ResidualDenseBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_growth_features=32, num_conv_blocks=5, num_groups=32, beta=0.2, **kwargs):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_growth_features=32, num_conv_blocks=3, num_groups=32, beta=0.2, **kwargs):
         super().__init__()
         assert num_conv_blocks > 0 if in_channels != out_channels else True, f'Number of convolutional blocks ({num_conv_blocks}) must be greater than 0'
 
@@ -108,6 +108,7 @@ class ResidualDenseBlock(nn.Module):
                     num_growth_features if block_index != (num_conv_blocks - 1) else out_channels,
                     num_groups=(num_groups if block_index != (num_conv_blocks - 1) else 0),
                     activation=(True if block_index != (num_conv_blocks - 1) else False),
+                    use_mish=True,
                     max_pool=False,
                     **(kwargs if block_index != (num_conv_blocks - 1) else {'kernel_size': 1, 'stride': 1, 'padding': 0})
                 )
@@ -226,7 +227,7 @@ class SelfAttentionBlock(nn.Module):
 
 
 class ResidualDenseAttentionBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_conv_blocks=5, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_conv_blocks=3, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
         super().__init__()
 
         # Residual Dense Block
@@ -256,7 +257,7 @@ class ResidualDenseAttentionBlock(nn.Module):
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=2, num_rdb_conv_blocks=5, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=1, num_rdb_conv_blocks=3, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
         super().__init__()
 
         # Residual Dense Blocks with Optional Self-Attention Blocks
@@ -298,7 +299,7 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=2, num_rdb_conv_blocks=5, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=1, num_rdb_conv_blocks=3, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
         super().__init__()
 
         # Residual Dense Blocks with Optional Self-Attention Blocks
@@ -341,7 +342,7 @@ class DecoderBlock(nn.Module):
 
 
 class BottleneckBlock(nn.Module):
-    def __init__(self, in_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=2, num_rdb_conv_blocks=5, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+    def __init__(self, in_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=1, num_rdb_conv_blocks=3, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
         super().__init__()
 
         # Residual Dense Blocks with Optional Self-Attention Blocks
@@ -372,7 +373,7 @@ class BottleneckBlock(nn.Module):
 
 
 class NoisePredictor(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rdb_blocks=2, num_rdb_conv_blocks=5, num_rdb_growth_features=32, attention_levels=((True,) * 4), num_attention_heads=8, num_groups=32, scale_factor=2):
+    def __init__(self, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rdb_blocks=1, num_rdb_conv_blocks=3, num_rdb_growth_features=32, attention_levels=((False,) * 2 + (True,) * 2), num_attention_heads=8, num_groups=32, scale_factor=1):
         super().__init__()
         assert len(feature_multipliers) == len(attention_levels), f'Array size of attention levels ({len(attention_levels)}) must match array size of feature multipliers ({len(feature_multipliers)})'
 
@@ -476,6 +477,7 @@ class NoisePredictor(nn.Module):
                 num_inner_features,
                 num_groups=num_groups,
                 activation=True,
+                use_mish=True,
                 max_pool=False,
                 kernel_size=3, stride=1, padding=1
             ),

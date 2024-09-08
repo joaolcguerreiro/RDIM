@@ -13,7 +13,7 @@ from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '', '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.srmediff import GaussianDiffusion, NoisePredictor
+from src.models.voxrdiff import GaussianDiffusion, NoisePredictor
 from src.models.esrgan import Generator
 from src.utils.utils import parse_patch_size, clamp, create_experiment_directory, save_samples, save_batch, set_seed
 from src.utils.logger import setup_logging, print_divisor

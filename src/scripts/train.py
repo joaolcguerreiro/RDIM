@@ -17,7 +17,7 @@ from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '', '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.srmediff import GaussianDiffusion, NoisePredictor
+from src.models.voxrdiff import GaussianDiffusion, NoisePredictor
 from src.models.esrgan import Generator
 from src.utils.losses import VGGLoss, SSIMLoss
 from src.utils.utils import upsample, clamp, denormalize, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
