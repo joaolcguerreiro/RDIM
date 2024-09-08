@@ -18,7 +18,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '', '..'
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.voxrdiff import GaussianDiffusion, NoisePredictor
-from src.models.esrgan import Generator
+from src.models.voxrdiff import LREncoder
 from src.utils.losses import VGGLoss, SSIMLoss
 from src.utils.utils import upsample, clamp, denormalize, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logging, print_divisor
@@ -68,7 +68,7 @@ def main():
     ).to(device)
 
     if config["MODEL"]["LR_CONDITION_ENCODING"]:
-        lr_encoder = Generator(
+        lr_encoder = LREncoder(
             in_channels=config["MODEL"]["LR_ENCODER"]["IN_CHANNELS"],
             out_channels=config["MODEL"]["LR_ENCODER"]["OUT_CHANNELS"],
             num_features=config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"],
@@ -80,7 +80,7 @@ def main():
         ).to(device)
 
         # Replace forward method to extract features
-        lr_encoder.forward = Generator.extract_features
+        lr_encoder.forward = LREncoder.extract_features
 
     # Initialize weights
     noise_predictor.initialize_weights()
@@ -166,7 +166,7 @@ def main():
         print_divisor()
 
         # Replace extract features method with forward
-        lr_encoder.forward = Generator.forward
+        lr_encoder.forward = LREncoder.forward
 
         for pre_train_epoch in range(pre_train_lr_encoder_start_epoch, pre_train_lr_encoder_end_epoch):
             # Set model to train mode
@@ -223,7 +223,7 @@ def main():
             pre_train_lr_encoder_dataset.increment_epoch()
 
         # Replace forward method to extract features
-        lr_encoder.forward = Generator.extract_features
+        lr_encoder.forward = LREncoder.extract_features
 
     # Training and validation loop
     print_divisor()

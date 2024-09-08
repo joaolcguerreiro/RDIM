@@ -14,7 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '', '..'
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.voxrdiff import GaussianDiffusion, NoisePredictor
-from src.models.esrgan import Generator
+from src.models.voxrdiff import LREncoder
 from src.utils.utils import parse_patch_size, clamp, create_experiment_directory, save_samples, save_batch, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
@@ -62,7 +62,7 @@ def main():
     ).to(device)
 
     if checkpoint['gaussian_diffusion_lr_condition_encoding']:
-        lr_encoder = Generator(
+        lr_encoder = LREncoder(
             in_channels=checkpoint['lr_encoder_in_channels'],
             out_channels=checkpoint['lr_encoder_out_channels'],
             num_features=checkpoint['lr_encoder_num_features'],
@@ -74,7 +74,7 @@ def main():
         ).to(device)
 
         # Replace forward method to extract features
-        lr_encoder.forward = Generator.extract_features
+        lr_encoder.forward = LREncoder.extract_features
 
     # Log Noise Predictor and LR Encoder
     summary(noise_predictor, input_data=[torch.randn(1, checkpoint['noise_predictor_in_channels'], *map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size']))), torch.randn(1, (checkpoint['lr_encoder_num_features'] if checkpoint['gaussian_diffusion_lr_condition_encoding'] else checkpoint['noise_predictor_in_channels']), *(lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size'])), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)

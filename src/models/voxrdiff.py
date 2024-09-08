@@ -1,5 +1,6 @@
 import os
 import sys
+import math
 import torch
 import torch.nn as nn
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
@@ -34,7 +35,7 @@ class SinusoidalPositionalEncoding(nn.Module):
 
 
 class ConvolutionalBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_groups=32, activation=True, use_mish=True, max_pool=False, **kwargs):
+    def __init__(self, in_channels, out_channels, num_groups=32, activation=True, max_pool=False, **kwargs):
         super().__init__()
 
         # Convolutional Layer
@@ -44,7 +45,7 @@ class ConvolutionalBlock(nn.Module):
         self.gn = nn.GroupNorm(num_groups, out_channels) if num_groups > 0 else nn.Identity()
 
         # Activation Function
-        self.act = (nn.Mish() if use_mish else nn.LeakyReLU(negative_slope=0.2)) if activation else nn.Identity()
+        self.act = nn.Mish() if activation else nn.Identity()
 
         # Max Polling Layer
         self.pool = nn.MaxPool3d(kernel_size=2) if max_pool else nn.Identity()
@@ -54,21 +55,21 @@ class ConvolutionalBlock(nn.Module):
 
 
 class DownsampleBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, scale_factor=2, activation=False, use_mish=True, **kwargs):
+    def __init__(self, in_channels, out_channels, scale_factor=2, activation=False, **kwargs):
         super().__init__()
 
         # Convolutional Layer
         self.conv = nn.Conv3d(in_channels, out_channels, stride=scale_factor, padding_mode='reflect', **kwargs)
 
         # Activation Function
-        self.act = (nn.Mish() if use_mish else nn.LeakyReLU(negative_slope=0.2)) if activation else nn.Identity()
+        self.act = nn.Mish() if activation else nn.Identity()
 
     def forward(self, x):
         return self.act(self.conv(x))
 
 
 class UpsampleBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, scale_factor=2, mode='trilinear', activation=False, use_mish=True, **kwargs):
+    def __init__(self, in_channels, out_channels, scale_factor=2, mode='trilinear', activation=False, **kwargs):
         super().__init__()
 
         # Upsample Layer
@@ -78,7 +79,7 @@ class UpsampleBlock(nn.Module):
         self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
 
         # Activation Function
-        self.act = (nn.Mish() if use_mish else nn.LeakyReLU(negative_slope=0.2)) if activation else nn.Identity()
+        self.act = nn.Mish() if activation else nn.Identity()
 
     def forward(self, x):
         return self.act(self.conv(self.upsample(x)))
@@ -108,7 +109,6 @@ class ResidualDenseBlock(nn.Module):
                     num_growth_features if block_index != (num_conv_blocks - 1) else out_channels,
                     num_groups=(num_groups if block_index != (num_conv_blocks - 1) else 0),
                     activation=(True if block_index != (num_conv_blocks - 1) else False),
-                    use_mish=True,
                     max_pool=False,
                     **(kwargs if block_index != (num_conv_blocks - 1) else {'kernel_size': 1, 'stride': 1, 'padding': 0})
                 )
@@ -477,7 +477,6 @@ class NoisePredictor(nn.Module):
                 num_inner_features,
                 num_groups=num_groups,
                 activation=True,
-                use_mish=True,
                 max_pool=False,
                 kernel_size=3, stride=1, padding=1
             ),
@@ -537,6 +536,163 @@ class NoisePredictor(nn.Module):
 
         # Concat skip-connection and apply output layer
         out = torch.cat([out, skip_connection], dim=1)
+        out = self.output(out)
+
+        return out
+
+
+class DenseBlock(nn.Module):
+    def __init__(self, in_channels, num_growth_features=32, num_conv_blocks=3, **kwargs):
+        super().__init__()
+
+        # Convolutional Blocks
+        self.conv_blocks = nn.ModuleList()
+
+        for block_index in range(num_conv_blocks):
+            self.conv_blocks.append(
+                ConvolutionalBlock(
+                    in_channels + block_index * num_growth_features,
+                    num_growth_features if block_index != (num_conv_blocks - 1) else in_channels,
+                    num_groups=0,
+                    activation=(True if block_index != (num_conv_blocks - 1) else False),
+                    max_pool=False,
+                    **kwargs
+                )
+            )
+
+    def forward(self, x):
+        out = skip_connections = x
+
+        for conv_block in self.conv_blocks:
+            out = conv_block(skip_connections)
+
+            skip_connections = torch.cat([skip_connections, out], dim=1)
+
+        return out
+
+
+class ResidualInResidualDenseBlock(nn.Module):
+    def __init__(self, in_channels, num_db_growth_features=32, num_db_blocks=2, num_db_conv_blocks=3, beta=0.2, **kwargs):
+        super().__init__()
+
+        # Residual Scale Factor
+        self.beta = beta
+
+        # Dense Blocks
+        self.dense_blocks = nn.ModuleList()
+
+        for _ in range(num_db_blocks):
+            self.dense_blocks.append(
+                DenseBlock(
+                    in_channels,
+                    num_growth_features=num_db_growth_features,
+                    num_conv_blocks=num_db_conv_blocks,
+                    **kwargs
+                )
+            )
+
+    def forward(self, x):
+        out = skip_connection = x
+
+        for dense_block in self.dense_blocks:
+            dense_out = dense_block(out)
+
+            out = out + dense_out * self.beta
+
+        out = out * self.beta + skip_connection
+
+        return out
+
+
+class LREncoder(nn.Module):
+    def __init__(self, in_channels=1, out_channels=1, num_features=64, num_rrdb_blocks=1, num_rrdb_db_blocks=2, num_rrdb_db_conv_blocks=3, num_rrdb_db_growth_features=32, scale_factor=1):
+        super().__init__()
+
+        # Input Layer
+        self.input = ConvolutionalBlock(
+            in_channels,
+            num_features,
+            num_groups=0,
+            activation=False,
+            max_pool=False,
+            kernel_size=3, stride=1, padding=1
+        )
+
+        # Residual in Residual Dense Blocks
+        self.res_in_res_blocks = nn.Sequential(*[ResidualInResidualDenseBlock(
+            num_features,
+            num_db_growth_features=num_rrdb_db_growth_features,
+            num_db_blocks=num_rrdb_db_blocks,
+            num_db_conv_blocks=num_rrdb_db_conv_blocks,
+            kernel_size=3, stride=1, padding=1
+        ) for _ in range(num_rrdb_blocks)])
+
+        # Convolutional Layer
+        self.conv = ConvolutionalBlock(
+            num_features,
+            num_features,
+            num_groups=0,
+            activation=False,
+            max_pool=False,
+            kernel_size=3, stride=1, padding=1
+        )
+
+        # Upsampling Blocks
+        self.upsample_blocks = nn.Sequential(*[UpsampleBlock(
+            num_features,
+            num_features,
+            scale_factor=2,
+            mode='nearest',
+            activation=True,
+            kernel_size=3, stride=1, padding=1
+        ) for _ in range(int(math.log2(scale_factor)))])
+
+        # Output Block
+        self.output = nn.Sequential(
+            ConvolutionalBlock(
+                num_features,
+                num_features,
+                num_groups=0,
+                activation=True,
+                max_pool=False,
+                kernel_size=3, stride=1, padding=1
+            ),
+            ConvolutionalBlock(
+                num_features,
+                out_channels,
+                num_groups=0,
+                activation=False,
+                max_pool=False,
+                kernel_size=3, stride=1, padding=1
+            )
+        )
+
+    def initialize_weights(self, scale=1.0):
+        for module in self.modules():
+            if isinstance(module, (nn.Conv3d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight.data)
+                module.weight.data *= scale
+                if module.bias is not None:
+                    nn.init.constant_(module.bias.data, 0)
+
+    def extract_features(self, x):
+        out = skip_connection = self.input(x)
+
+        out = self.res_in_res_blocks(out)
+
+        features = self.conv(out) + skip_connection
+
+        return features
+
+    def forward(self, x):
+        out = skip_connection = self.input(x)
+
+        out = self.res_in_res_blocks(out)
+
+        out = self.conv(out) + skip_connection
+
+        out = self.upsample_blocks(out)
+
         out = self.output(out)
 
         return out
