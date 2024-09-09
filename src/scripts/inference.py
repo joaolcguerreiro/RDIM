@@ -131,6 +131,9 @@ def main():
         # Logging the inference progress bar
         logging.info(inference_pbar)
 
+        # Release unused memory
+        torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
+
     print_divisor()
 
 

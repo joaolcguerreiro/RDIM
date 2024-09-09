@@ -221,6 +221,9 @@ def main():
             # Increment epoch count
             pre_train_lr_encoder_dataset.increment_epoch()
 
+            # Release unused memory
+            torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
+
         # Replace forward method to extract features
         lr_encoder.forward = lr_encoder.extract_features
 
@@ -292,6 +295,9 @@ def main():
         # Logging the training progress bar
         logging.info(train_pbar)
 
+        # Release unused memory
+        torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
+
         if args.val:
             # Set the noise predictor to evaluation mode
             noise_predictor.eval()
@@ -350,6 +356,9 @@ def main():
 
                 # Logging the validation progress bar
                 logging.info(val_pbar)
+
+                # Release unused memory
+                torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
 
         # Adjust learning rate
         noise_predictor_scheduler.step(epoch)
@@ -437,6 +446,9 @@ def main():
                 y_label='Loss',
                 save_filename=os.path.join(experiment_path, 'figures', 'train', 'noise_predictor_loss')
             )
+
+        # Release unused memory
+        torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
 
     print_divisor()
 

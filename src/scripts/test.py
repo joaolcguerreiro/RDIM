@@ -150,6 +150,9 @@ def main():
         # Logging the testing progress bar
         logging.info(test_pbar)
 
+        # Release unused memory
+        torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
+
     print_divisor(last=True)
 
     # Log metrics
