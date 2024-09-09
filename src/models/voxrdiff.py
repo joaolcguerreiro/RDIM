@@ -870,7 +870,7 @@ class GaussianDiffusion(nn.Module):
 
         for timestep in reversed(range(1, self.num_timesteps + 1)):
             # Adapt timestep for batch processing
-            timestep = torch.full((num_samples,), timestep, dtype=torch.long)
+            timestep = torch.full((num_samples,), timestep, dtype=torch.long, device=next(noise_predictor.parameters()).device)
 
             # Predict noise
             eps_t_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None)) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
