@@ -117,7 +117,7 @@ def main():
 
     # Define the loss function
     diffusion_criterion = nn.MSELoss().to(device)
-    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True)).to(device) if config['TRAINING']['PERCEPTUAL_LOSS_VGG'] else SSIMLoss(num_spatial_dims=len(train_dataset.get_low_resolution_shape(only_spatial_dims=True)), _min=_min, _max=_max, mean=mean, std=std).to(device)
+    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True)).to(device) if config['PRE_TRAINING_LR_ENCODER']['PERCEPTUAL_LOSS_VGG'] else SSIMLoss(num_spatial_dims=len(train_dataset.get_low_resolution_shape(only_spatial_dims=True)), _min=_min, _max=_max, mean=mean, std=std).to(device)
     content_criterion = nn.L1Loss().to(device)
 
     # Define number of epochs and resume training if applicable
@@ -257,7 +257,7 @@ def main():
             timesteps = gaussian_diffusion.sample_timesteps(len(volumes_0)).to(device)
 
             # Sample timestep volumes
-            volumes_t, volumes_t_m1_real, eps_t_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
+            volumes_t, eps_t_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
 
             # Zero the gradients
             noise_predictor_optimizer.zero_grad()
@@ -265,20 +265,11 @@ def main():
             # Forward pass
             eps_t_pred = noise_predictor(volumes_t, (lr_encoder(lr_volumes) if config["MODEL"]["LR_CONDITION_ENCODING"] else lr_volumes), timesteps)
 
-            # Reverse diffusion to compute volume at previous timestep
-            volumes_t_m1_pred = gaussian_diffusion.reverse_diffusion(volumes_t, eps_t_pred, timesteps)
-
-            # Compute perceptual loss
-            perceptual_loss = perceptual_criterion(volumes_t_m1_pred, volumes_t_m1_real) if perceptual_criterion else 0.0
-
             # Compute diffusion loss
             diffusion_loss = diffusion_criterion(eps_t_pred, eps_t_real)
 
-            # Compute pixel-wise loss
-            content_loss = content_criterion(volumes_t_m1_pred, volumes_t_m1_real)
-
             # Noise Predictor Total loss
-            noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['CONTENT_LOSS'] * content_loss
+            noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss
 
             # Backward pass
             noise_predictor_total_loss.backward()
@@ -332,25 +323,16 @@ def main():
                     timesteps = gaussian_diffusion.sample_timesteps(len(volumes_0)).to(device)
 
                     # Sample timestep volumes
-                    volumes_t, volumes_t_m1_real, eps_t_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
+                    volumes_t, eps_t_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
 
                     # Forward pass
                     eps_t_pred = noise_predictor_inferer(inputs=volumes_t, conditions=lr_volumes, timesteps=timesteps, inputs_network=noise_predictor, conditions_network=(lr_encoder if config["MODEL"]["LR_CONDITION_ENCODING"] else None))
 
-                    # Reverse diffusion to compute volume at previous timestep
-                    volumes_t_m1_pred = gaussian_diffusion.reverse_diffusion(volumes_t, eps_t_pred, timesteps)
-
-                    # Compute perceptual loss
-                    perceptual_loss = perceptual_criterion(volumes_t_m1_pred, volumes_t_m1_real) if perceptual_criterion else 0.0
-
                     # Compute diffusion loss
                     diffusion_loss = diffusion_criterion(eps_t_pred, eps_t_real)
 
-                    # Compute pixel-wise loss
-                    content_loss = content_criterion(volumes_t_m1_pred, volumes_t_m1_real)
-
                     # Noise Predictor Total loss
-                    noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['CONTENT_LOSS'] * content_loss
+                    noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss
 
                     # Update the validation loss
                     noise_predictor_val_loss += noise_predictor_total_loss.item()

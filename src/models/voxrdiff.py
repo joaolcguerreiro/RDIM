@@ -792,33 +792,9 @@ class GaussianDiffusion(nn.Module):
         condition = condition.view(*timestep.shape, *([1] * num_diff_dims))
 
         # Sample random noise
-        eps = torch.randn_like(x_0)
+        eps_t = torch.randn_like(x_0)
 
-        x_t = torch.where(condition, torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps, x_0)
-
-        return x_t
-
-    def compute_volume_at_next_timestep(self, x_t_m1, timestep):
-        """
-        Compute the volume at the next timestep given the volume at the previous timestep
-        Equation (2) in original DDPM paper (https://arxiv.org/pdf/2006.11239.pdf) with reparameterization trick
-        """
-
-        assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
-
-        # Get timestep index
-        timestep_index = timestep - 1
-
-        # Count dimension mismatch between volume and timestep
-        num_diff_dims = x_t_m1.dim() - timestep.dim()
-
-        # Compute beta at given timestep and match volume dimensions
-        beta_t = self.betas[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
-
-        # Sample random noise
-        eps_t = torch.randn_like(x_t_m1)
-
-        x_t = torch.sqrt(1 - beta_t) * x_t_m1 + torch.sqrt(beta_t) * eps_t
+        x_t = torch.where(condition, torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps_t, x_0)
 
         return x_t, eps_t
 
@@ -859,16 +835,10 @@ class GaussianDiffusion(nn.Module):
     def forward_diffusion(self, x_0, timestep):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
 
-        # Get second to last timestep (timestep_m1)
-        timestep_m1 = timestep - 1
-
-        # Compute second to last timestep volume
-        x_t_m1 = self.compute_volume_at_timestep(x_0, timestep_m1)
-
         # Compute last timestep volume
-        x_t, eps_t = self.compute_volume_at_next_timestep(x_t_m1, timestep)
+        x_t, eps_t = self.compute_volume_at_timestep(x_0, timestep)
 
-        return x_t, x_t_m1, eps_t
+        return x_t, eps_t
 
     def reverse_diffusion(self, x_t, eps_t, timestep):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
