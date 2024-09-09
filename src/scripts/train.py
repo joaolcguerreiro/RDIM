@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
 from glob import glob
-from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
@@ -97,7 +96,6 @@ def main():
 
     # Define patch-based inferers
     noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True), scale_factor=config["MODEL"]["SCALE_FACTOR"], overlap=0.25, mode='gaussian', sw_device=device, device=device)
-    lr_encoder_inferer = SlidingWindowInferer(roi_size=train_dataset.get_low_resolution_shape(only_spatial_dims=True), overlap=0.25, mode='gaussian', sw_device=device, device=device) if config["MODEL"]["LR_CONDITION_ENCODING"] else None
 
     # Define optimizer and scheduler
     noise_predictor_optimizer = optim.Adam(
@@ -246,12 +244,6 @@ def main():
             lr_volumes = lr_volumes.to(device)
             hr_volumes = hr_volumes.to(device)
 
-            # Prepare conditioning variable
-            if config["MODEL"]["LR_CONDITION_ENCODING"]:
-                cond_volumes = lr_encoder(lr_volumes)
-            else:
-                cond_volumes = lr_volumes
-
             # Compute residual volumes
             if config["MODEL"]["RESIDUAL_PREDICTION"]:
                 # Upsample volumes
@@ -271,7 +263,7 @@ def main():
             noise_predictor_optimizer.zero_grad()
 
             # Forward pass
-            eps_t_pred = noise_predictor(volumes_t, cond_volumes, timesteps)
+            eps_t_pred = noise_predictor(volumes_t, (lr_encoder(lr_volumes) if config["MODEL"]["LR_CONDITION_ENCODING"] else lr_volumes), timesteps)
 
             # Reverse diffusion to compute volume at previous timestep
             volumes_t_m1_pred = gaussian_diffusion.reverse_diffusion(volumes_t, eps_t_pred, timesteps)
@@ -327,12 +319,6 @@ def main():
                     lr_volumes = lr_volumes.to(device)
                     hr_volumes = hr_volumes.to(device)
 
-                    # Prepare conditioning variable
-                    if config["MODEL"]["LR_CONDITION_ENCODING"]:
-                        cond_volumes = lr_encoder_inferer(inputs=lr_volumes, network=lr_encoder)
-                    else:
-                        cond_volumes = lr_volumes
-
                     # Compute residual volumes
                     if config["MODEL"]["RESIDUAL_PREDICTION"]:
                         # Upsample volumes
@@ -349,7 +335,7 @@ def main():
                     volumes_t, volumes_t_m1_real, eps_t_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
 
                     # Forward pass
-                    eps_t_pred = noise_predictor_inferer(inputs=volumes_t, conditions=cond_volumes, timesteps=timesteps, network=noise_predictor)
+                    eps_t_pred = noise_predictor_inferer(inputs=volumes_t, conditions=lr_volumes, timesteps=timesteps, inputs_network=noise_predictor, conditions_network=(lr_encoder if config["MODEL"]["LR_CONDITION_ENCODING"] else None))
 
                     # Reverse diffusion to compute volume at previous timestep
                     volumes_t_m1_pred = gaussian_diffusion.reverse_diffusion(volumes_t, eps_t_pred, timesteps)
@@ -450,7 +436,7 @@ def main():
             # Plot sample figure
             save_sample(
                 lr_volume=clamp(lr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
-                gen_volume=clamp(clamp(gaussian_diffusion.sample(lr_volumes[-1].unsqueeze(dim=0), noise_predictor, (lr_encoder if config["MODEL"]["LR_CONDITION_ENCODING"] else None), noise_predictor_inferer, (lr_encoder_inferer if config["MODEL"]["LR_CONDITION_ENCODING"] else None)).squeeze(dim=0), _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
+                gen_volume=clamp(clamp(gaussian_diffusion.sample(lr_volumes[-1].unsqueeze(dim=0), noise_predictor, (lr_encoder if config["MODEL"]["LR_CONDITION_ENCODING"] else None), noise_predictor_inferer).squeeze(dim=0), _min=(_min if args.clamp else None), _max=(_max if args.clamp else None), mean=mean, std=std), _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 gt_volume=clamp(hr_volumes[-1], _min=args.sample_pixel_range[0], _max=args.sample_pixel_range[1], mean=mean, std=std),
                 bins=100,
                 _min=(args.sample_pixel_range[0] if args.sample_pixel_range[0] is not None else _min), _max=(args.sample_pixel_range[1] if args.sample_pixel_range[1] is not None else _max), mean=mean, std=std,

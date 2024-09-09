@@ -9,7 +9,6 @@ import numpy as np
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
-from monai.inferers.inferer import SlidingWindowInferer
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
@@ -87,7 +86,6 @@ def main():
 
     # Define patch-based inferers
     noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.25, mode='gaussian', sw_device=device, device=device)
-    lr_encoder_inferer = SlidingWindowInferer(roi_size=(args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']), overlap=0.25, mode='gaussian', sw_device=device, device=device) if checkpoint['gaussian_diffusion_lr_condition_encoding'] else None
 
     # Define metrics
     metrics = SuperResolutionMetrics(num_spatial_dims=len(checkpoint['training_lr_patch_size']), _min=_min, _max=_max, mean=mean, std=std)
@@ -118,7 +116,7 @@ def main():
             hr_volumes = hr_volumes.to(device)
 
             # Reverse Diffusion (Forward pass xT)
-            gen_volumes = gaussian_diffusion.sample(lr_volumes, noise_predictor, (lr_encoder if checkpoint['gaussian_diffusion_lr_condition_encoding'] else None), noise_predictor_inferer, (lr_encoder_inferer if checkpoint['gaussian_diffusion_lr_condition_encoding'] else None))
+            gen_volumes = gaussian_diffusion.sample(lr_volumes, noise_predictor, (lr_encoder if checkpoint['gaussian_diffusion_lr_condition_encoding'] else None), noise_predictor_inferer)
 
             # Clamp generated data
             gen_volumes = torch.stack([clamp(gen_volume, _min=_min, _max=_max, mean=mean, std=std) for gen_volume in gen_volumes]) if args.clamp else gen_volumes

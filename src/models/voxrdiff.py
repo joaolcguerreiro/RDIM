@@ -879,21 +879,18 @@ class GaussianDiffusion(nn.Module):
         return x_t_m1_pred
 
     @torch.no_grad()
-    def sample(self, x_lr, noise_predictor, lr_encoder=None, noise_predictor_inferer=None, lr_encoder_inferer=None):
+    def sample(self, x_lr, noise_predictor, lr_encoder=None, noise_predictor_inferer=None):
+        assert not self.lr_condition_encoding or lr_encoder, f'LR Encoder is required because LR condition encoding is {self.lr_condition_encoding}'
+
         # Get number of samples (batch size)
         num_samples = x_lr.shape[0]
 
         # Set the noise predictor to evaluation mode
         noise_predictor.eval()
 
-        # Prepare conditioning variable
+        # Set the LR encoder to evaluation mode if applicable
         if self.lr_condition_encoding:
-            # Set the LR encoder to evaluation mode
             lr_encoder.eval()
-
-            x_cond = lr_encoder_inferer(inputs=x_lr, network=lr_encoder) if lr_encoder_inferer else lr_encoder(x_lr)
-        else:
-            x_cond = x_lr
 
         # Upsample volume
         x_lr_up = torch.stack([upsample(volume, self.scale_factor) for volume in x_lr])
@@ -906,7 +903,7 @@ class GaussianDiffusion(nn.Module):
             timestep = torch.full((num_samples,), timestep, dtype=torch.long)
 
             # Predict noise
-            eps_t_pred = noise_predictor_inferer(inputs=x_t, conditions=x_cond, timesteps=timestep, network=noise_predictor) if noise_predictor_inferer else noise_predictor(x_t, x_cond, timestep)
+            eps_t_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None)) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
 
             # Reverse diffusion to compute volume at previous timestep
             x_t = self.reverse_diffusion(x_t, eps_t_pred, timestep)

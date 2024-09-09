@@ -70,11 +70,11 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
             (i.e. no overlapping among the buffers) non_blocking copy may be automatically enabled for efficiency.
         buffer_dim: the spatial dimension along which the buffers are created.
             0 indicates the first spatial dimension. Default is -1, the last spatial dimension.
-        with_coord: whether to pass the window coordinates to ``network``. Defaults to False.
-            If True, the ``network``'s 2nd input argument should accept the window coordinates.
+        with_coord: whether to pass the window coordinates to ``inputs_network``. Defaults to False.
+            If True, the ``inputs_network``'s 2nd input argument should accept the window coordinates.
 
     Note:
-        ``sw_batch_size`` denotes the max number of windows per network inference iteration,
+        ``sw_batch_size`` denotes the max number of windows per inputs_network inference iteration,
         not the batch size of inputs.
     """
 
@@ -228,7 +228,8 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
         inputs: torch.Tensor,
         conditions: torch.Tensor,
         timesteps: torch.Tensor,
-        network: Callable[..., torch.Tensor | Sequence[torch.Tensor] | dict[Any, torch.Tensor]],
+        inputs_network: Callable[..., torch.Tensor | Sequence[torch.Tensor] | dict[Any, torch.Tensor]],
+        conditions_network: Callable[..., torch.Tensor | Sequence[torch.Tensor] | dict[Any, torch.Tensor]] | None = None,
         process_fn: Callable | None = None,
         *args: Any,
         **kwargs: Any,
@@ -238,11 +239,13 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
             inputs: input image to be processed (assuming NCHW[D])
             conditions: condition image to be processes (assuming NCH/sW/s[D/s])
             timesteps: steps used to condition the inputs (assuming N)
-            network: target model to execute inference.
+            inputs_network: target model to execute inference.
+                supports callables such as ``lambda x: my_torch_model(x, additional_config)``
+            conditions_network: target model to execute conditional inference.
                 supports callables such as ``lambda x: my_torch_model(x, additional_config)``
             process_fn: process inference output and adjust the importance map per window
-            args: optional args to be passed to ``network``.
-            kwargs: optional keyword args to be passed to ``network``.
+            args: optional args to be passed to ``inputs_network``.
+            kwargs: optional keyword args to be passed to ``inputs_network``.
         """
 
         device = kwargs.pop("device", self.device)
@@ -360,10 +363,12 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
                 win_data = inputs[unravel_slice[0]].to(sw_device)
                 win_cond_data = conditions[conditions_unravel_slice[0]].to(sw_device)
                 time_data = timesteps[time_unravel_slice[0]].to(sw_device)
+            if conditions_network:
+                win_cond_data = conditions_network(win_cond_data)
             if self.with_coord:
-                seg_prob_out = network(win_data, win_cond_data, time_data, unravel_slice, *args, **kwargs)  # batched patch
+                seg_prob_out = inputs_network(win_data, win_cond_data, time_data, unravel_slice, *args, **kwargs)  # batched patch
             else:
-                seg_prob_out = network(win_data, win_cond_data, time_data, *args, **kwargs)  # batched patch
+                seg_prob_out = inputs_network(win_data, win_cond_data, time_data, *args, **kwargs)  # batched patch
 
             # convert seg_prob_out to tuple seg_tuple, this does not allocate new memory.
             dict_keys, seg_tuple = self._flatten_struct(seg_prob_out)
