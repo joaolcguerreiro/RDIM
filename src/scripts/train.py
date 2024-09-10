@@ -95,7 +95,7 @@ def main():
         print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferers
-    noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True), scale_factor=config["MODEL"]["SCALE_FACTOR"], overlap=0.25, mode='gaussian', sw_device=device, device=device)
+    noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True), scale_factor=config["MODEL"]["SCALE_FACTOR"], overlap=0.125, mode='gaussian', sw_device=device, device=device)
 
     # Define optimizer and scheduler
     noise_predictor_optimizer = optim.Adam(
