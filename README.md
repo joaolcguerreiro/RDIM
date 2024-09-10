@@ -1,6 +1,6 @@
 # <span style="color: orange">VoxRDiff</span>
 
-Official repository for VoxRDiff, a generative adversarial network for 3D medical image reconstruction. 
+Official repository for VoxRDiff, a denoising diffusion probabilistic model for 3D medical image reconstruction. 
 
 ![Illustration with VoxRDiff qualitative results along every training epoch](./figures/sample.gif)
 
@@ -154,10 +154,12 @@ If you find this project useful, please consider citing the paper:
 
 3) Run script:
    ```
-   python test.py --exp=<experiment_path> --epoch=<epoch> [--lr-patch-size=lr_patch_size]
+   python test.py --exp=<experiment_path> --epoch=<epoch> [--lr-patch-size=<lr_patch_size>]
    ```
 
 > Note: Results are in `<experiment_path>/results`. Additionally, check `<experiment_path>/logs/test` and `<experiment_path>/figures/test` for more insights.
+
+> Note: Increase testing `PATCH_SLIDING_WINDOW_BATCH_SIZE` in `config.yaml` file to accelerate testing time. It controls the number of concurrent sliding window patches being processed. Notice, this will also increase memory used.
 
 > Note: Set `--lr-patch-size` to override the training low-resolution patch size. Higher patch sizes will accelerate the execution, but use more memory.
 
@@ -171,8 +173,10 @@ If you find this project useful, please consider citing the paper:
 
 3) Run script:
    ```
-    python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--lr-patch-size=lr_patch_size]
+    python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--patch-sliding-window-batch-size=<patch_sliding_window_batch_size>] [--lr-patch-size=<lr_patch_size>]
    ```
+
+> Note: Increase `--patch-sliding-window-batch-size` to accelerate inference time. It controls the number of concurrent sliding window patches being processed. Notice, this will also increase memory used.
 
 > Note: Set `--lr-patch-size` to override the training low-resolution patch size. Higher patch sizes will accelerate the execution, but use more memory.
 

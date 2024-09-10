@@ -119,7 +119,9 @@ LOSS_WEIGHTS:
 #=================================================================================================================#
 
 VALIDATION:
-  BATCH_SIZE: 1
+  BATCH_SIZE: 1,
+  PATCH_SLIDING_WINDOW_BATCH_SIZE: 16
 
 TESTING:
-  BATCH_SIZE: 1
+  BATCH_SIZE: 1,
+  PATCH_SLIDING_WINDOW_BATCH_SIZE: 16

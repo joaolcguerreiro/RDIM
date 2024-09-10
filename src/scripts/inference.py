@@ -84,7 +84,7 @@ def main():
         print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferers
-    noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.125, mode='gaussian', sw_device=device, device=device)
+    noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.125, mode='gaussian', sw_batch_size=args.patch_sliding_window_batch_size, sw_device=device, device=device)
 
     # Initialize models weights
     noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
@@ -146,6 +146,7 @@ if __name__ == '__main__':
     parser.add_argument('--clamp', default=True, help='Clamp generated data to original data range', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--sample-pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=lambda arg: np.array(ast.literal_eval(arg)))
     parser.add_argument('--batch-size', default=1, help='Number of samples per batch', type=int)
+    parser.add_argument('--patch-sliding-window-batch-size', default=16, help='Number of patches per sliding window batch', type=int)
     parser.add_argument('--lr-patch-size', default=None, help="Override low-resolution training patch size", type=ast.literal_eval)
     parser.add_argument('--num-workers', default=8, help='Number of subprocesses used for data loading', type=int)
     args = parser.parse_args()

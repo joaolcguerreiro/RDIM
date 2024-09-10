@@ -85,7 +85,7 @@ def main():
         print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Define patch-based inferers
-    noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.125, mode='gaussian', sw_device=device, device=device)
+    noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.125, mode='gaussian', sw_batch_size=config["TESTING"]["PATCH_SLIDING_WINDOW_BATCH_SIZE"], sw_device=device, device=device)
 
     # Define metrics
     metrics = SuperResolutionMetrics(num_spatial_dims=len(checkpoint['training_lr_patch_size']), _min=_min, _max=_max, mean=mean, std=std)
