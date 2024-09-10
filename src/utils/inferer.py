@@ -377,10 +377,10 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
                     win_cond_key = win_cond_data.cpu().detach().numpy().tobytes()
 
                     if win_cond_key in self.conditions_cache:
-                        win_cond_data = self.conditions_cache[win_cond_key]
+                        win_cond_data = self.conditions_cache[win_cond_key].to(device)
                     else:
                         win_cond_data = conditions_network(win_cond_data)
-                        self.conditions_cache[win_cond_key] = win_cond_data
+                        self.conditions_cache[win_cond_key] = win_cond_data.cpu()
                 else:
                     win_cond_data = conditions_network(win_cond_data)
             if self.with_coord:
