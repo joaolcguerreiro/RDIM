@@ -873,10 +873,13 @@ class GaussianDiffusion(nn.Module):
             timestep = torch.full((num_samples,), timestep, dtype=torch.long, device=next(noise_predictor.parameters()).device)
 
             # Predict noise
-            eps_t_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None)) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
+            eps_t_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None), cache_conditions=True) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
 
             # Reverse diffusion to compute volume at previous timestep
             x_t = self.reverse_diffusion(x_t, eps_t_pred, timestep)
+
+        # Clear cached memory
+        noise_predictor_inferer.clear_conditions_cache()
 
         return x_t + x_lr_up if self.residual_prediction else x_t
 

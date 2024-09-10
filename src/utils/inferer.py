@@ -27,6 +27,7 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
     """
     Multi-scale conditional sliding window method for model inference,
     with `sw_batch_size` windows for every model.forward().
+    The inferer is equipped with a cache system to avoid redundant computations of conditions.
     Usage example can be found in the :py:class:`monai.inferers.Inferer` base class.
 
     Args:
@@ -113,6 +114,9 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
         self.buffer_steps = buffer_steps
         self.buffer_dim = buffer_dim
         self.with_coord = with_coord
+
+        # Set conditions cache
+        self.conditions_cache = {}
 
         # compute_importance_map takes long time when computing on cpu. We thus
         # compute it once if it's static and then save it for future usage
@@ -223,6 +227,9 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
                     )
             out[idx_zm] += p
 
+    def clear_conditions_cache(self):
+        self.conditions_cache.clear()
+
     def __call__(
         self,
         inputs: torch.Tensor,
@@ -230,6 +237,7 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
         timesteps: torch.Tensor,
         inputs_network: Callable[..., torch.Tensor | Sequence[torch.Tensor] | dict[Any, torch.Tensor]],
         conditions_network: Callable[..., torch.Tensor | Sequence[torch.Tensor] | dict[Any, torch.Tensor]] | None = None,
+        cache_conditions: bool = False,
         process_fn: Callable | None = None,
         *args: Any,
         **kwargs: Any,
@@ -243,6 +251,7 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
                 supports callables such as ``lambda x: my_torch_model(x, additional_config)``
             conditions_network: target model to execute conditional inference.
                 supports callables such as ``lambda x: my_torch_model(x, additional_config)``
+            cache_conditions: whether to cache features of conditions.
             process_fn: process inference output and adjust the importance map per window
             args: optional args to be passed to ``inputs_network``.
             kwargs: optional keyword args to be passed to ``inputs_network``.
@@ -364,7 +373,16 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
                 win_cond_data = conditions[conditions_unravel_slice[0]].to(sw_device)
                 time_data = timesteps[time_unravel_slice[0]].to(sw_device)
             if conditions_network:
-                win_cond_data = conditions_network(win_cond_data)
+                if cache_conditions:
+                    win_cond_key = win_cond_data.cpu().detach().numpy().tobytes()
+
+                    if win_cond_key in self.conditions_cache:
+                        win_cond_data = self.conditions_cache[win_cond_key]
+                    else:
+                        win_cond_data = conditions_network(win_cond_data)
+                        self.conditions_cache[win_cond_key] = win_cond_data
+                else:
+                    win_cond_data = conditions_network(win_cond_data)
             if self.with_coord:
                 seg_prob_out = inputs_network(win_data, win_cond_data, time_data, unravel_slice, *args, **kwargs)  # batched patch
             else:
