@@ -104,7 +104,7 @@ def main():
         betas=(config['OPTIMIZER']['NOISE_PREDICTOR']['BETA_1'], config['OPTIMIZER']['NOISE_PREDICTOR']['BETA_2']),
         weight_decay=config['OPTIMIZER']['NOISE_PREDICTOR']['WEIGHT_DECAY']
     )
-    noise_predictor_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(noise_predictor_optimizer, T_0=config['SCHEDULER']['NOISE_PREDICTOR']['T_0'], T_mult=config['SCHEDULER']['NOISE_PREDICTOR']['T_MULT'], eta_min=config['SCHEDULER']['NOISE_PREDICTOR']['ETA_MIN'])
+    noise_predictor_scheduler = optim.lr_scheduler.CosineAnnealingLR(noise_predictor_optimizer, T_max=(len(train_dataloader) * config['TRAINING']['EPOCHS']), eta_min=config['SCHEDULER']['NOISE_PREDICTOR']['ETA_MIN'])
 
     if config["MODEL"]["LR_CONDITION_ENCODING"]:
         pre_train_lr_encoder_optimizer = optim.Adam(
