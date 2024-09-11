@@ -278,6 +278,9 @@ def main():
             noise_predictor_total_loss.backward()
             noise_predictor_optimizer.step()
 
+            # Adjust learning rate
+            noise_predictor_scheduler.step()
+
             # Update the training loss
             noise_predictor_train_loss += noise_predictor_total_loss.item()
             train_pbar.set_postfix({
@@ -359,9 +362,6 @@ def main():
 
                 # Release unused memory
                 torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
-
-        # Adjust learning rate
-        noise_predictor_scheduler.step(epoch)
 
         # Increment epoch count
         train_dataset.increment_epoch()
