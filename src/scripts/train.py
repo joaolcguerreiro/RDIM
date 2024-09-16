@@ -413,7 +413,7 @@ def main():
             }
 
             if config["MODEL"]["LR_CONDITION_ENCODING"]:
-                checkpoint_data['lr_encoder_state_dict'] = lr_encoder.state_dict(),
+                checkpoint_data['lr_encoder_state_dict'] = lr_encoder.state_dict()
                 checkpoint_data['lr_encoder_in_channels'] = config["MODEL"]["LR_ENCODER"]["IN_CHANNELS"]
                 checkpoint_data['lr_encoder_out_channels'] = config["MODEL"]["LR_ENCODER"]["OUT_CHANNELS"]
                 checkpoint_data['lr_encoder_num_features'] = config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"]

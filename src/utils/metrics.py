@@ -4,7 +4,7 @@ import lpips
 import torch
 import numpy as np
 import monai.transforms as transforms
-from monai.metrics import PSNRMetric, SSIMMetric, MultiScaleSSIMMetric
+from monai.metrics import PSNRMetric, SSIMMetric
 from monai.metrics.regression import RegressionMetric
 from monai.utils import MetricReduction
 from tabulate import tabulate
@@ -68,7 +68,7 @@ class SuperResolutionMetrics(Metrics):
         self.metrics = [
             {'name': 'PSNR', 'scores': [], 'func': PSNRMetric(max_val=1.0)},
             {'name': 'SSIM', 'scores': [], 'func': SSIMMetric(spatial_dims=num_spatial_dims, data_range=1.0)},
-            {'name': 'MS-SSIM', 'scores': [], 'func': MultiScaleSSIMMetric(spatial_dims=num_spatial_dims, data_range=1.0)}
+            {'name': 'LPIPS', 'scores': [], 'func': LPIPSMetric(min_val=0.0, max_val=1.0)}
         ]
 
     def preprocess(self, predictions, ground_truths):
@@ -99,7 +99,7 @@ class LPIPSMetric(RegressionMetric):
         pretrained: Use pretrained weights for LPIPS model. Default is True.
     """
 
-    def __init__(self, reduction: MetricReduction | str = MetricReduction.MEAN, get_not_nans: bool = False, model: str = 'alex', version: str = '0.1', pretrained: bool = True) -> None:
+    def __init__(self, min_val: float, max_val: float, reduction: MetricReduction | str = MetricReduction.MEAN, get_not_nans: bool = False, model: str = 'alex', version: str = '0.1', pretrained: bool = True) -> None:
         super().__init__(reduction=reduction, get_not_nans=get_not_nans)
 
         # Define Criterion
@@ -108,7 +108,7 @@ class LPIPSMetric(RegressionMetric):
         # Network transforms
         self.model_transforms = transforms.Compose([
             EnsureExactChannels(num_channels=3),
-            transforms.ScaleIntensity(minv=-1.0, maxv=1.0),
+            transforms.ScaleIntensityRange(a_min=min_val, a_max=max_val, b_min=-1.0, b_max=1.0),
             transforms.ToTensor(),
         ])
 
