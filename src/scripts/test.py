@@ -122,7 +122,7 @@ def main():
             gen_volumes = torch.stack([clamp(gen_volume, _min=_min, _max=_max, mean=mean, std=std) for gen_volume in gen_volumes]) if args.clamp else gen_volumes
 
             # Compute metrics
-            scores = metrics.compute_scores(gen_volumes, hr_volumes)
+            scores = metrics.compute_scores(gen_volumes.to('cpu'), hr_volumes.to('cpu'))
             test_pbar.set_postfix(scores)
 
             # Plot sample figures

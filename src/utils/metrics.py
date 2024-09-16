@@ -1,8 +1,9 @@
 import os
 import sys
-import lpips
 import torch
 import numpy as np
+import lpips
+import warnings
 import monai.transforms as transforms
 from monai.metrics import PSNRMetric, SSIMMetric
 from monai.metrics.regression import RegressionMetric
@@ -26,7 +27,7 @@ class Metrics:
 
         for metric in self.metrics:
             # Compute metric scores
-            scores = metric['func'](y_pred=predictions, y=ground_truths).to('cpu').squeeze(dim=-1).tolist()
+            scores = metric['func'](y_pred=predictions, y=ground_truths).squeeze(dim=-1).tolist()
 
             # Store metric score
             metric['scores'] += scores
@@ -52,6 +53,14 @@ class Metrics:
         """
 
         return predictions, ground_truths
+
+    def to(self, *args, **kwargs):
+        # Required to move attributes to device, change their dtype, and more
+        for metric in self.metrics:
+            if hasattr(metric['func'], 'to'):
+                metric['func'].to(*args, **kwargs)
+
+        return self
 
 
 class SuperResolutionMetrics(Metrics):
@@ -102,8 +111,13 @@ class LPIPSMetric(RegressionMetric):
     def __init__(self, min_val: float, max_val: float, reduction: MetricReduction | str = MetricReduction.MEAN, get_not_nans: bool = False, model: str = 'alex', version: str = '0.1', pretrained: bool = True) -> None:
         super().__init__(reduction=reduction, get_not_nans=get_not_nans)
 
-        # Define Criterion
-        self.criterion = lpips.LPIPS(net=model, version=version, pretrained=pretrained)
+        # Suppress the specific warning related to pretrained model
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="The parameter 'pretrained' is deprecated")
+            warnings.filterwarnings("ignore", message="Arguments other than a weight enum or `None` for 'weights' are deprecated")
+
+            # Define Criterion
+            self.criterion = lpips.LPIPS(net=model, version=version, pretrained=pretrained)
 
         # Network transforms
         self.model_transforms = transforms.Compose([
@@ -122,4 +136,10 @@ class LPIPSMetric(RegressionMetric):
         transformed_ground_truths_2d = transformed_ground_truths.permute(-5, -3, -4, -2, -1).contiguous().view(-1, 3, *transformed_ground_truths.shape[-2:])
 
         # Compute LPIPS score
-        return torch.mean(self.criterion(transformed_predictions_2d.to('cpu'), transformed_ground_truths_2d.to('cpu'))).reshape(1, 1)
+        return torch.mean(self.criterion(transformed_predictions_2d, transformed_ground_truths_2d)).reshape(1, 1)
+
+    def to(self, *args, **kwargs):
+        # Required to move attributes to device, change their dtype, and more
+        self.criterion.to(*args, **kwargs)
+
+        return self
