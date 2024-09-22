@@ -161,7 +161,7 @@ If you find this project useful, please consider citing the paper:
 
 > Note: Increase testing `PATCH_SLIDING_WINDOW_BATCH_SIZE` in `config.yaml` file to accelerate testing time. It controls the number of concurrent sliding window patches being processed. Notice, this will also increase memory used.
 
-> Note: Set `--lr-patch-size` to override the training low-resolution patch size. Higher patch sizes will accelerate the execution, but use more memory.
+> Note: Set `--lr-patch-size` to override the training low-resolution patch size.
 
 <hr style="border:1px solid gray">
 
@@ -178,7 +178,7 @@ If you find this project useful, please consider citing the paper:
 
 > Note: Increase `--patch-sliding-window-batch-size` to accelerate inference time. It controls the number of concurrent sliding window patches being processed. Notice, this will also increase memory used.
 
-> Note: Set `--lr-patch-size` to override the training low-resolution patch size. Higher patch sizes will accelerate the execution, but use more memory.
+> Note: Set `--lr-patch-size` to override the training low-resolution patch size.
 
 <hr style="border:1px solid gray">
 
