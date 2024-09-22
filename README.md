@@ -25,20 +25,29 @@ If you find this project useful, please consider citing the paper:
    import torch
    from monai.inferers.inferer import SlidingWindowInferer
    
+   # Define device
+   device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
+   
    # Set patch size (D, H, W)
    patch_size = (16, 16, 16)
    
    # Define inferer (Optional)
-   inferer = SlidingWindowInferer(roi_size=patch_size, overlap=0.125, mode='gaussian')
+   inferer = torch.hub.load(
+      'joaolcguerreiro/VoxRDiff', 'load_inferer',
+      roi_size=patch_size, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
+   )
    
    # Two random volumes (batch size of 2) with 1 channel and size of 64x64x64 (D, H, W). Mean is 0 and STD is 1.
-   volumes = torch.randn(2, 1, 64, 64, 64)
+   volumes = torch.randn(2, 1, 64, 64, 64).to(device)
    
    # Avoid HTTP Error 403
    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
    
    # Load model (check pretrained_models/README.md)
-   model = torch.hub.load(???)
+   model = torch.hub.load(
+      'joaolcguerreiro/VoxRDiff', 'load_model',
+      ???
+   ).to(device)
    model.eval()
    
    # Generated volumes. Model expects z-score normalized input volumes.
@@ -57,7 +66,10 @@ If you find this project useful, please consider citing the paper:
    ...
    
    # Load model (check pretrained_models/README.md)
-   model = torch.hub.load(???)
+   model = torch.hub.load(
+      'joaolcguerreiro/VoxRDiff', 'load_model',
+      ???
+   ).to(device)
    model.forward = model.extract_features
    model.eval()
    
