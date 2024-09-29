@@ -171,7 +171,7 @@ def main():
     # Plot sample pixel distribution
     draw_histogram(
         data=[
-            {'Pixel Intensity': gen_pixel_values, 'Data Type': ['Synthetic'] * len(gen_pixel_values)},
+            {'Pixel Intensity': gen_pixel_values, 'Data Type': ['Reconstruction'] * len(gen_pixel_values)},
             {'Pixel Intensity': hr_pixel_values, 'Data Type': ['Ground Truth'] * len(hr_pixel_values)}
         ],
         title='Sample Pixel Distribution',

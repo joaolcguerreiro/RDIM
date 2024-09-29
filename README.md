@@ -2,7 +2,7 @@
 
 Official repository for VoxRDiff, a denoising diffusion probabilistic model for 3D medical image reconstruction. 
 
-![Illustration with VoxRDiff qualitative results along every training epoch](./figures/sample.gif)
+![VoxRDiff qualitative results across every training epoch](./figures/sample.gif)
 
 <hr style="border:2px solid orange">
 

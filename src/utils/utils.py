@@ -332,7 +332,7 @@ def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, _min=None, 
     # Number of series (volume types) and samples per series (batch size)
     num_volume_types = sum(1 for _array in [lr_volumes, sr_volumes, gt_volumes] if _array)
     batch_size = len(lr_volumes or sr_volumes or gt_volumes)
-    _labels = list(label for label, _array in zip(['Low-Quality', 'Synthetic', 'Ground Truth'], [lr_volumes, sr_volumes, gt_volumes]) if _array) * batch_size if labels else None
+    _labels = list(label for label, _array in zip(['Low-Quality', 'Reconstruction', 'Ground Truth'], [lr_volumes, sr_volumes, gt_volumes]) if _array) * batch_size if labels else None
 
     print_divisor(width=50)
 
@@ -419,7 +419,7 @@ def save_sample(save_filename, lr_volume=None, gen_volume=None, gt_volume=None, 
     ax_img = np.array([[fig.add_subplot(grid_img[row, column]) for row in range(n_img_rows) for column in range(n_columns)]])
 
     # Draw slices
-    volumes, labels = zip(*filter(lambda slice_label_pair: slice_label_pair[0] is not None, zip([lr_volume, gen_volume, gt_volume], ['Low-Quality', 'Synthetic', 'Ground Truth'])))
+    volumes, labels = zip(*filter(lambda slice_label_pair: slice_label_pair[0] is not None, zip([lr_volume, gen_volume, gt_volume], ['Low-Quality', 'Reconstruction', 'Ground Truth'])))
     display_volumes(volumes, plane=plane, dimension=dimension, slice_index=slice_index, labels=labels, show=False, ax=ax_img, theme=theme)
 
     if with_histogram:
@@ -435,7 +435,7 @@ def save_sample(save_filename, lr_volume=None, gen_volume=None, gt_volume=None, 
         draw_histogram(
             data=[
                 *({'Pixel Intensity': lr_pixel_values, 'Data Type': ['Low-Quality'] * len(lr_pixel_values)} for lr_pixel_values in [lr_pixel_values] if lr_pixel_values),
-                *({'Pixel Intensity': gen_pixel_values, 'Data Type': ['Synthetic'] * len(gen_pixel_values)} for gen_pixel_values in [gen_pixel_values] if gen_pixel_values),
+                *({'Pixel Intensity': gen_pixel_values, 'Data Type': ['Reconstruction'] * len(gen_pixel_values)} for gen_pixel_values in [gen_pixel_values] if gen_pixel_values),
                 *({'Pixel Intensity': gt_pixel_values, 'Data Type': ['Ground Truth'] * len(gt_pixel_values)} for gt_pixel_values in [gt_pixel_values] if gt_pixel_values),
             ],
             title='Sample Pixel Distribution',
