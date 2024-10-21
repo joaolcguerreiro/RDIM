@@ -775,26 +775,21 @@ class GaussianDiffusion(nn.Module):
         Equation (9) in improved DDPM paper (https://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf)
         """
 
-        assert torch.all((timestep >= 0) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 0 and (b) less than or equal to ({self.num_timesteps})'
+        assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
 
-        # Define condition to check if timestep is greater than 0
-        condition = timestep > 0
-
-        # Get timestep index, which equals to -1 when timestep is 0 (initial), thus index errors are absent
+        # Get timestep index
         timestep_index = timestep - 1
 
         # Count dimension mismatch between volume and timestep
         num_diff_dims = x_0.dim() - timestep.dim()
 
         # Compute alpha cumulative product at given timestep and match volume dimensions
-        alpha_cum_prod_t = torch.where(condition, self.alphas_cum_prod[timestep_index], float('nan')).view(*timestep.shape, *([1] * num_diff_dims))
-
-        condition = condition.view(*timestep.shape, *([1] * num_diff_dims))
+        alpha_cum_prod_t = self.alphas_cum_prod[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
 
         # Sample random noise
         eps_t = torch.randn_like(x_0)
 
-        x_t = torch.where(condition, torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps_t, x_0)
+        x_t = torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps_t
 
         return x_t, eps_t
 
