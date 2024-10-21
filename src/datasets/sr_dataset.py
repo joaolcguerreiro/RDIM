@@ -10,7 +10,7 @@ from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, Normal
 
 
 class SuperResolutionDataset(Dataset):
-    def __init__(self, lr_data_dir=None, hr_data_dir=None, scale_factor=None, lr_patch_size=(-1, -1, -1), _min=None, _max=None, mean=None, std=None, augmentation=False):
+    def __init__(self, lr_data_dir=None, hr_data_dir=None, scale_factor=None, lr_patch_size=(-1, -1, -1), _min=None, _max=None, mean=None, std=None, repeat_sample_factor=1, augmentation=False):
         super().__init__()
 
         # Data Directory Paths
@@ -18,8 +18,8 @@ class SuperResolutionDataset(Dataset):
         self.hr_data_dir = hr_data_dir
 
         # Files
-        self.lr_files = sorted(os.listdir(lr_data_dir)) if lr_data_dir else None
-        self.hr_files = sorted(os.listdir(hr_data_dir)) if hr_data_dir else None
+        self.lr_files = sorted(os.listdir(lr_data_dir)) * repeat_sample_factor if lr_data_dir else None
+        self.hr_files = sorted(os.listdir(hr_data_dir)) * repeat_sample_factor if hr_data_dir else None
 
         # Resolution ratio between LR and HR
         self.scale_factor = scale_factor
