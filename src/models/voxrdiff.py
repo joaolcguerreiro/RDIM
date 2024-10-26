@@ -166,21 +166,23 @@ class SelfAttentionBlock(nn.Module):
     def forward(self, x):
         skip_connection = x
 
-        # Reshape and transpose input tensor to process depth feature maps rather than spatial maps
-        batch, in_channels, *spatial_shape = x.shape
+        # Apply normalization
+        out = self.gn(x)
 
+        # Reshape and transpose normalized input tensor to process depth feature maps rather than spatial maps
         # [batch, in_channels, D, H, W] => [batch, D*H*W, in_channels] = [batch, sequence_len, num_embedding_dims]
-        x = x.view(batch, in_channels, torch.tensor(spatial_shape).prod()).transpose(-2, -1).contiguous()
+        batch, in_channels, *spatial_shape = out.shape
+        out = out.view(batch, in_channels, torch.tensor(spatial_shape).prod()).transpose(-2, -1).contiguous()
 
         # Apply Attention Mechanism
-        out, _ = self.attention(query=x, key=x, value=x, need_weights=False)
+        out, _ = self.attention(query=out, key=out, value=out, need_weights=False)
 
         # Transpose and reshape output tensor to match input shape
         # [batch, D*H*W, in_channels] => [batch, in_channels, D, H, W]
         out = out.transpose(-2, -1).contiguous().view(batch, in_channels, *spatial_shape)
 
         # Add skip-connection and apply normalization
-        out = self.gn(out + skip_connection)
+        out = out + skip_connection
 
         return out
 
@@ -477,12 +479,12 @@ class NoisePredictor(nn.Module):
         x_cond_up = self.upsample_cond(x_cond)
 
         # Apply input layer transformation
-        x = self.input(x)
+        out = self.input(x)
 
         # Add conditioning variable
-        x = x + x_cond_up
+        out = out + x_cond_up
 
-        out = skip_connection = x
+        skip_connection = out
         skip_connections = []
 
         # Contracting Path
