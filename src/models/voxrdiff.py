@@ -149,61 +149,15 @@ class ResidualDenseBlock(nn.Module):
         return out
 
 
-class MultiHeadAttention(nn.Module):
-    def __init__(self, num_embedding_dims, num_heads=8):
-        super().__init__()
-        assert num_embedding_dims % num_heads == 0, f'Number of embedding dimensions ({num_embedding_dims}) must be divisible by the number of attention heads ({num_heads})'
-
-        self.num_heads = num_heads
-        self.num_head_dims = num_embedding_dims // num_heads
-
-        # Linear projections for queries (Q), keys (K), and values (V)
-        self.query_proj = nn.Linear(num_embedding_dims, num_embedding_dims)
-        self.key_proj = nn.Linear(num_embedding_dims, num_embedding_dims)
-        self.value_proj = nn.Linear(num_embedding_dims, num_embedding_dims)
-
-        # Linear projection for the output after head concatenation
-        self.output_proj = nn.Linear(num_embedding_dims, num_embedding_dims)
-
-    def forward(self, x):
-        # Get linear projections of queries (Q), keys (K), and values (V)
-        # [batch, sequence_len, num_embedding_dims] => [batch, sequence_len, num_embedding_dims]
-        queries = self.query_proj(x)
-        keys = self.key_proj(x)
-        values = self.value_proj(x)
-
-        # Split queries (Q), keys (K), and values (V) between attention heads
-        # [batch, sequence_len, num_embedding_dims] => [batch, num_heads, sequence_len, num_head_dims]
-        queries = torch.stack(torch.split(queries, split_size_or_sections=self.num_head_dims, dim=-1), dim=1)
-        keys = torch.stack(torch.split(keys, split_size_or_sections=self.num_head_dims, dim=-1), dim=1)
-        values = torch.stack(torch.split(values, split_size_or_sections=self.num_head_dims, dim=-1), dim=1)
-
-        # Compute Scaled Dot-Product Attention
-        # Eq. 1 from Transformer paper (https://arxiv.org/pdf/1706.03762.pdf)
-        attention_scores = nn.functional.scaled_dot_product_attention(query=queries, key=keys, value=values)
-
-        # Permute dimensions of Attention Scores
-        # [batch, num_heads, sequence_len, num_head_dims] => [batch, sequence_len, num_heads, num_head_dims]
-        attention_scores = attention_scores.permute(0, 2, 1, 3).contiguous()
-
-        # Concatenate heads
-        # [batch, sequence_len, num_heads, num_head_dims] => [batch, sequence_len, num_embedding_dims]
-        concatenated_heads_attention_scores = attention_scores.view(*x.shape)
-
-        # Get output linear projection
-        out = self.output_proj(concatenated_heads_attention_scores)
-
-        return out
-
-
 class SelfAttentionBlock(nn.Module):
     def __init__(self, in_channels, num_heads=8, num_groups=32):
         super().__init__()
 
         # Multi-Head Attention Mechanism
-        self.attention = MultiHeadAttention(
-            num_embedding_dims=in_channels,
-            num_heads=num_heads
+        self.attention = nn.MultiheadAttention(
+            embed_dim=in_channels,
+            num_heads=num_heads,
+            batch_first=True
         )
 
         # Group Normalization Layer
@@ -219,7 +173,7 @@ class SelfAttentionBlock(nn.Module):
         x = x.view(batch, in_channels, torch.tensor(spatial_shape).prod()).transpose(-2, -1).contiguous()
 
         # Apply Attention Mechanism
-        out = self.attention(x)
+        out, _ = self.attention(query=x, key=x, value=x, need_weights=False)
 
         # Transpose and reshape output tensor to match input shape
         # [batch, D*H*W, in_channels] => [batch, in_channels, D, H, W]
