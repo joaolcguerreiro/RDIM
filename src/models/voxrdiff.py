@@ -180,9 +180,7 @@ class MultiHeadAttention(nn.Module):
 
         # Compute Scaled Dot-Product Attention
         # Eq. 1 from Transformer paper (https://arxiv.org/pdf/1706.03762.pdf)
-        scale_factor = 1 / torch.tensor(self.num_head_dims).sqrt()
-        transposed_keys = keys.transpose(-2, -1).contiguous()
-        attention_scores = torch.matmul(torch.softmax(torch.matmul(queries, transposed_keys) * scale_factor, dim=-1), values)
+        attention_scores = nn.functional.scaled_dot_product_attention(query=queries, key=keys, value=values)
 
         # Permute dimensions of Attention Scores
         # [batch, num_heads, sequence_len, num_head_dims] => [batch, sequence_len, num_heads, num_head_dims]
