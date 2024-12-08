@@ -42,14 +42,14 @@ class SinusoidalPositionalEncoding(nn.Module):
 
 
 class ConvolutionalBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_groups=32, activation=True, max_pool=False, **kwargs):
+    def __init__(self, in_channels, out_channels, num_groups=8, activation=True, max_pool=False, conv_first=True, **kwargs):
         super().__init__()
 
         # Convolutional Layer
         self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
 
         # Group Normalization Layer
-        self.gn = nn.GroupNorm(num_groups, out_channels) if num_groups > 0 else nn.Identity()
+        self.gn = nn.GroupNorm(num_groups, out_channels if conv_first else in_channels) if num_groups > 0 else nn.Identity()
 
         # Activation Function
         self.act = nn.Mish() if activation else nn.Identity()
@@ -57,8 +57,11 @@ class ConvolutionalBlock(nn.Module):
         # Max Polling Layer
         self.pool = nn.MaxPool3d(kernel_size=2) if max_pool else nn.Identity()
 
+        # Set Convolutional Layer Order
+        self.conv_first = conv_first
+
     def forward(self, x):
-        return self.pool(self.act(self.gn(self.conv(x))))
+        return self.pool(self.act(self.gn(self.conv(x)))) if self.conv_first else self.pool(self.conv(self.act(self.gn(x))))
 
 
 class DownsampleBlock(nn.Module):
@@ -92,18 +95,15 @@ class UpsampleBlock(nn.Module):
         return self.act(self.conv(self.upsample(x)))
 
 
-class ResidualDenseBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_growth_features=32, num_conv_blocks=3, num_groups=32, beta=0.2, **kwargs):
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_conv_blocks=2, num_groups=8, **kwargs):
         super().__init__()
         assert num_conv_blocks > 0 if in_channels != out_channels else True, f'Number of convolutional blocks ({num_conv_blocks}) must be greater than 0'
-
-        # Residual Scale Factor
-        self.beta = beta
 
         # Time embedding projection layer
         self.time_proj = nn.Sequential(
             nn.Mish(),
-            nn.Linear(num_time_embedding_dims, num_growth_features)
+            nn.Linear(num_time_embedding_dims, out_channels)
         )
 
         # Convolutional Blocks
@@ -112,16 +112,16 @@ class ResidualDenseBlock(nn.Module):
         for block_index in range(num_conv_blocks):
             self.conv_blocks.append(
                 ConvolutionalBlock(
-                    in_channels + block_index * num_growth_features,
-                    num_growth_features if block_index != (num_conv_blocks - 1) else out_channels,
-                    num_groups=(num_groups if block_index != (num_conv_blocks - 1) else 0),
-                    activation=(True if block_index != (num_conv_blocks - 1) else False),
+                    out_channels if block_index != 0 else in_channels,
+                    out_channels,
+                    num_groups=num_groups,
+                    activation=True,
                     max_pool=False,
-                    **(kwargs if block_index != (num_conv_blocks - 1) else {'kernel_size': 1, 'stride': 1, 'padding': 0})
+                    **kwargs
                 )
             )
 
-        # Skip connection Layer
+        # Skip Connection Layer
         self.residual_conv = nn.Conv3d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
 
     def forward(self, x, t_cond):
@@ -134,23 +134,21 @@ class ResidualDenseBlock(nn.Module):
         # Reshape time embedding to match input tensor dimensions
         t_cond = t_cond.view(*t_cond.shape, *([1] * num_diff_dims))
 
-        out = skip_connection = skip_connections = x
+        out = skip_connection = x
 
         for block_index, conv_block in enumerate(self.conv_blocks):
-            out = conv_block(skip_connections)
+            out = conv_block(out)
 
-            if block_index < len(self.conv_blocks) - 1:
+            if block_index < len(self.conv_blocks) - 1 or block_index == 0:
                 out = out + t_cond
 
-            skip_connections = torch.cat([skip_connections, out], dim=1)
-
-        out = out * self.beta + self.residual_conv(skip_connection)
+        out = out + self.residual_conv(skip_connection)
 
         return out
 
 
 class SelfAttentionBlock(nn.Module):
-    def __init__(self, in_channels, num_heads=8, num_groups=32):
+    def __init__(self, in_channels, num_heads=8, num_groups=8):
         super().__init__()
 
         # Multi-Head Attention Mechanism
@@ -178,23 +176,22 @@ class SelfAttentionBlock(nn.Module):
         # [batch, D*H*W, in_channels] => [batch, in_channels, D, H, W]
         out = out.transpose(-2, -1).contiguous().view(batch, in_channels, *spatial_shape)
 
-        # Add skip-connection and apply normalization
+        # Add skip connection and apply normalization
         out = self.gn(out + skip_connection)
 
         return out
 
 
-class ResidualDenseAttentionBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_conv_blocks=3, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+class ResidualAttentionBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
-        # Residual Dense Block
-        self.res_dense_block = ResidualDenseBlock(
+        # Residual Block
+        self.res_block = ResidualBlock(
             in_channels,
             out_channels,
             num_time_embedding_dims=num_time_embedding_dims,
-            num_growth_features=num_rdb_growth_features,
-            num_conv_blocks=num_rdb_conv_blocks,
+            num_conv_blocks=num_rb_conv_blocks,
             num_groups=num_groups,
             **kwargs
         )
@@ -207,7 +204,7 @@ class ResidualDenseAttentionBlock(nn.Module):
         ) if self_attention else nn.Identity()
 
     def forward(self, x, t_cond):
-        out = self.res_dense_block(x, t_cond)
+        out = self.res_block(x, t_cond)
 
         out = self.att_block(out)
 
@@ -215,20 +212,19 @@ class ResidualDenseAttentionBlock(nn.Module):
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=1, num_rdb_conv_blocks=3, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=1, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
-        # Residual Dense Blocks with Optional Self-Attention Blocks
-        self.res_dense_att_blocks = nn.ModuleList()
+        # Residual Blocks with Optional Self-Attention Blocks
+        self.res_att_blocks = nn.ModuleList()
 
-        for block_index in range(num_rdb_blocks):
-            self.res_dense_att_blocks.append(
-                ResidualDenseAttentionBlock(
+        for block_index in range(num_rb_blocks):
+            self.res_att_blocks.append(
+                ResidualAttentionBlock(
                     out_channels if block_index != 0 else in_channels,
                     out_channels,
                     num_time_embedding_dims=num_time_embedding_dims,
-                    num_rdb_growth_features=num_rdb_growth_features,
-                    num_rdb_conv_blocks=num_rdb_conv_blocks,
+                    num_rb_conv_blocks=num_rb_conv_blocks,
                     self_attention=self_attention,
                     num_attention_heads=num_attention_heads,
                     num_groups=num_groups,
@@ -248,8 +244,8 @@ class EncoderBlock(nn.Module):
     def forward(self, x, t_cond):
         out = x
 
-        for res_dense_att_block in self.res_dense_att_blocks:
-            out = res_dense_att_block(out, t_cond)
+        for res_att_block in self.res_att_blocks:
+            out = res_att_block(out, t_cond)
 
         out = self.downsample_block(out)
 
@@ -257,20 +253,19 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=1, num_rdb_conv_blocks=3, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=1, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
-        # Residual Dense Blocks with Optional Self-Attention Blocks
-        self.res_dense_att_blocks = nn.ModuleList()
+        # Residual Blocks with Optional Self-Attention Blocks
+        self.res_att_blocks = nn.ModuleList()
 
-        for block_index in range(num_rdb_blocks):
-            self.res_dense_att_blocks.append(
-                ResidualDenseAttentionBlock(
+        for block_index in range(num_rb_blocks):
+            self.res_att_blocks.append(
+                ResidualAttentionBlock(
                     out_channels if block_index != 0 else in_channels,
                     out_channels,
                     num_time_embedding_dims=num_time_embedding_dims,
-                    num_rdb_growth_features=num_rdb_growth_features,
-                    num_rdb_conv_blocks=num_rdb_conv_blocks,
+                    num_rb_conv_blocks=num_rb_conv_blocks,
                     self_attention=self_attention,
                     num_attention_heads=num_attention_heads,
                     num_groups=num_groups,
@@ -291,8 +286,8 @@ class DecoderBlock(nn.Module):
     def forward(self, x, t_cond):
         out = x
 
-        for res_dense_att_block in self.res_dense_att_blocks:
-            out = res_dense_att_block(out, t_cond)
+        for res_att_block in self.res_att_blocks:
+            out = res_att_block(out, t_cond)
 
         out = self.upsample_block(out)
 
@@ -300,20 +295,19 @@ class DecoderBlock(nn.Module):
 
 
 class BottleneckBlock(nn.Module):
-    def __init__(self, in_channels, num_time_embedding_dims, num_rdb_growth_features=32, num_rdb_blocks=1, num_rdb_conv_blocks=3, self_attention=True, num_attention_heads=8, num_groups=32, **kwargs):
+    def __init__(self, in_channels, num_time_embedding_dims, num_rb_blocks=1, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
-        # Residual Dense Blocks with Optional Self-Attention Blocks
-        self.res_dense_att_blocks = nn.ModuleList()
+        # Residual Blocks with Optional Self-Attention Blocks
+        self.res_att_blocks = nn.ModuleList()
 
-        for _ in range(num_rdb_blocks):
-            self.res_dense_att_blocks.append(
-                ResidualDenseAttentionBlock(
+        for _ in range(num_rb_blocks):
+            self.res_att_blocks.append(
+                ResidualAttentionBlock(
                     in_channels,
                     in_channels,
                     num_time_embedding_dims=num_time_embedding_dims,
-                    num_rdb_growth_features=num_rdb_growth_features,
-                    num_rdb_conv_blocks=num_rdb_conv_blocks,
+                    num_rb_conv_blocks=num_rb_conv_blocks,
                     self_attention=self_attention,
                     num_attention_heads=num_attention_heads,
                     num_groups=num_groups,
@@ -324,14 +318,14 @@ class BottleneckBlock(nn.Module):
     def forward(self, x, t_cond):
         out = x
 
-        for res_dense_att_block in self.res_dense_att_blocks:
-            out = res_dense_att_block(out, t_cond)
+        for res_att_block in self.res_att_blocks:
+            out = res_att_block(out, t_cond)
 
         return out
 
 
 class NoisePredictor(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rdb_blocks=1, num_rdb_conv_blocks=3, num_rdb_growth_features=32, attention_levels=((False,) * 2 + (True,) * 2), num_attention_heads=8, num_groups=32, scale_factor=1):
+    def __init__(self, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rb_blocks=1, num_rb_conv_blocks=2, attention_levels=((False,) * 2 + (True,) * 2), num_attention_heads=8, num_groups=8, scale_factor=1):
         super().__init__()
         assert len(feature_multipliers) == len(attention_levels), f'Array size of attention levels ({len(attention_levels)}) must match array size of feature multipliers ({len(feature_multipliers)})'
 
@@ -378,9 +372,8 @@ class NoisePredictor(nn.Module):
                     num_inner_features * prev_multiplier if prev_multiplier is not None else num_inner_features,
                     num_inner_features * multiplier,
                     num_time_embedding_dims=num_inner_features,
-                    num_rdb_growth_features=num_rdb_growth_features,
-                    num_rdb_blocks=num_rdb_blocks,
-                    num_rdb_conv_blocks=num_rdb_conv_blocks,
+                    num_rb_blocks=num_rb_blocks,
+                    num_rb_conv_blocks=num_rb_conv_blocks,
                     self_attention=attention_levels[block_index],
                     num_attention_heads=num_attention_heads,
                     num_groups=num_groups,
@@ -392,9 +385,8 @@ class NoisePredictor(nn.Module):
         self.bottleneck_block = BottleneckBlock(
             num_inner_features * feature_multipliers[-1],
             num_time_embedding_dims=num_inner_features,
-            num_rdb_growth_features=num_rdb_growth_features,
-            num_rdb_blocks=num_rdb_blocks,
-            num_rdb_conv_blocks=num_rdb_conv_blocks,
+            num_rb_blocks=num_rb_blocks,
+            num_rb_conv_blocks=num_rb_conv_blocks,
             self_attention=True,
             num_attention_heads=num_attention_heads,
             num_groups=num_groups,
@@ -418,9 +410,8 @@ class NoisePredictor(nn.Module):
                     num_inner_features * multiplier + (num_inner_features * prev_multiplier if prev_multiplier is not None else num_inner_features * multiplier),
                     num_inner_features * multiplier,
                     num_time_embedding_dims=num_inner_features,
-                    num_rdb_growth_features=num_rdb_growth_features,
-                    num_rdb_blocks=num_rdb_blocks,
-                    num_rdb_conv_blocks=num_rdb_conv_blocks,
+                    num_rb_blocks=num_rb_blocks,
+                    num_rb_conv_blocks=num_rb_conv_blocks,
                     self_attention=reversed_attention_levels[block_index],
                     num_attention_heads=num_attention_heads,
                     num_groups=num_groups,
@@ -498,7 +489,7 @@ class NoisePredictor(nn.Module):
             out = torch.cat([out, encoder_block_out], dim=1)
             out = decoder_block(out, t_cond)
 
-        # Concat skip-connection and apply output layer
+        # Concat skip connection and apply output layer
         out = torch.cat([out, skip_connection], dim=1)
         out = self.output(out)
 
@@ -765,13 +756,12 @@ class GaussianDiffusion(nn.Module):
         beta_t = self.betas[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
         alpha_t = self.alphas[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
         alpha_cum_prod_t = self.alphas_cum_prod[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
+        alpha_cum_prod_t_m1 = torch.where(condition, self.alphas_cum_prod[timestep_index - 1], 0).view(*timestep.shape, *([1] * num_diff_dims))
 
-        condition = condition.view(*timestep.shape, *([1] * num_diff_dims))
+        # Sample random noise and match volume dimensions
+        z = torch.where(condition.view(*timestep.shape, *([1] * num_diff_dims)), torch.randn_like(x_t), 0)
 
-        # Sample random noise
-        z = torch.where(condition, torch.randn_like(x_t), torch.zeros_like(x_t))
-
-        x_t_m1 = (1 / torch.sqrt(alpha_t)) * (x_t - (beta_t / (torch.sqrt(1 - alpha_cum_prod_t))) * eps_t) + torch.sqrt(beta_t) * z
+        x_t_m1 = (1 / torch.sqrt(alpha_t)) * (x_t - (beta_t / (torch.sqrt(1 - alpha_cum_prod_t))) * eps_t) + torch.sqrt(((1 - alpha_cum_prod_t_m1) / (1 - alpha_cum_prod_t)) * beta_t) * z
 
         return x_t_m1
 
