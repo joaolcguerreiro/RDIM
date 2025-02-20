@@ -668,7 +668,7 @@ class GaussianDiffusion(nn.Module):
     @staticmethod
     def linear_beta_schedule(num_timesteps=1000, beta_start=1e-4, beta_end=2e-2):
         """
-        Linear schedule, proposed in original DDPM paper (https://proceedings.neurips.cc/paper/2020/file/4c5bcfec8584af0d967f1ab10179ca4b-Paper.pdf)
+        Linear schedule, proposed in original DDPM paper (https://proceedings.neurips.cc/paper/2020/file/4c5bcfec8584af0d967f1ab10179ca4b-Paper.pdf).
         """
 
         return torch.linspace(start=beta_start, end=beta_end, steps=num_timesteps)
@@ -676,7 +676,7 @@ class GaussianDiffusion(nn.Module):
     @staticmethod
     def cosine_beta_schedule(num_timesteps=1000, beta_offset=8e-3, beta_min=0.0, beta_max=9.99e-1):
         """
-        Cosine schedule, proposed in improved DDPM paper (https://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf)
+        Cosine schedule, proposed in improved DDPM paper (https://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf).
         """
 
         steps = torch.linspace(start=0, end=num_timesteps, steps=(num_timesteps + 1))
@@ -689,7 +689,7 @@ class GaussianDiffusion(nn.Module):
     @staticmethod
     def sigmoid_beta_schedule(num_timesteps=1000, start=-3, end=3, tau=1, beta_min=0.0, beta_max=9.99e-1):
         """
-        Sigmoid schedule, proposed in RINs paper (https://arxiv.org/pdf/2212.11972.pdf)
+        Sigmoid schedule, proposed in RINs paper (https://arxiv.org/pdf/2212.11972.pdf).
         """
 
         steps = torch.linspace(start=0, end=num_timesteps, steps=(num_timesteps + 1))
@@ -713,8 +713,8 @@ class GaussianDiffusion(nn.Module):
 
     def compute_volume_at_timestep(self, x_0, timestep):
         """
-        Compute the volume at a specific timestep given the initial volume
-        Equation (9) in improved DDPM paper (https://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf)
+        Compute the volume at a specific timestep (t) given the initial volume. q(x_t|x_0).
+        Reparameterized Equation (4) in original DDPM paper (https://arxiv.org/pdf/2006.11239.pdf).
         """
 
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
@@ -737,8 +737,8 @@ class GaussianDiffusion(nn.Module):
 
     def compute_volume_at_prev_timestep(self, x_t, eps_t, timestep):
         """
-        Compute the volume at the previous timestep given the volume at the precedent timestep
-        Line (4) in Sampling algorithm of original DDPM paper (https://arxiv.org/pdf/2006.11239.pdf)
+        Given the volume at a specific timestep (t) compute the volume at the previous timestep (t-1). p_θ(x_t_m1|x_t).
+        Line (4) in Sampling algorithm of original DDPM paper (https://arxiv.org/pdf/2006.11239.pdf).
         """
 
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
@@ -771,7 +771,7 @@ class GaussianDiffusion(nn.Module):
     def forward_diffusion(self, x_0, timestep):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
 
-        # Compute last timestep volume
+        # Compute volume at a specific timestep
         x_t, eps_t = self.compute_volume_at_timestep(x_0, timestep)
 
         return x_t, eps_t
@@ -779,7 +779,7 @@ class GaussianDiffusion(nn.Module):
     def reverse_diffusion(self, x_t, eps_t, timestep):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
 
-        # Predict previous timestep volume
+        # Predict volume at the previous timestep
         x_t_m1_pred = self.compute_volume_at_prev_timestep(x_t, eps_t, timestep)
 
         return x_t_m1_pred
