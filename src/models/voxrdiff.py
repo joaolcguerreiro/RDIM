@@ -117,6 +117,7 @@ class ResidualBlock(nn.Module):
                     num_groups=num_groups,
                     activation=True,
                     max_pool=False,
+                    conv_first=False,
                     **kwargs
                 )
             )
@@ -212,7 +213,7 @@ class ResidualAttentionBlock(nn.Module):
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=1, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
         # Residual Blocks with Optional Self-Attention Blocks
@@ -253,7 +254,7 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=1, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
         # Residual Blocks with Optional Self-Attention Blocks
@@ -295,7 +296,7 @@ class DecoderBlock(nn.Module):
 
 
 class BottleneckBlock(nn.Module):
-    def __init__(self, in_channels, num_time_embedding_dims, num_rb_blocks=1, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, in_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
         # Residual Blocks with Optional Self-Attention Blocks
@@ -325,7 +326,7 @@ class BottleneckBlock(nn.Module):
 
 
 class NoisePredictor(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rb_blocks=1, num_rb_conv_blocks=2, attention_levels=((False,) * 2 + (True,) * 2), num_attention_heads=8, num_groups=8, scale_factor=1):
+    def __init__(self, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rb_blocks=2, num_rb_conv_blocks=2, attention_levels=((False,) * 2 + (True,) * 2), num_attention_heads=8, num_groups=8, scale_factor=1):
         super().__init__()
         assert len(feature_multipliers) == len(attention_levels), f'Array size of attention levels ({len(attention_levels)}) must match array size of feature multipliers ({len(feature_multipliers)})'
 
