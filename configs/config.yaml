@@ -20,6 +20,7 @@ DATA:
 #=================================================================================================================#
 
 MODEL:
+  DIFFUSION_TYPE: 'DDIM'
   NUM_TIMESTEPS: 1000
   BETA_SCHEDULE: 'COSINE'
   RESIDUAL_PREDICTION: True
@@ -45,6 +46,16 @@ MODEL:
     NUM_RRDB_DB_CONV_BLOCKS: 3
     NUM_RRDB_DB_GROWTH_FEATURES: 32
     PRE_TRAINED_PATH:
+
+DIFFUSION_TYPE_OPTIONS:
+  - 'DDPM'
+  - 'DDIM'
+
+DIFFUSION_TYPE_PARAMETERS:
+  DDPM: ~
+  DDIM:
+    NUM_SAMPLING_TIMESTEPS: 5
+    ETA: 0.0
 
 BETA_SCHEDULE_OPTIONS:
   - 'LINEAR'

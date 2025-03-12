@@ -43,6 +43,8 @@ def main():
 
     # Define models
     gaussian_diffusion = GaussianDiffusion(
+        diffusion_type=config["MODEL"]["DIFFUSION_TYPE"],
+        diffusion_type_parameters={key.lower(): value for key, value in (config["DIFFUSION_TYPE_PARAMETERS"][config["MODEL"]["DIFFUSION_TYPE"]] or {}).items()} or None,
         num_timesteps=config["MODEL"]["NUM_TIMESTEPS"],
         beta_schedule=config["MODEL"]["BETA_SCHEDULE"],
         residual_prediction=config["MODEL"]["RESIDUAL_PREDICTION"],
@@ -259,16 +261,16 @@ def main():
             timesteps = gaussian_diffusion.sample_timesteps(len(volumes_0)).to(device)
 
             # Sample timestep volumes
-            volumes_t, eps_t_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
+            volumes_t, eps_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
 
             # Zero the gradients
             noise_predictor_optimizer.zero_grad()
 
             # Forward pass
-            eps_t_pred = noise_predictor(volumes_t, (lr_encoder(lr_volumes) if config["MODEL"]["LR_CONDITION_ENCODING"] else lr_volumes), timesteps)
+            eps_pred = noise_predictor(volumes_t, (lr_encoder(lr_volumes) if config["MODEL"]["LR_CONDITION_ENCODING"] else lr_volumes), timesteps)
 
             # Compute diffusion loss
-            diffusion_loss = diffusion_criterion(eps_t_pred, eps_t_real)
+            diffusion_loss = diffusion_criterion(eps_pred, eps_real)
 
             # Noise Predictor Total loss
             noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss
@@ -331,13 +333,13 @@ def main():
                     timesteps = gaussian_diffusion.sample_timesteps(len(volumes_0)).to(device)
 
                     # Sample timestep volumes
-                    volumes_t, eps_t_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
+                    volumes_t, eps_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
 
                     # Forward pass
-                    eps_t_pred = noise_predictor_inferer(inputs=volumes_t, conditions=lr_volumes, timesteps=timesteps, inputs_network=noise_predictor, conditions_network=(lr_encoder if config["MODEL"]["LR_CONDITION_ENCODING"] else None))
+                    eps_pred = noise_predictor_inferer(inputs=volumes_t, conditions=lr_volumes, timesteps=timesteps, inputs_network=noise_predictor, conditions_network=(lr_encoder if config["MODEL"]["LR_CONDITION_ENCODING"] else None))
 
                     # Compute diffusion loss
-                    diffusion_loss = diffusion_criterion(eps_t_pred, eps_t_real)
+                    diffusion_loss = diffusion_criterion(eps_pred, eps_real)
 
                     # Noise Predictor Total loss
                     noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss
@@ -385,6 +387,8 @@ def main():
                 'noise_predictor_state_dict': noise_predictor.state_dict(),
                 'noise_predictor_optimizer_state_dict': noise_predictor_optimizer.state_dict(),
                 'noise_predictor_scheduler_state_dict': noise_predictor_scheduler.state_dict(),
+                'gaussian_diffusion_type': config["MODEL"]["DIFFUSION_TYPE"],
+                'gaussian_diffusion_type_parameters': config["DIFFUSION_TYPE_PARAMETERS"][config["MODEL"]["DIFFUSION_TYPE"]],
                 'gaussian_diffusion_num_timesteps': config["MODEL"]["NUM_TIMESTEPS"],
                 'gaussian_diffusion_beta_schedule': config["MODEL"]["BETA_SCHEDULE"],
                 'gaussian_beta_schedule_parameters': config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]],

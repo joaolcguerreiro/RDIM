@@ -38,6 +38,8 @@ def main():
 
     # Define models
     gaussian_diffusion = GaussianDiffusion(
+        diffusion_type=checkpoint['gaussian_diffusion_type'],
+        diffusion_type_parameters={key.lower(): value for key, value in (checkpoint['gaussian_diffusion_type_parameters'] or {}).items()} or None,
         num_timesteps=checkpoint['gaussian_diffusion_num_timesteps'],
         beta_schedule=checkpoint['gaussian_diffusion_beta_schedule'],
         residual_prediction=checkpoint['gaussian_diffusion_residual_prediction'],

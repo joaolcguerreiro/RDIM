@@ -655,10 +655,13 @@ class LREncoder(nn.Module):
 
 
 class GaussianDiffusion(nn.Module):
-    def __init__(self, num_timesteps=1000, beta_schedule='COSINE', residual_prediction=True, lr_condition_encoding=True, scale_factor=2, **kwargs):
+    def __init__(self, diffusion_type='DDPM', diffusion_type_parameters=None, num_timesteps=1000, beta_schedule='COSINE', residual_prediction=True, lr_condition_encoding=True, scale_factor=1, **kwargs):
         super().__init__()
 
+        self.diffusion_type = diffusion_type
+        self.diffusion_type_parameters = diffusion_type_parameters
         self.num_timesteps = num_timesteps
+        self.sampling_timesteps = self.reverse_trajectory_timesteps(diffusion_type=diffusion_type, diffusion_type_parameters=diffusion_type_parameters, num_timesteps=num_timesteps)
         self.betas = self.compute_beta_schedule(beta_schedule=beta_schedule, num_timesteps=num_timesteps, **kwargs)
         self.alphas = 1.0 - self.betas
         self.alphas_cum_prod = torch.cumprod(self.alphas, dim=0)
@@ -712,10 +715,24 @@ class GaussianDiffusion(nn.Module):
         else:
             raise NotImplementedError(f'Beta schedule {beta_schedule} not implemented.')
 
-    def compute_volume_at_timestep(self, x_0, timestep):
+    def sample_timesteps(self, num_samples):
+        return torch.randint(low=1, high=self.num_timesteps + 1, size=(num_samples,), dtype=torch.long)
+
+    def reverse_trajectory_timesteps(self, diffusion_type='DDPM', diffusion_type_parameters=None, num_timesteps=1000):
+        # Get timesteps for reverse trajectory
+        if diffusion_type == 'DDPM':
+            sampling_timesteps = torch.linspace(1, num_timesteps, steps=num_timesteps, dtype=torch.long)
+        elif diffusion_type == 'DDIM':
+            sampling_timesteps = torch.linspace(1, num_timesteps, steps=diffusion_type_parameters['num_sampling_timesteps'], dtype=torch.long)
+        else:
+            raise NotImplementedError(f'Invalid diffusion type: {diffusion_type}.')
+
+        return sampling_timesteps
+
+    def q_sample(self, x_0, timestep):
         """
         Compute the volume at a specific timestep (t) given the initial volume. q(x_t|x_0).
-        Reparameterized Equation (4) in original DDPM paper (https://arxiv.org/pdf/2006.11239.pdf).
+        Reparameterized Equation (4) in original DDPM paper (https://proceedings.neurips.cc/paper/2020/file/4c5bcfec8584af0d967f1ab10179ca4b-Paper.pdf).
         """
 
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
@@ -730,16 +747,16 @@ class GaussianDiffusion(nn.Module):
         alpha_cum_prod_t = self.alphas_cum_prod[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
 
         # Sample random noise
-        eps_t = torch.randn_like(x_0)
+        eps = torch.randn_like(x_0)
 
-        x_t = torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps_t
+        x_t = torch.sqrt(alpha_cum_prod_t) * x_0 + torch.sqrt(1 - alpha_cum_prod_t) * eps
 
-        return x_t, eps_t
+        return x_t, eps
 
-    def compute_volume_at_prev_timestep(self, x_t, eps_t, timestep):
+    def p_sample_ddpm(self, x_t, eps, timestep):
         """
-        Given the volume at a specific timestep (t) compute the volume at the previous timestep (t-1). p_θ(x_t_m1|x_t).
-        Line (4) in Sampling algorithm of original DDPM paper (https://arxiv.org/pdf/2006.11239.pdf).
+        Given the volume at a specific timestep (t) compute the volume at the previous timestep (t - 1). p_θ(x_t_m1|x_t).
+        Line (4) in Sampling algorithm of original DDPM paper (https://proceedings.neurips.cc/paper/2020/file/4c5bcfec8584af0d967f1ab10179ca4b-Paper.pdf).
         """
 
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
@@ -762,26 +779,69 @@ class GaussianDiffusion(nn.Module):
         # Sample random noise and match volume dimensions
         z = torch.where(condition.view(*timestep.shape, *([1] * num_diff_dims)), torch.randn_like(x_t), 0)
 
-        x_t_m1 = (1 / torch.sqrt(alpha_t)) * (x_t - (beta_t / (torch.sqrt(1 - alpha_cum_prod_t))) * eps_t) + torch.sqrt(((1 - alpha_cum_prod_t_m1) / (1 - alpha_cum_prod_t)) * beta_t) * z
+        # Compute previous volume at timestep t - 1
+        variance = ((1 - alpha_cum_prod_t_m1) / (1 - alpha_cum_prod_t)) * beta_t
+        mean = (1 / torch.sqrt(alpha_t)) * (x_t - (beta_t / (torch.sqrt(1 - alpha_cum_prod_t))) * eps)
+
+        x_t_m1 = mean + torch.sqrt(variance) * z
 
         return x_t_m1
 
-    def sample_timesteps(self, num_samples):
-        return torch.randint(low=1, high=self.num_timesteps + 1, size=(num_samples,), dtype=torch.long)
+    def p_sample_ddim(self, x_tau_k, eps, tau_k):
+        """
+        Given the volume at a specific timestep (tau_k) compute the volume at the distant timestep (tau_k - 1). p_θ(x_tau_k_m1|x_tau_k).
+        Equations (12) and (15) in DDIM paper (https://openreview.net/pdf?id=St1giarCHLP)
+        """
+
+        assert torch.all((tau_k >= 1) & (tau_k <= self.num_timesteps)), f'Timestep(s) ({tau_k}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
+
+        # Define condition to check if timestep is greater than 1
+        condition = tau_k > 1
+
+        # Get timestep index
+        tau_k_index = tau_k - 1
+
+        # Count dimension mismatch between volume and timestep
+        num_diff_dims = x_tau_k.dim() - tau_k.dim()
+
+        # Compute diffusion parameters and match volume dimensions
+        beta_tau_k = self.betas[tau_k_index].view(*tau_k.shape, *([1] * num_diff_dims))
+        alpha_cum_prod_tau_k = self.alphas_cum_prod[tau_k_index].view(*tau_k.shape, *([1] * num_diff_dims))
+        alpha_cum_prod_tau_k_m1 = torch.where(condition, self.alphas_cum_prod[tau_k_index - 1], 0).view(*tau_k.shape, *([1] * num_diff_dims))
+        eta = torch.tensor(self.diffusion_type_parameters['eta'], device=tau_k.device).view(*tau_k.shape, *([1] * num_diff_dims))
+
+        # Sample random noise and match volume dimensions
+        z = torch.randn_like(x_tau_k)
+
+        # Predict initial volume at timestep 0
+        x_0_pred = (x_tau_k - torch.sqrt(1 - alpha_cum_prod_tau_k) * eps) / torch.sqrt(alpha_cum_prod_tau_k)
+
+        # Compute distant volume at timestep tau_{k - 1}
+        variance = torch.pow(eta, 2) * ((1 - alpha_cum_prod_tau_k_m1) / (1 - alpha_cum_prod_tau_k)) * beta_tau_k
+        mean = torch.sqrt(alpha_cum_prod_tau_k_m1) * x_0_pred + torch.sqrt(1 - alpha_cum_prod_tau_k_m1 - variance) * eps
+
+        x_tau_k_m1 = torch.where(condition.view(*tau_k.shape, *([1] * num_diff_dims)), mean + torch.sqrt(variance) * z, x_0_pred)
+
+        return x_tau_k_m1
 
     def forward_diffusion(self, x_0, timestep):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
 
         # Compute volume at a specific timestep
-        x_t, eps_t = self.compute_volume_at_timestep(x_0, timestep)
+        x_t, eps = self.q_sample(x_0, timestep)
 
-        return x_t, eps_t
+        return x_t, eps
 
-    def reverse_diffusion(self, x_t, eps_t, timestep):
+    def reverse_diffusion(self, x_t, eps, timestep):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
 
         # Predict volume at the previous timestep
-        x_t_m1_pred = self.compute_volume_at_prev_timestep(x_t, eps_t, timestep)
+        if self.diffusion_type == 'DDPM':
+            x_t_m1_pred = self.p_sample_ddpm(x_t, eps, timestep)
+        elif self.diffusion_type == 'DDIM':
+            x_t_m1_pred = self.p_sample_ddim(x_t, eps, timestep)
+        else:
+            raise NotImplementedError(f'Invalid diffusion type: {self.diffusion_type}.')
 
         return x_t_m1_pred
 
@@ -805,15 +865,15 @@ class GaussianDiffusion(nn.Module):
         # Compute random noise
         x_t = torch.randn_like(x_lr_up)
 
-        for timestep in reversed(range(1, self.num_timesteps + 1)):
+        for timestep in reversed(self.sampling_timesteps):
             # Adapt timestep for batch processing
-            timestep = torch.full((num_samples,), timestep, dtype=torch.long, device=next(noise_predictor.parameters()).device)
+            timestep = torch.full((num_samples,), timestep, dtype=torch.long, device=timestep.device)
 
             # Predict noise
-            eps_t_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None), cache_conditions=True) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
+            eps_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None), cache_conditions=True) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
 
             # Reverse diffusion to compute volume at previous timestep
-            x_t = self.reverse_diffusion(x_t, eps_t_pred, timestep)
+            x_t = self.reverse_diffusion(x_t, eps_pred, timestep)
 
         # Clear cached memory
         noise_predictor_inferer.clear_conditions_cache()
@@ -822,6 +882,7 @@ class GaussianDiffusion(nn.Module):
 
     def to(self, *args, **kwargs):
         # Required to move non-parameter attributes to device, change their dtype, and more
+        self.sampling_timesteps = self.sampling_timesteps.to(*args, **kwargs)
         self.betas = self.betas.to(*args, **kwargs)
         self.alphas = self.alphas.to(*args, **kwargs)
         self.alphas_cum_prod = self.alphas_cum_prod.to(*args, **kwargs)
