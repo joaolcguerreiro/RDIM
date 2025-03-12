@@ -52,7 +52,7 @@ class ConvolutionalBlock(nn.Module):
         self.gn = nn.GroupNorm(num_groups, out_channels if conv_first else in_channels) if num_groups > 0 else nn.Identity()
 
         # Activation Function
-        self.act = nn.Mish() if activation else nn.Identity()
+        self.act = nn.SiLU() if activation else nn.Identity()
 
         # Max Polling Layer
         self.pool = nn.MaxPool3d(kernel_size=2) if max_pool else nn.Identity()
@@ -72,7 +72,7 @@ class DownsampleBlock(nn.Module):
         self.conv = nn.Conv3d(in_channels, out_channels, stride=scale_factor, padding_mode='reflect', **kwargs)
 
         # Activation Function
-        self.act = nn.Mish() if activation else nn.Identity()
+        self.act = nn.SiLU() if activation else nn.Identity()
 
     def forward(self, x):
         return self.act(self.conv(x))
@@ -89,7 +89,7 @@ class UpsampleBlock(nn.Module):
         self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
 
         # Activation Function
-        self.act = nn.Mish() if activation else nn.Identity()
+        self.act = nn.SiLU() if activation else nn.Identity()
 
     def forward(self, x):
         return self.act(self.conv(self.upsample(x)))
@@ -102,7 +102,7 @@ class ResidualBlock(nn.Module):
 
         # Time embedding projection layer
         self.time_proj = nn.Sequential(
-            nn.Mish(),
+            nn.SiLU(),
             nn.Linear(num_time_embedding_dims, out_channels)
         )
 
@@ -336,7 +336,7 @@ class NoisePredictor(nn.Module):
         # Multilayer Perceptron for time embedding
         self.time_mlp = nn.Sequential(
             nn.Linear(num_inner_features, num_inner_features * 4),
-            nn.Mish(),
+            nn.SiLU(),
             nn.Linear(num_inner_features * 4, num_inner_features)
         )
 
