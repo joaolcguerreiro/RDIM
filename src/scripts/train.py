@@ -28,7 +28,7 @@ def main():
     set_seed(20)
 
     # Define device
-    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
+    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
 
     # Compute training data statistics
     _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_channels=config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"])
@@ -95,6 +95,13 @@ def main():
         summary(lr_encoder, input_size=(1, *train_dataset.get_low_resolution_shape()), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
         print_divisor(width=0, last=True, new_lines_offset=-1)
 
+    # Use multiple GPUs if available
+    if torch.cuda.device_count() > 1 or torch.mps.device_count() > 1:
+        noise_predictor = nn.DataParallel(noise_predictor, device_ids=config["DATA"]["GPU_IDS"])
+
+        if config["MODEL"]["LR_CONDITION_ENCODING"]:
+            lr_encoder = nn.DataParallel(lr_encoder, device_ids=config["DATA"]["GPU_IDS"])
+
     # Define patch-based inferers
     noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True), scale_factor=config["MODEL"]["SCALE_FACTOR"], overlap=0.125, mode='gaussian', sw_batch_size=config["VALIDATION"]["PATCH_SLIDING_WINDOW_BATCH_SIZE"], sw_device=device, device=device)
 
@@ -124,13 +131,13 @@ def main():
     # Define number of epochs and resume training if applicable
     if args.resume:
         # Load the saved checkpoint
-        checkpoint = torch.load(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, weights_only=False)
 
         # Initialize weights, optimizers and epoch count
-        noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
+        (noise_predictor.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else noise_predictor).load_state_dict(checkpoint['noise_predictor_state_dict'])
         noise_predictor_optimizer.load_state_dict(checkpoint['noise_predictor_optimizer_state_dict'])
         noise_predictor_scheduler.load_state_dict(checkpoint['noise_predictor_scheduler_state_dict'])
-        lr_encoder.load_state_dict(checkpoint['lr_encoder_state_dict']) if config["MODEL"]["LR_CONDITION_ENCODING"] else None
+        (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).load_state_dict(checkpoint['lr_encoder_state_dict']) if config["MODEL"]["LR_CONDITION_ENCODING"] else None
         start_epoch = checkpoint['epoch'] + 1
         train_dataset.update_epoch(start_epoch)
         val_dataset.update_epoch(start_epoch) if args.val else None
@@ -141,17 +148,17 @@ def main():
         # Load pre-trained models
         if config["MODEL"]["NOISE_PREDICTOR"]["PRE_TRAINED_PATH"]:
             # Load the pre-trained checkpoint
-            checkpoint = torch.load(config["MODEL"]["NOISE_PREDICTOR"]["PRE_TRAINED_PATH"])
+            checkpoint = torch.load(config["MODEL"]["NOISE_PREDICTOR"]["PRE_TRAINED_PATH"], weights_only=False)
 
             # Initialize noise predictor weights
-            noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
+            (noise_predictor.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else noise_predictor).load_state_dict(checkpoint['noise_predictor_state_dict'])
 
         if config["MODEL"]["LR_ENCODER"]["PRE_TRAINED_PATH"] and config["MODEL"]["LR_CONDITION_ENCODING"]:
             # Load the pre-trained checkpoint
-            checkpoint = torch.load(config["MODEL"]["LR_ENCODER"]["PRE_TRAINED_PATH"])
+            checkpoint = torch.load(config["MODEL"]["LR_ENCODER"]["PRE_TRAINED_PATH"], weights_only=False)
 
             # Initialize LR Encoder weights
-            lr_encoder.load_state_dict(checkpoint['lr_encoder_state_dict'])
+            (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).load_state_dict(checkpoint['lr_encoder_state_dict'])
 
         start_epoch = 0
         pre_train_lr_encoder_start_epoch = 0
@@ -166,7 +173,7 @@ def main():
         print_divisor()
 
         # Replace extract features method with forward
-        lr_encoder.forward = lr_encoder_forward_method
+        (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).forward = lr_encoder_forward_method
 
         for pre_train_epoch in range(pre_train_lr_encoder_start_epoch, pre_train_lr_encoder_end_epoch):
             # Set model to train mode
@@ -223,10 +230,10 @@ def main():
             pre_train_lr_encoder_dataset.increment_epoch()
 
             # Release unused memory
-            torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
+            torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.mps.is_available() else None)
 
         # Replace forward method to extract features
-        lr_encoder.forward = lr_encoder.extract_features
+        (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).forward = (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).extract_features
 
     # Training and validation loop
     print_divisor()
@@ -300,7 +307,7 @@ def main():
         logging.info(train_pbar)
 
         # Release unused memory
-        torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
+        torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.mps.is_available() else None)
 
         if args.val:
             # Set the noise predictor to evaluation mode
@@ -362,7 +369,7 @@ def main():
                 logging.info(val_pbar)
 
                 # Release unused memory
-                torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
+                torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.mps.is_available() else None)
 
         # Increment epoch count
         train_dataset.increment_epoch()
@@ -384,7 +391,7 @@ def main():
         if (epoch + 1) % config["TRAINING"]["SAVE_INTERVAL"] == 0:
             # Assemble checkpoint data
             checkpoint_data = {
-                'noise_predictor_state_dict': noise_predictor.state_dict(),
+                'noise_predictor_state_dict': (noise_predictor.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else noise_predictor).state_dict(),
                 'noise_predictor_optimizer_state_dict': noise_predictor_optimizer.state_dict(),
                 'noise_predictor_scheduler_state_dict': noise_predictor_scheduler.state_dict(),
                 'gaussian_diffusion_type': config["MODEL"]["DIFFUSION_TYPE"],
@@ -415,7 +422,7 @@ def main():
             }
 
             if config["MODEL"]["LR_CONDITION_ENCODING"]:
-                checkpoint_data['lr_encoder_state_dict'] = lr_encoder.state_dict()
+                checkpoint_data['lr_encoder_state_dict'] = (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).state_dict()
                 checkpoint_data['lr_encoder_in_channels'] = config["MODEL"]["LR_ENCODER"]["IN_CHANNELS"]
                 checkpoint_data['lr_encoder_out_channels'] = config["MODEL"]["LR_ENCODER"]["OUT_CHANNELS"]
                 checkpoint_data['lr_encoder_num_features'] = config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"]
@@ -450,7 +457,7 @@ def main():
             )
 
         # Release unused memory
-        torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.backends.mps.is_available() else None)
+        torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.mps.is_available() else None)
 
     print_divisor()
 

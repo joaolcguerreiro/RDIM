@@ -19,14 +19,14 @@ If you find this project useful, please consider citing the paper:
 
 # <span style="color: orange">Quick Inference</span>
 
-#### Reconstruction
+Run the following code to conduct 3D image reconstruction:
 
    ```python
    import torch
-   from monai.inferers.inferer import SlidingWindowInferer
+   import torch.nn as nn
    
    # Define device
-   device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
+   device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
    
    # Set patch size (D, H, W)
    patch_size = (16, 16, 16)
@@ -37,44 +37,31 @@ If you find this project useful, please consider citing the paper:
       roi_size=patch_size, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
    )
    
-   # Two random volumes (batch size of 2) with 1 channel and size of 64x64x64 (D, H, W). Mean is 0 and STD is 1.
+   # Define LQ images to be reconstructed. Mean is 0 and STD is 1.
+   # For simplicity, two random volumes with 1 channel and size of 64x64x64 (D, H, W) are sampled. Replace them with your images.
    volumes = torch.randn(2, 1, 64, 64, 64).to(device)
    
    # Avoid HTTP Error 403
    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
    
-   # Load model (check pretrained_models/README.md)
-   model = torch.hub.load(
+   # Load models (check pretrained_models/README.md)
+   gaussian_diffusion, noise_predictor, lr_encoder = torch.hub.load(
       'joaolcguerreiro/VoxRDiff', 'load_model',
       ???
-   ).to(device)
-   model.eval()
+   )
+   gaussian_diffusion.to(device)
+   noise_predictor.to(device)
+   lr_encoder.to(device)
+   
+   if torch.cuda.device_count() > 1 or torch.mps.device_count() > 1:
+      noise_predictor = nn.DataParallel(noise_predictor, device_ids=None)
+      lr_encoder = nn.DataParallel(lr_encoder, device_ids=None) if lr_encoder else None
+   
+   noise_predictor.eval()
+   lr_encoder.eval() if lr_encoder else None
    
    # Generated volumes. Model expects z-score normalized input volumes.
-   gen_volumes = model(volumes) if not inferer else inferer(inputs=volumes, network=model)
-   ```
-
-<hr style="border:1px solid gray">
-
-#### Feature Extraction
-
-   ```python
-   import torch
-   from monai.inferers.inferer import SlidingWindowInferer
-   
-   # Same as Reconstruction
-   ...
-   
-   # Load model (check pretrained_models/README.md)
-   model = torch.hub.load(
-      'joaolcguerreiro/VoxRDiff', 'load_model',
-      ???
-   ).to(device)
-   model.forward = model.extract_features
-   model.eval()
-   
-   # Extract features. Model expects z-score normalized input volumes.
-   features = model(volumes) if not inferer else inferer(inputs=volumes, network=model)
+   gen_volumes = gaussian_diffusion.sample(volumes, noise_predictor, lr_encoder, inferer)
    ```
 
 <hr style="border:2px solid orange">

@@ -5,6 +5,7 @@ import argparse
 import logging
 import yaml
 import torch
+import torch.nn as nn
 import numpy as np
 from torch.utils.data import DataLoader
 from torchinfo import summary
@@ -24,10 +25,10 @@ def main():
     set_seed(20)
 
     # Define device
-    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
+    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
 
     # Load checkpoint
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
 
     # Fetch training data statistics
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
@@ -85,6 +86,13 @@ def main():
         summary(lr_encoder, input_size=(1, checkpoint['lr_encoder_in_channels'], *(lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, test_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
         print_divisor(width=0, last=True, new_lines_offset=-1)
 
+    # Use multiple GPUs if available
+    if torch.cuda.device_count() > 1 or torch.mps.device_count() > 1:
+        noise_predictor = nn.DataParallel(noise_predictor, device_ids=config["DATA"]["GPU_IDS"])
+
+        if checkpoint['gaussian_diffusion_lr_condition_encoding']:
+            lr_encoder = nn.DataParallel(lr_encoder, device_ids=config["DATA"]["GPU_IDS"])
+
     # Define patch-based inferers
     noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.125, mode='gaussian', sw_batch_size=config["TESTING"]["PATCH_SLIDING_WINDOW_BATCH_SIZE"], sw_device=device, device=device)
 
@@ -92,8 +100,8 @@ def main():
     metrics = SuperResolutionMetrics(num_spatial_dims=len(checkpoint['training_lr_patch_size']), _min=_min, _max=_max, mean=mean, std=std)
 
     # Initialize models weights
-    noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
-    lr_encoder.load_state_dict(checkpoint['lr_encoder_state_dict']) if checkpoint['gaussian_diffusion_lr_condition_encoding'] else None
+    (noise_predictor.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else noise_predictor).load_state_dict(checkpoint['noise_predictor_state_dict'])
+    (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).load_state_dict(checkpoint['lr_encoder_state_dict']) if checkpoint['gaussian_diffusion_lr_condition_encoding'] else None
 
     # Testing loop
     print_divisor()

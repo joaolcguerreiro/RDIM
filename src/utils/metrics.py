@@ -115,6 +115,7 @@ class LPIPSMetric(RegressionMetric):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="The parameter 'pretrained' is deprecated")
             warnings.filterwarnings("ignore", message="Arguments other than a weight enum or `None` for 'weights' are deprecated")
+            warnings.filterwarnings("ignore", message="You are using `torch.load` with `weights_only=False`", category=FutureWarning)
 
             # Define Criterion
             self.criterion = lpips.LPIPS(net=model, version=version, pretrained=pretrained)

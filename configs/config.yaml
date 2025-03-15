@@ -13,6 +13,7 @@ DATA:
     LR_DIR_PATH: /path/to/dataset/testing/LR
     HR_DIR_PATH: /path/to/dataset/testing/HR
   NUM_WORKERS: 8
+  GPU_IDS: ~
 
 
 #=================================================================================================================#

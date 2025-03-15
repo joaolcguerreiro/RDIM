@@ -453,6 +453,7 @@ def save_sample(save_filename, lr_volume=None, gen_volume=None, gt_volume=None, 
     # Save figure
     ensure_dir_exists(save_filename)
     plt.savefig(save_filename)
+    plt.close()
 
 
 def save_samples(save_dir_path, volumes_metadata, lr_volumes=None, gen_volumes=None, gt_volumes=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=False, bound_range=False):
@@ -508,6 +509,7 @@ def draw_line_chart(data, title, x_label, y_label, save_filename=None, ax=None, 
     if save_filename:
         ensure_dir_exists(save_filename)
         plt.savefig(save_filename)
+        plt.close()
 
 
 def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bin_range=None, frequency_range=None, element='bars', fill=True, save_filename=None, ax=None, fig_size=None, theme='light'):
@@ -534,6 +536,7 @@ def draw_histogram(data, title, x_label, hue=None, stat='count', bins='auto', bi
     if save_filename:
         ensure_dir_exists(save_filename)
         plt.savefig(save_filename)
+        plt.close()
 
 
 def draw_box_plot(data, title, x_label, y_label, hue=None, save_filename=None, ax=None, fig_size=None, theme='light'):
@@ -559,6 +562,7 @@ def draw_box_plot(data, title, x_label, y_label, hue=None, save_filename=None, a
     if save_filename:
         ensure_dir_exists(save_filename)
         plt.savefig(save_filename)
+        plt.close()
 
 
 def create_experiment_directory(experiment_path, config_path=None, checkpoint_path=None, inference_mode=False):
