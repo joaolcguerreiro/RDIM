@@ -79,10 +79,6 @@ def main():
             scale_factor=config["MODEL"]["SCALE_FACTOR"]
         ).to(device)
 
-        # Replace forward method to extract features
-        lr_encoder_forward_method = lr_encoder.forward
-        lr_encoder.forward = lr_encoder.extract_features
-
     # Initialize weights
     noise_predictor.initialize_weights()
     lr_encoder.initialize_weights() if config["MODEL"]["LR_CONDITION_ENCODING"] else None
@@ -172,9 +168,6 @@ def main():
     if not args.resume and config["MODEL"]["LR_CONDITION_ENCODING"]:
         print_divisor()
 
-        # Replace extract features method with forward
-        (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).forward = lr_encoder_forward_method
-
         for pre_train_epoch in range(pre_train_lr_encoder_start_epoch, pre_train_lr_encoder_end_epoch):
             # Set model to train mode
             lr_encoder.train()
@@ -192,7 +185,7 @@ def main():
                 pre_train_lr_encoder_optimizer.zero_grad()
 
                 # Forward pass
-                gen_volumes = lr_encoder(lr_volumes)
+                gen_volumes = (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).pre_train_forward(lr_volumes)
 
                 # Compute perceptual loss
                 perceptual_loss = perceptual_criterion(gen_volumes, hr_volumes) if config['LOSS_WEIGHTS']['PRE_TRAIN_LR_ENCODER']['PERCEPTUAL_LOSS'] != 0.0 else 0.0
@@ -231,9 +224,6 @@ def main():
 
             # Release unused memory
             torch.cuda.empty_cache() if torch.cuda.is_available() else (torch.mps.empty_cache() if torch.mps.is_available() else None)
-
-        # Replace forward method to extract features
-        (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).forward = (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).extract_features
 
     # Training and validation loop
     print_divisor()

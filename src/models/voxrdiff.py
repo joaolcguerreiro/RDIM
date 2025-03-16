@@ -18,13 +18,10 @@ class SinusoidalPositionalEncoding(nn.Module):
 
         # Compute division term for positional embedding
         log_term = torch.tensor(1e4).log() / self.num_embedding_dims
-        self.div_term = torch.exp(even_indexes * -log_term)
+        div_term = torch.exp(even_indexes * -log_term)
 
-    def to(self, *args, **kwargs):
-        # Required to move non-parameter attributes to device, change their dtype, and more
-        self.div_term = self.div_term.to(*args, **kwargs)
-
-        return super().to(*args, **kwargs)
+        # Register div_term as a buffer
+        self.register_buffer('div_term', div_term)
 
     def forward(self, position):
         # Compute positional embedding
@@ -451,12 +448,6 @@ class NoisePredictor(nn.Module):
                 nn.init.constant_(module.weight.data, 1)
                 nn.init.constant_(module.bias.data, 0)
 
-    def to(self, *args, **kwargs):
-        # Required to move non-parameter attributes to device, change their dtype, and more
-        self.time_positional_encoding = self.time_positional_encoding.to(*args, **kwargs)
-
-        return super().to(*args, **kwargs)
-
     def forward(self, x, x_cond, timestep):
         # Compute timestep embedding using sinusoidal positional encoding
         t_cond = self.time_positional_encoding(timestep)
@@ -631,21 +622,17 @@ class LREncoder(nn.Module):
                 if module.bias is not None:
                     nn.init.constant_(module.bias.data, 0)
 
-    def extract_features(self, x):
-        out = skip_connection = self.input(x)
-
-        out = self.res_in_res_blocks(out)
-
-        features = self.conv(out) + skip_connection
-
-        return features
-
     def forward(self, x):
         out = skip_connection = self.input(x)
 
         out = self.res_in_res_blocks(out)
 
         out = self.conv(out) + skip_connection
+
+        return out
+
+    def pre_train_forward(self, x):
+        out = self.forward(x)
 
         out = self.upsample_blocks(out)
 
