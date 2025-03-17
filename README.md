@@ -53,10 +53,12 @@ Run the following code to conduct 3D image reconstruction:
    noise_predictor.to(device)
    lr_encoder.to(device)
    
+   # Use multiple GPUs if available
    if torch.cuda.device_count() > 1 or torch.mps.device_count() > 1:
       noise_predictor = nn.DataParallel(noise_predictor, device_ids=None)
       lr_encoder = nn.DataParallel(lr_encoder, device_ids=None) if lr_encoder else None
    
+   # Set models to evaluation mode
    noise_predictor.eval()
    lr_encoder.eval() if lr_encoder else None
    

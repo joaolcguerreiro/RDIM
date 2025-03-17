@@ -118,7 +118,7 @@ class LPIPSMetric(RegressionMetric):
             warnings.filterwarnings("ignore", message="You are using `torch.load` with `weights_only=False`", category=FutureWarning)
 
             # Define Criterion
-            self.criterion = lpips.LPIPS(net=model, version=version, pretrained=pretrained)
+            self.criterion = lpips.LPIPS(net=model, version=version, pretrained=pretrained, verbose=False)
 
         # Network transforms
         self.model_transforms = transforms.Compose([
