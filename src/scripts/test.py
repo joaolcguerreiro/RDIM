@@ -13,8 +13,7 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.voxrdiff import GaussianDiffusion, NoisePredictor
-from src.models.voxrdiff import LREncoder
+from src.models.voxrdiff import GaussianDiffusion, NoisePredictor, LREncoder
 from src.utils.metrics import SuperResolutionMetrics
 from src.utils.utils import parse_patch_size, clamp, save_samples, save_batch, collect_batch_pixels, parse_bin_range, compute_max_frequency, draw_box_plot, draw_histogram, set_seed
 from src.utils.logger import setup_logging, print_divisor
@@ -90,7 +89,7 @@ def main():
         if checkpoint['gaussian_diffusion_lr_condition_encoding']:
             lr_encoder = nn.DataParallel(lr_encoder, device_ids=config["DATA"]["GPU_IDS"])
 
-    # Define patch-based inferers
+    # Define patch-based inferer
     noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.125, mode='gaussian', sw_batch_size=config["TESTING"]["PATCH_SLIDING_WINDOW_BATCH_SIZE"], sw_device=device, device=device)
 
     # Define metrics

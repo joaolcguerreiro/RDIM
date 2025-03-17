@@ -16,8 +16,7 @@ from glob import glob
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.voxrdiff import GaussianDiffusion, NoisePredictor
-from src.models.voxrdiff import LREncoder
+from src.models.voxrdiff import GaussianDiffusion, NoisePredictor, LREncoder
 from src.utils.losses import VGGLoss, SSIMLoss
 from src.utils.utils import upsample, clamp, denormalize, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logging, print_divisor
@@ -98,7 +97,7 @@ def main():
         if config["MODEL"]["LR_CONDITION_ENCODING"]:
             lr_encoder = nn.DataParallel(lr_encoder, device_ids=config["DATA"]["GPU_IDS"])
 
-    # Define patch-based inferers
+    # Define patch-based inferer
     noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True), scale_factor=config["MODEL"]["SCALE_FACTOR"], overlap=0.125, mode='gaussian', sw_batch_size=config["VALIDATION"]["PATCH_SLIDING_WINDOW_BATCH_SIZE"], sw_device=device, device=device)
 
     # Define optimizer and scheduler

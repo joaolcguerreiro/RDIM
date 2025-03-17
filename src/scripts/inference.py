@@ -13,8 +13,7 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.voxrdiff import GaussianDiffusion, NoisePredictor
-from src.models.voxrdiff import LREncoder
+from src.models.voxrdiff import GaussianDiffusion, NoisePredictor, LREncoder
 from src.utils.utils import parse_patch_size, clamp, create_experiment_directory, save_samples, save_batch, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
@@ -89,7 +88,7 @@ def main():
         if checkpoint['gaussian_diffusion_lr_condition_encoding']:
             lr_encoder = nn.DataParallel(lr_encoder, device_ids=args.gpu_ids)
 
-    # Define patch-based inferers
+    # Define patch-based inferer
     noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.125, mode='gaussian', sw_batch_size=args.patch_sliding_window_batch_size, sw_device=device, device=device)
 
     # Initialize models weights

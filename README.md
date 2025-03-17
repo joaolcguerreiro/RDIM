@@ -34,7 +34,7 @@ Run the following code to conduct 3D image reconstruction:
    # Define inferer (Optional)
    inferer = torch.hub.load(
       'joaolcguerreiro/VoxRDiff', 'load_inferer',
-      roi_size=patch_size, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
+      roi_size=patch_size, scale_factor=2, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
    )
    
    # Define LQ images to be reconstructed. Mean is 0 and STD is 1.
@@ -47,11 +47,14 @@ Run the following code to conduct 3D image reconstruction:
    # Load models (check pretrained_models/README.md)
    gaussian_diffusion, noise_predictor, lr_encoder = torch.hub.load(
       'joaolcguerreiro/VoxRDiff', 'load_model',
-      ???
+      checkpoint_url='???', pretrained=True,
+      gaussian_diffusion_kwargs={???},
+      noise_predictor_kwargs={???},
+      lr_encoder_kwargs={???}
    )
    gaussian_diffusion.to(device)
    noise_predictor.to(device)
-   lr_encoder.to(device)
+   lr_encoder.to(device) if lr_encoder else None
    
    # Use multiple GPUs if available
    if torch.cuda.device_count() > 1 or torch.mps.device_count() > 1:
