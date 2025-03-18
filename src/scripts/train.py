@@ -1,5 +1,6 @@
 import os
 import sys
+import math
 import ast
 import argparse
 import datetime
@@ -107,7 +108,7 @@ def main():
         betas=(config['OPTIMIZER']['NOISE_PREDICTOR']['BETA_1'], config['OPTIMIZER']['NOISE_PREDICTOR']['BETA_2']),
         weight_decay=config['OPTIMIZER']['NOISE_PREDICTOR']['WEIGHT_DECAY']
     )
-    noise_predictor_scheduler = optim.lr_scheduler.CosineAnnealingLR(noise_predictor_optimizer, T_max=(len(train_dataloader) * config['TRAINING']['EPOCHS']), eta_min=config['SCHEDULER']['NOISE_PREDICTOR']['ETA_MIN'])
+    noise_predictor_scheduler = optim.lr_scheduler.CosineAnnealingLR(noise_predictor_optimizer, T_max=(math.ceil(len(train_dataloader) / config['TRAINING']['NUM_GRADIENT_ACCUMULATION_STEPS']) * config['TRAINING']['EPOCHS']), eta_min=config['SCHEDULER']['NOISE_PREDICTOR']['ETA_MIN'])
 
     if config["MODEL"]["LR_CONDITION_ENCODING"]:
         pre_train_lr_encoder_optimizer = optim.Adam(
@@ -196,14 +197,22 @@ def main():
                 lr_encoder_total_loss = config['LOSS_WEIGHTS']['PRE_TRAIN_LR_ENCODER']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['PRE_TRAIN_LR_ENCODER']['CONTENT_LOSS'] * content_loss
 
                 # Backward pass
-                lr_encoder_total_loss.backward()
-                pre_train_lr_encoder_optimizer.step()
+                remaining_batches = len(pre_train_lr_encoder_pbar) % config['PRE_TRAINING_LR_ENCODER']['NUM_GRADIENT_ACCUMULATION_STEPS']
+
+                if batch_index + 1 > len(pre_train_lr_encoder_pbar) - remaining_batches:
+                    (lr_encoder_total_loss / remaining_batches).backward()
+                else:
+                    (lr_encoder_total_loss / config['PRE_TRAINING_LR_ENCODER']['NUM_GRADIENT_ACCUMULATION_STEPS']).backward()
 
                 # Update the training loss
                 lr_encoder_train_loss += lr_encoder_total_loss.item()
                 pre_train_lr_encoder_pbar.set_postfix({
                     'LR Enc. Train. Loss': f'{lr_encoder_total_loss.item():.4f}',
                 })
+
+                if (batch_index + 1) % config['PRE_TRAINING_LR_ENCODER']['NUM_GRADIENT_ACCUMULATION_STEPS'] == 0 or batch_index + 1 == len(pre_train_lr_encoder_pbar):
+                    # Update model parameters
+                    pre_train_lr_encoder_optimizer.step()
 
                 # Compute average training loss for this epoch
                 if batch_index + 1 == len(pre_train_lr_encoder_pbar):
@@ -272,17 +281,25 @@ def main():
             noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss
 
             # Backward pass
-            noise_predictor_total_loss.backward()
-            noise_predictor_optimizer.step()
+            remaining_batches = len(train_pbar) % config['TRAINING']['NUM_GRADIENT_ACCUMULATION_STEPS']
 
-            # Adjust learning rate
-            noise_predictor_scheduler.step()
+            if batch_index + 1 > len(train_pbar) - remaining_batches:
+                (noise_predictor_total_loss / remaining_batches).backward()
+            else:
+                (noise_predictor_total_loss / config['TRAINING']['NUM_GRADIENT_ACCUMULATION_STEPS']).backward()
 
             # Update the training loss
             noise_predictor_train_loss += noise_predictor_total_loss.item()
             train_pbar.set_postfix({
                 'Noise Pred. Train. Loss': f'{noise_predictor_total_loss.item():.4f}',
             })
+
+            if (batch_index + 1) % config['TRAINING']['NUM_GRADIENT_ACCUMULATION_STEPS'] == 0 or batch_index + 1 == len(train_pbar):
+                # Update model parameters
+                noise_predictor_optimizer.step()
+
+                # Adjust learning rate
+                noise_predictor_scheduler.step()
 
             # Compute average training loss for this epoch
             if batch_index + 1 == len(train_pbar):
