@@ -176,13 +176,13 @@ def main():
             # Define training progress bar
             pre_train_lr_encoder_pbar = tqdm(pre_train_lr_encoder_dataloader, desc=f"Epoch {pre_train_epoch + 1}/{pre_train_lr_encoder_end_epoch}")
 
+            # Zero the gradients
+            pre_train_lr_encoder_optimizer.zero_grad()
+
             for batch_index, (lr_volumes, hr_volumes, _) in enumerate(pre_train_lr_encoder_pbar):
                 # Move inputs to the designated device
                 lr_volumes = lr_volumes.to(device)
                 hr_volumes = hr_volumes.to(device)
-
-                # Zero the gradients
-                pre_train_lr_encoder_optimizer.zero_grad()
 
                 # Forward pass
                 gen_volumes = (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).pre_train_forward(lr_volumes)
@@ -213,6 +213,9 @@ def main():
                 if (batch_index + 1) % config['PRE_TRAINING_LR_ENCODER']['NUM_GRADIENT_ACCUMULATION_STEPS'] == 0 or batch_index + 1 == len(pre_train_lr_encoder_pbar):
                     # Update model parameters
                     pre_train_lr_encoder_optimizer.step()
+
+                    # Zero the gradients
+                    pre_train_lr_encoder_optimizer.zero_grad()
 
                 # Compute average training loss for this epoch
                 if batch_index + 1 == len(pre_train_lr_encoder_pbar):
@@ -248,6 +251,9 @@ def main():
         # Define training progress bar
         train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch + 1}/{end_epoch}")
 
+        # Zero the gradients
+        noise_predictor_optimizer.zero_grad()
+
         for batch_index, (lr_volumes, hr_volumes, _) in enumerate(train_pbar):
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
@@ -267,9 +273,6 @@ def main():
 
             # Sample timestep volumes
             volumes_t, eps_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
-
-            # Zero the gradients
-            noise_predictor_optimizer.zero_grad()
 
             # Forward pass
             eps_pred = noise_predictor(volumes_t, (lr_encoder(lr_volumes) if config["MODEL"]["LR_CONDITION_ENCODING"] else lr_volumes), timesteps)
@@ -297,6 +300,9 @@ def main():
             if (batch_index + 1) % config['TRAINING']['NUM_GRADIENT_ACCUMULATION_STEPS'] == 0 or batch_index + 1 == len(train_pbar):
                 # Update model parameters
                 noise_predictor_optimizer.step()
+
+                # Zero the gradients
+                noise_predictor_optimizer.zero_grad()
 
                 # Adjust learning rate
                 noise_predictor_scheduler.step()
