@@ -1,8 +1,8 @@
-# <span style="color: orange">VoxRDiff</span>
+# <span style="color: orange">RDIM</span>
 
-Official repository for VoxRDiff, a denoising diffusion probabilistic model for 3D medical image reconstruction. 
+Official repository of Residual Diffusion Implicit Model (RDIM), a diffusion model for medical image reconstruction. 
 
-<img src="./figures/sample.gif" alt="VoxRDiff qualitative results across every training epoch" width="100%">
+<img src="./figures/sample.gif" alt="RDIM qualitative results across every training epoch" width="100%">
 
 <hr style="border:2px solid orange">
 
@@ -33,7 +33,7 @@ Run the following code to conduct 3D image reconstruction:
    
    # Define inferer (Optional)
    inferer = torch.hub.load(
-      'joaolcguerreiro/VoxRDiff', 'load_inferer',
+      'joaolcguerreiro/RDIM', 'load_inferer',
       roi_size=patch_size, scale_factor=2, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
    )
    
@@ -46,7 +46,7 @@ Run the following code to conduct 3D image reconstruction:
    
    # Load models (check pretrained_models/README.md)
    gaussian_diffusion, noise_predictor, lr_encoder = torch.hub.load(
-      'joaolcguerreiro/VoxRDiff', 'load_model',
+      'joaolcguerreiro/RDIM', 'load_model',
       checkpoint_url='???', pretrained=True,
       gaussian_diffusion_kwargs={???},
       noise_predictor_kwargs={???},
@@ -78,14 +78,14 @@ Run the following code to conduct 3D image reconstruction:
 1) Clone GitHub repository:
 
    ```
-   git clone https://github.com/joaolcguerreiro/VoxRDiff.git
-   cd VoxRDiff
+   git clone https://github.com/joaolcguerreiro/RDIM.git
+   cd RDIM
    ```
 
 2) Create environment:
    ```
-   conda create -n voxrdiff python=3.10.11
-   conda activate voxrdiff
+   conda create -n rdim python=3.10.11
+   conda activate rdim
    ```
 
 3) Install Python dependencies (Python 3.10 is recommended):

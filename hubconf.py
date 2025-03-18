@@ -1,6 +1,6 @@
 import torch
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
-from src.models.voxrdiff import GaussianDiffusion, NoisePredictor, LREncoder
+from src.models.rdim import GaussianDiffusion, NoisePredictor, LREncoder
 
 dependencies = ['torch']
 

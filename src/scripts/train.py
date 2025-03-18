@@ -17,7 +17,7 @@ from glob import glob
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.voxrdiff import GaussianDiffusion, NoisePredictor, LREncoder
+from src.models.rdim import GaussianDiffusion, NoisePredictor, LREncoder
 from src.utils.losses import VGGLoss, SSIMLoss
 from src.utils.utils import upsample, clamp, denormalize, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logging, print_divisor
