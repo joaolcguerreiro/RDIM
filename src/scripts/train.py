@@ -43,11 +43,12 @@ def main():
 
     # Define models
     gaussian_diffusion = GaussianDiffusion(
-        diffusion_type=config["MODEL"]["DIFFUSION_TYPE"],
-        diffusion_type_parameters={key.lower(): value for key, value in (config["DIFFUSION_TYPE_PARAMETERS"][config["MODEL"]["DIFFUSION_TYPE"]] or {}).items()} or None,
+        gamma=config["MODEL"]["GAUSSIAN_DIFFUSION"]["GAMMA"],
+        eta=config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
         num_timesteps=config["MODEL"]["NUM_TIMESTEPS"],
+        num_sampling_timesteps=config["MODEL"]["NUM_SAMPLING_TIMESTEPS"],
+        sampling_timestep_schedule=config["MODEL"]["SAMPLING_TIMESTEP_SCHEDULE"],
         beta_schedule=config["MODEL"]["BETA_SCHEDULE"],
-        residual_prediction=config["MODEL"]["RESIDUAL_PREDICTION"],
         lr_condition_encoding=config["MODEL"]["LR_CONDITION_ENCODING"],
         scale_factor=config["MODEL"]["SCALE_FACTOR"],
         **{key.lower(): value for key, value in config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]].items()}
@@ -259,26 +260,26 @@ def main():
             lr_volumes = lr_volumes.to(device)
             hr_volumes = hr_volumes.to(device)
 
-            # Compute residual volumes
-            if config["MODEL"]["RESIDUAL_PREDICTION"]:
-                # Upsample volumes
-                lr_volumes_up = torch.stack([upsample(lr_volume, config["MODEL"]["SCALE_FACTOR"]) for lr_volume in lr_volumes])
+            # Define initial volumes
+            volumes_0 = hr_volumes
 
-                volumes_0 = hr_volumes - lr_volumes_up
-            else:
-                volumes_0 = hr_volumes
+            # Upsample volumes
+            lr_volumes_up = torch.stack([upsample(lr_volume, config["MODEL"]["SCALE_FACTOR"]) for lr_volume in lr_volumes])
+
+            # Define residual
+            delta = hr_volumes - lr_volumes_up
 
             # Sample timesteps
             timesteps = gaussian_diffusion.sample_timesteps(len(volumes_0)).to(device)
 
             # Sample timestep volumes
-            volumes_t, eps_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
+            volumes_t = gaussian_diffusion.forward_diffusion(volumes_0, delta, timesteps)
 
             # Forward pass
-            eps_pred = noise_predictor(volumes_t, (lr_encoder(lr_volumes) if config["MODEL"]["LR_CONDITION_ENCODING"] else lr_volumes), timesteps)
+            volumes_0_pred = noise_predictor(volumes_t, (lr_encoder(lr_volumes) if config["MODEL"]["LR_CONDITION_ENCODING"] else lr_volumes), timesteps)
 
             # Compute diffusion loss
-            diffusion_loss = diffusion_criterion(eps_pred, eps_real)
+            diffusion_loss = diffusion_criterion(volumes_0_pred, volumes_0)
 
             # Noise Predictor Total loss
             noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss
@@ -339,26 +340,26 @@ def main():
                     lr_volumes = lr_volumes.to(device)
                     hr_volumes = hr_volumes.to(device)
 
-                    # Compute residual volumes
-                    if config["MODEL"]["RESIDUAL_PREDICTION"]:
-                        # Upsample volumes
-                        lr_volumes_up = torch.stack([upsample(lr_volume, config["MODEL"]["SCALE_FACTOR"]) for lr_volume in lr_volumes])
+                    # Define initial volumes
+                    volumes_0 = hr_volumes
 
-                        volumes_0 = hr_volumes - lr_volumes_up
-                    else:
-                        volumes_0 = hr_volumes
+                    # Upsample volumes
+                    lr_volumes_up = torch.stack([upsample(lr_volume, config["MODEL"]["SCALE_FACTOR"]) for lr_volume in lr_volumes])
+
+                    # Define residual
+                    delta = hr_volumes - lr_volumes_up
 
                     # Sample timesteps
                     timesteps = gaussian_diffusion.sample_timesteps(len(volumes_0)).to(device)
 
                     # Sample timestep volumes
-                    volumes_t, eps_real = gaussian_diffusion.forward_diffusion(volumes_0, timesteps)
+                    volumes_t = gaussian_diffusion.forward_diffusion(volumes_0, delta, timesteps)
 
                     # Forward pass
-                    eps_pred = noise_predictor_inferer(inputs=volumes_t, conditions=lr_volumes, timesteps=timesteps, inputs_network=noise_predictor, conditions_network=(lr_encoder if config["MODEL"]["LR_CONDITION_ENCODING"] else None))
+                    volumes_0_pred = noise_predictor_inferer(inputs=volumes_t, conditions=lr_volumes, timesteps=timesteps, inputs_network=noise_predictor, conditions_network=(lr_encoder if config["MODEL"]["LR_CONDITION_ENCODING"] else None))
 
                     # Compute diffusion loss
-                    diffusion_loss = diffusion_criterion(eps_pred, eps_real)
+                    diffusion_loss = diffusion_criterion(volumes_0_pred, volumes_0)
 
                     # Noise Predictor Total loss
                     noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss
@@ -406,12 +407,13 @@ def main():
                 'noise_predictor_state_dict': (noise_predictor.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else noise_predictor).state_dict(),
                 'noise_predictor_optimizer_state_dict': noise_predictor_optimizer.state_dict(),
                 'noise_predictor_scheduler_state_dict': noise_predictor_scheduler.state_dict(),
-                'gaussian_diffusion_type': config["MODEL"]["DIFFUSION_TYPE"],
-                'gaussian_diffusion_type_parameters': config["DIFFUSION_TYPE_PARAMETERS"][config["MODEL"]["DIFFUSION_TYPE"]],
+                'gaussian_diffusion_gamma': config["MODEL"]["GAUSSIAN_DIFFUSION"]["GAMMA"],
+                'gaussian_diffusion_eta': config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
                 'gaussian_diffusion_num_timesteps': config["MODEL"]["NUM_TIMESTEPS"],
+                'gaussian_diffusion_num_sampling_timesteps': config["MODEL"]["NUM_SAMPLING_TIMESTEPS"],
+                'gaussian_diffusion_sampling_timestep_schedule': config["MODEL"]["SAMPLING_TIMESTEP_SCHEDULE"],
                 'gaussian_diffusion_beta_schedule': config["MODEL"]["BETA_SCHEDULE"],
                 'gaussian_beta_schedule_parameters': config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]],
-                'gaussian_diffusion_residual_prediction': config["MODEL"]["RESIDUAL_PREDICTION"],
                 'gaussian_diffusion_lr_condition_encoding': config["MODEL"]["LR_CONDITION_ENCODING"],
                 'gaussian_diffusion_scale_factor': config["MODEL"]["SCALE_FACTOR"],
                 'noise_predictor_in_channels': config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"],

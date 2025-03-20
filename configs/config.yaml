@@ -21,12 +21,15 @@ DATA:
 #=================================================================================================================#
 
 MODEL:
-  DIFFUSION_TYPE: 'DDIM'
   NUM_TIMESTEPS: 1000
-  BETA_SCHEDULE: 'COSINE'
-  RESIDUAL_PREDICTION: True
+  NUM_SAMPLING_TIMESTEPS: 10
+  SAMPLING_TIMESTEP_SCHEDULE: 'LINEAR'
+  BETA_SCHEDULE: 'GENERAL_SIGMOID'
   LR_CONDITION_ENCODING: True
   SCALE_FACTOR: 1
+  GAUSSIAN_DIFFUSION:
+    GAMMA: 0.1
+    ETA: 0.1
   NOISE_PREDICTOR:
     IN_CHANNELS: 1
     OUT_CHANNELS: 1
@@ -48,35 +51,25 @@ MODEL:
     NUM_RRDB_DB_GROWTH_FEATURES: 32
     PRE_TRAINED_PATH:
 
-DIFFUSION_TYPE_OPTIONS:
-  - 'DDPM'
-  - 'DDIM'
-
-DIFFUSION_TYPE_PARAMETERS:
-  DDPM: ~
-  DDIM:
-    NUM_SAMPLING_TIMESTEPS: 5
-    ETA: 0.0
+SAMPLING_TIMESTEP_SCHEDULE_OPTIONS:
+  - 'LINEAR'
+  - 'GEOMETRIC'
 
 BETA_SCHEDULE_OPTIONS:
-  - 'LINEAR'
-  - 'COSINE'
-  - 'SIGMOID'
+  - 'GENERAL_SIGMOID'
+  - 'GENERAL_SIGMOID_ANTIDERIVATIVE'
+  - 'CIRCULAR'
+  - 'PARABOLIC'
 
 BETA_SCHEDULE_PARAMETERS:
-  LINEAR:
-    BETA_START: 1.0e-4
-    BETA_END: 2.0e-2
-  COSINE:
-    BETA_OFFSET: 8.0e-3
-    BETA_MIN: 0.0
-    BETA_MAX: 9.99e-1
-  SIGMOID:
-    START: -3
-    END: 3
-    TAU: 1.0
-    BETA_MIN: 0.0
-    BETA_MAX: 9.99e-1
+  GENERAL_SIGMOID:
+    P: 2
+  GENERAL_SIGMOID_ANTIDERIVATIVE:
+    P: 8
+  CIRCULAR:
+    P: 3
+  PARABOLIC:
+    P: 2
 
 
 #=================================================================================================================#
