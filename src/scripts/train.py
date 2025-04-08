@@ -413,7 +413,7 @@ def main():
                 'gaussian_diffusion_num_sampling_timesteps': config["MODEL"]["NUM_SAMPLING_TIMESTEPS"],
                 'gaussian_diffusion_sampling_timestep_schedule': config["MODEL"]["SAMPLING_TIMESTEP_SCHEDULE"],
                 'gaussian_diffusion_beta_schedule': config["MODEL"]["BETA_SCHEDULE"],
-                'gaussian_beta_schedule_parameters': config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]],
+                'gaussian_diffusion_beta_schedule_parameters': config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]],
                 'gaussian_diffusion_lr_condition_encoding': config["MODEL"]["LR_CONDITION_ENCODING"],
                 'gaussian_diffusion_scale_factor': config["MODEL"]["SCALE_FACTOR"],
                 'noise_predictor_in_channels': config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"],
