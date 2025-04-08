@@ -642,14 +642,14 @@ class LREncoder(nn.Module):
 
 
 class GaussianDiffusion(nn.Module):
-    def __init__(self, num_timesteps=1000, num_sampling_timesteps=10, sampling_timestep_schedule='LINEAR', beta_schedule='GENERAL_SIGMOID', lr_condition_encoding=True, scale_factor=1, gamma=0.1, eta=0.1, **kwargs):
+    def __init__(self, num_timesteps=1000, num_sampling_timesteps=10, sampling_timestep_schedule='LINEAR', beta_schedule='GENERAL_SIGMOID', gamma=0.1, eta=0.1, scale_factor=1, lr_condition_encoding=True, **kwargs):
         super().__init__()
 
         self.num_timesteps = num_timesteps
-        self.lr_condition_encoding = lr_condition_encoding
-        self.scale_factor = scale_factor
         self.gamma = gamma
         self.eta = eta
+        self.scale_factor = scale_factor
+        self.lr_condition_encoding = lr_condition_encoding
 
         # Register buffers
         sampling_timesteps = self.reverse_trajectory_timesteps(sampling_timestep_schedule=sampling_timestep_schedule, num_sampling_timesteps=num_sampling_timesteps)

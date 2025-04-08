@@ -41,10 +41,10 @@ def main():
         num_sampling_timesteps=(args.num_sampling_timesteps or checkpoint['gaussian_diffusion_num_sampling_timesteps']),
         sampling_timestep_schedule=(args.sampling_timestep_schedule or checkpoint['gaussian_diffusion_sampling_timestep_schedule']),
         beta_schedule=checkpoint['gaussian_diffusion_beta_schedule'],
-        lr_condition_encoding=checkpoint['gaussian_diffusion_lr_condition_encoding'],
-        scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
         gamma=checkpoint['gaussian_diffusion_gamma'],
-        eta=checkpoint['gaussian_diffusion_eta'],
+        eta=(args.eta or checkpoint['gaussian_diffusion_eta']),
+        scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
+        lr_condition_encoding=checkpoint['gaussian_diffusion_lr_condition_encoding'],
         **{key.lower(): value for key, value in checkpoint['gaussian_diffusion_beta_schedule_parameters'].items()}
     ).to(device)
 
@@ -153,6 +153,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr-patch-size', default=None, help="Override low-resolution training patch size", type=ast.literal_eval)
     parser.add_argument('--num-sampling-timesteps', default=None, help="Override number of timesteps in the reverse trajectory", type=int)
     parser.add_argument('--sampling-timestep-schedule', default=None, help="Override timestep scheduler for the reverse trajectory", type=str)
+    parser.add_argument('--eta', default=None, help="Override eta in the reverse trajectory", type=float)
     parser.add_argument('--num-workers', default=8, help='Number of subprocesses used for data loading', type=int)
     parser.add_argument('--gpu-ids', default=None, help='GPU identifiers (None for all)', type=ast.literal_eval)
     args = parser.parse_args()
