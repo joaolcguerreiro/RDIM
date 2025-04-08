@@ -4,8 +4,8 @@
 
 1) [Overview](#overview)
 2) [Prepare LDCT-and-Projection-Data Dataset](#prepare-ldct-and-projection-data-dataset)
-4) [Prepare LIDC-IDRI Dataset](#prepare-lidc-idri-dataset)
 3) [Prepare BraTS 2023 Dataset](#prepare-brats-2023-dataset)
+4) [Prepare FMD Dataset](#prepare-fmd-dataset)
 5) [Prepare Other Dataset](#prepare-other-dataset)
 
 <hr style="border:1px solid gray">
@@ -90,9 +90,9 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
-#### Prepare LIDC-IDRI Dataset
+#### Prepare FMD Dataset
 
-1) Download [LIDC-IDRI](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=1966254) dataset.
+1) Download [FMD](https://curate.nd.edu/articles/dataset/Fluorescence_Microscopy_Denoising_FMD_dataset/24744648) dataset.
 
 2) Navigate to `preprocessing` directory:
    ```
@@ -101,34 +101,29 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 3) Run clone data script to duplicate dataset into `data` directory:
    ```
-   python clone_data.py --dir=<path_to_raw_lidc_idri> --dataset-name="LIDC-IDRI"
+   python clone_data.py --dir=<path_to_raw_fmd> --dataset-name="FMD"
    ```
 
 4) Run data cleaning script:
    ```
-   python clean_lidc_idri.py --dir="../../data/LIDC-IDRI"
+   python clean_fmd.py --dir="../../data/FMD"
    ```
 
 5) Run data formatting script:
    ```
-   python format_lidc_idri.py --dir="../../data/LIDC-IDRI"
+   python format_fmd.py --dir="../../data/FMD"
    ```
 
-6) Run data splitting script:
+6) Run data splitting script for each subset:
    ```
-   python split_data.py --dir="../../data/LIDC-IDRI"
-   ```
-
-7) Run data downsampling script to create LR-HR pairs:
-   ```
-   python simulate_ldct.py --dir="../../data/LIDC-IDRI/training"
-   python simulate_ldct.py --dir="../../data/LIDC-IDRI/validation"
-   python simulate_ldct.py --dir="../../data/LIDC-IDRI/testing"
+   python split_data.py --dir="../../data/Confocal-BPAE-Raw" --pair-wise=True
+   python split_data.py --dir="../../data/Two-Photon-BPAE-Raw" --pair-wise=True
+   python split_data.py --dir="../../data/Wide-Field-BPAE-Raw" --pair-wise=True
    ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
 
-> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py` and ignore `simulate_ldct.py` for `validation` directory.
+> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py`.
 
 <hr style="border:1px solid gray">
 
