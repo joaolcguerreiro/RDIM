@@ -38,14 +38,14 @@ def main():
 
     # Define models
     gaussian_diffusion = GaussianDiffusion(
-        gamma=checkpoint['gaussian_diffusion_gamma'],
-        eta=checkpoint['gaussian_diffusion_eta'],
         num_timesteps=checkpoint['gaussian_diffusion_num_timesteps'],
         num_sampling_timesteps=(args.num_sampling_timesteps or checkpoint['gaussian_diffusion_num_sampling_timesteps']),
         sampling_timestep_schedule=(args.sampling_timestep_schedule or checkpoint['gaussian_diffusion_sampling_timestep_schedule']),
         beta_schedule=checkpoint['gaussian_diffusion_beta_schedule'],
         lr_condition_encoding=checkpoint['gaussian_diffusion_lr_condition_encoding'],
         scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
+        gamma=checkpoint['gaussian_diffusion_gamma'],
+        eta=checkpoint['gaussian_diffusion_eta'],
         **{key.lower(): value for key, value in checkpoint['gaussian_diffusion_beta_schedule_parameters'].items()}
     ).to(device)
 

@@ -43,14 +43,14 @@ def main():
 
     # Define models
     gaussian_diffusion = GaussianDiffusion(
-        gamma=config["MODEL"]["GAUSSIAN_DIFFUSION"]["GAMMA"],
-        eta=config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
         num_timesteps=config["MODEL"]["NUM_TIMESTEPS"],
         num_sampling_timesteps=config["MODEL"]["NUM_SAMPLING_TIMESTEPS"],
         sampling_timestep_schedule=config["MODEL"]["SAMPLING_TIMESTEP_SCHEDULE"],
         beta_schedule=config["MODEL"]["BETA_SCHEDULE"],
         lr_condition_encoding=config["MODEL"]["LR_CONDITION_ENCODING"],
         scale_factor=config["MODEL"]["SCALE_FACTOR"],
+        gamma=config["MODEL"]["GAUSSIAN_DIFFUSION"]["GAMMA"],
+        eta=config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
         **{key.lower(): value for key, value in config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]].items()}
     ).to(device)
 
@@ -407,8 +407,6 @@ def main():
                 'noise_predictor_state_dict': (noise_predictor.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else noise_predictor).state_dict(),
                 'noise_predictor_optimizer_state_dict': noise_predictor_optimizer.state_dict(),
                 'noise_predictor_scheduler_state_dict': noise_predictor_scheduler.state_dict(),
-                'gaussian_diffusion_gamma': config["MODEL"]["GAUSSIAN_DIFFUSION"]["GAMMA"],
-                'gaussian_diffusion_eta': config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
                 'gaussian_diffusion_num_timesteps': config["MODEL"]["NUM_TIMESTEPS"],
                 'gaussian_diffusion_num_sampling_timesteps': config["MODEL"]["NUM_SAMPLING_TIMESTEPS"],
                 'gaussian_diffusion_sampling_timestep_schedule': config["MODEL"]["SAMPLING_TIMESTEP_SCHEDULE"],
@@ -416,6 +414,8 @@ def main():
                 'gaussian_diffusion_beta_schedule_parameters': config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["BETA_SCHEDULE"]],
                 'gaussian_diffusion_lr_condition_encoding': config["MODEL"]["LR_CONDITION_ENCODING"],
                 'gaussian_diffusion_scale_factor': config["MODEL"]["SCALE_FACTOR"],
+                'gaussian_diffusion_gamma': config["MODEL"]["GAUSSIAN_DIFFUSION"]["GAMMA"],
+                'gaussian_diffusion_eta': config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
                 'noise_predictor_in_channels': config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"],
                 'noise_predictor_out_channels': config["MODEL"]["NOISE_PREDICTOR"]["OUT_CHANNELS"],
                 'noise_predictor_num_inner_features': config["MODEL"]["NOISE_PREDICTOR"]["NUM_INNER_FEATURES"],
