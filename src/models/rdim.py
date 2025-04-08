@@ -771,7 +771,7 @@ class GaussianDiffusion(nn.Module):
 
         # Compute beta at given timestep and match volume dimensions
         beta_t = self.betas[timestep_index].view(*timestep.shape, *([1] * num_diff_dims))
-        gamma = torch.tensor(self.gamma, device=timestep.device).view(*timestep.shape, *([1] * num_diff_dims))
+        gamma = torch.tensor(self.gamma, device=timestep.device)
 
         # Sample random noise
         eps = torch.randn_like(x_0)
@@ -802,9 +802,9 @@ class GaussianDiffusion(nn.Module):
         # Compute diffusion parameters and match volume dimensions
         beta_tau_k = self.betas[tau_k_index].view(*tau_k.shape, *([1] * num_diff_dims))
         beta_tau_k_m1 = torch.where(timestep_condition, self.betas[tau_k_index - 1], 0).view(*tau_k.shape, *([1] * num_diff_dims))
-        lambda_tau_k = self.lamdas[tau_k_index].view(*tau_k.shape, *([1] * num_diff_dims))
-        gamma = torch.tensor(self.gamma, device=tau_k.device).view(*tau_k.shape, *([1] * num_diff_dims))
-        eta = torch.tensor(self.eta, device=tau_k.device).view(*tau_k.shape, *([1] * num_diff_dims))
+        lambda_tau_k = self.lambdas[tau_k_index].view(*tau_k.shape, *([1] * num_diff_dims))
+        gamma = torch.tensor(self.gamma, device=tau_k.device)
+        eta = torch.tensor(self.eta, device=tau_k.device)
 
         # Sample random noise and match volume dimensions
         z = torch.randn_like(x_tau_k)
