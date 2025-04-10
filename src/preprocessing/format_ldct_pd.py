@@ -96,7 +96,7 @@ def main():
         # Uniform shape transforms
         uniform_transforms = transforms.Compose([
             ReverseDimensions(),
-            EnsureChannelExists(),
+            EnsureChannelExists(num_spatial_dimensions=3),
             transforms.NormalizeIntensity(subtrahend=_min, divisor=(_max-_min)),
             transforms.SpatialPad(spatial_size=args.uniform_shape),
             transforms.CenterSpatialCrop(roi_size=args.uniform_shape),

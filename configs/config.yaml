@@ -21,6 +21,7 @@ DATA:
 #=================================================================================================================#
 
 MODEL:
+  NUM_SPATIAL_DIMENSIONS: 3
   SCALE_FACTOR: 1
   LR_CONDITION_ENCODING: True
   GAUSSIAN_DIFFUSION:

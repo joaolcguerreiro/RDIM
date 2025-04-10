@@ -64,7 +64,7 @@ class Metrics:
 
 
 class SuperResolutionMetrics(Metrics):
-    def __init__(self, num_spatial_dims, _min, _max, mean=None, std=None):
+    def __init__(self, num_spatial_dimensions, _min, _max, mean=None, std=None):
         super().__init__()
 
         # Define statistics
@@ -76,8 +76,8 @@ class SuperResolutionMetrics(Metrics):
         # Define metrics
         self.metrics = [
             {'name': 'PSNR', 'scores': [], 'func': PSNRMetric(max_val=1.0)},
-            {'name': 'SSIM', 'scores': [], 'func': SSIMMetric(spatial_dims=num_spatial_dims, data_range=1.0)},
-            {'name': 'LPIPS', 'scores': [], 'func': LPIPSMetric(min_val=0.0, max_val=1.0)}
+            {'name': 'SSIM', 'scores': [], 'func': SSIMMetric(spatial_dims=num_spatial_dimensions, data_range=1.0)},
+            {'name': 'LPIPS', 'scores': [], 'func': LPIPSMetric(num_spatial_dimensions=num_spatial_dimensions, min_val=0.0, max_val=1.0)}
         ]
 
     def preprocess(self, predictions, ground_truths):
@@ -100,6 +100,9 @@ class LPIPSMetric(RegressionMetric):
     Input `predictions` is compared with ground truth `ground_truths`.
 
     Args:
+        num_spatial_dimensions: Number of spatial dimensions in the tensors.
+        min_val: Minimum pixel intensity value.
+        max_val: Maximum pixel intensity value.
         reduction: Define the mode to reduce metrics, available reduction modes: {``"none"``, ``"mean"``, ``"sum"``,
             ``"mean_batch"``, ``"sum_batch"``, ``"mean_channel"``, ``"sum_channel"``}, default to ``"mean"``. If "none", will not do reduction.
         get_not_nans: Whether to return the `not_nans` count, if True, aggregate() returns (metric, not_nans).
@@ -108,7 +111,7 @@ class LPIPSMetric(RegressionMetric):
         pretrained: Use pretrained weights for LPIPS model. Default is True.
     """
 
-    def __init__(self, min_val: float, max_val: float, reduction: MetricReduction | str = MetricReduction.MEAN, get_not_nans: bool = False, model: str = 'alex', version: str = '0.1', pretrained: bool = True) -> None:
+    def __init__(self, num_spatial_dimensions: int, min_val: float, max_val: float, reduction: MetricReduction | str = MetricReduction.MEAN, get_not_nans: bool = False, model: str = 'alex', version: str = '0.1', pretrained: bool = True) -> None:
         super().__init__(reduction=reduction, get_not_nans=get_not_nans)
 
         # Suppress the specific warning related to pretrained model
@@ -122,7 +125,7 @@ class LPIPSMetric(RegressionMetric):
 
         # Network transforms
         self.model_transforms = transforms.Compose([
-            EnsureExactChannels(num_channels=3),
+            EnsureExactChannels(num_channels=3, num_spatial_dimensions=num_spatial_dimensions),
             transforms.ScaleIntensityRange(a_min=min_val, a_max=max_val, b_min=-1.0, b_max=1.0),
             transforms.ToTensor(),
         ])
@@ -133,8 +136,8 @@ class LPIPSMetric(RegressionMetric):
         transformed_ground_truths = torch.stack([self.model_transforms(ground_truth) for ground_truth in ground_truths], dim=0)
 
         # Convert 3D data to 2D
-        transformed_predictions_2d = transformed_predictions.permute(-5, -3, -4, -2, -1).contiguous().view(-1, 3, *transformed_predictions.shape[-2:])
-        transformed_ground_truths_2d = transformed_ground_truths.permute(-5, -3, -4, -2, -1).contiguous().view(-1, 3, *transformed_ground_truths.shape[-2:])
+        transformed_predictions_2d = transformed_predictions.permute(-5, -3, -4, -2, -1).contiguous().view(-1, 3, *transformed_predictions.shape[-2:]) if transformed_predictions.dim() == 5 else transformed_predictions
+        transformed_ground_truths_2d = transformed_ground_truths.permute(-5, -3, -4, -2, -1).contiguous().view(-1, 3, *transformed_ground_truths.shape[-2:]) if transformed_ground_truths.dim() == 5 else transformed_ground_truths
 
         # Compute LPIPS score
         return torch.mean(self.criterion(transformed_predictions_2d, transformed_ground_truths_2d)).reshape(1, 1)

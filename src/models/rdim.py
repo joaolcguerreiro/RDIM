@@ -39,11 +39,11 @@ class SinusoidalPositionalEncoding(nn.Module):
 
 
 class ConvolutionalBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_groups=8, activation=True, max_pool=False, conv_first=True, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_groups=8, activation=True, max_pool=False, conv_first=True, **kwargs):
         super().__init__()
 
         # Convolutional Layer
-        self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
+        self.conv = (nn.Conv3d if num_spatial_dimensions == 3 else nn.Conv2d)(in_channels, out_channels, **kwargs)
 
         # Group Normalization Layer
         self.gn = nn.GroupNorm(num_groups, out_channels if conv_first else in_channels) if num_groups > 0 else nn.Identity()
@@ -52,7 +52,7 @@ class ConvolutionalBlock(nn.Module):
         self.act = nn.SiLU() if activation else nn.Identity()
 
         # Max Polling Layer
-        self.pool = nn.MaxPool3d(kernel_size=2) if max_pool else nn.Identity()
+        self.pool = (nn.MaxPool3d if num_spatial_dimensions == 3 else nn.MaxPool2d)(kernel_size=2) if max_pool else nn.Identity()
 
         # Set Convolutional Layer Order
         self.conv_first = conv_first
@@ -62,11 +62,11 @@ class ConvolutionalBlock(nn.Module):
 
 
 class DownsampleBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, scale_factor=2, activation=False, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, scale_factor=2, activation=False, **kwargs):
         super().__init__()
 
         # Convolutional Layer
-        self.conv = nn.Conv3d(in_channels, out_channels, stride=scale_factor, padding_mode='reflect', **kwargs)
+        self.conv = (nn.Conv3d if num_spatial_dimensions == 3 else nn.Conv2d)(in_channels, out_channels, stride=scale_factor, padding_mode='reflect', **kwargs)
 
         # Activation Function
         self.act = nn.SiLU() if activation else nn.Identity()
@@ -76,14 +76,14 @@ class DownsampleBlock(nn.Module):
 
 
 class UpsampleBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, scale_factor=2, mode='trilinear', activation=False, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, scale_factor=2, mode='nearest', activation=False, **kwargs):
         super().__init__()
 
         # Upsample Layer
-        self.upsample = nn.Upsample(scale_factor=scale_factor, mode=mode, align_corners=False)
+        self.upsample = nn.Upsample(scale_factor=scale_factor, mode=mode, align_corners=(False if mode != 'nearest' else None))
 
         # Convolutional Layer
-        self.conv = nn.Conv3d(in_channels, out_channels, **kwargs)
+        self.conv = (nn.Conv3d if num_spatial_dimensions == 3 else nn.Conv2d)(in_channels, out_channels, **kwargs)
 
         # Activation Function
         self.act = nn.SiLU() if activation else nn.Identity()
@@ -93,7 +93,7 @@ class UpsampleBlock(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_conv_blocks=2, num_groups=8, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_conv_blocks=2, num_groups=8, **kwargs):
         super().__init__()
         assert num_conv_blocks > 0 if in_channels != out_channels else True, f'Number of convolutional blocks ({num_conv_blocks}) must be greater than 0'
 
@@ -109,6 +109,7 @@ class ResidualBlock(nn.Module):
         for block_index in range(num_conv_blocks):
             self.conv_blocks.append(
                 ConvolutionalBlock(
+                    num_spatial_dimensions,
                     out_channels if block_index != 0 else in_channels,
                     out_channels,
                     num_groups=num_groups,
@@ -120,7 +121,7 @@ class ResidualBlock(nn.Module):
             )
 
         # Skip Connection Layer
-        self.residual_conv = nn.Conv3d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
+        self.residual_conv = (nn.Conv3d if num_spatial_dimensions == 3 else nn.Conv2d)(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
 
     def forward(self, x, t_cond):
         # Apply time embedding projection
@@ -181,11 +182,12 @@ class SelfAttentionBlock(nn.Module):
 
 
 class ResidualAttentionBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
         # Residual Block
         self.res_block = ResidualBlock(
+            num_spatial_dimensions,
             in_channels,
             out_channels,
             num_time_embedding_dims=num_time_embedding_dims,
@@ -210,7 +212,7 @@ class ResidualAttentionBlock(nn.Module):
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
         # Residual Blocks with Optional Self-Attention Blocks
@@ -219,6 +221,7 @@ class EncoderBlock(nn.Module):
         for block_index in range(num_rb_blocks):
             self.res_att_blocks.append(
                 ResidualAttentionBlock(
+                    num_spatial_dimensions,
                     out_channels if block_index != 0 else in_channels,
                     out_channels,
                     num_time_embedding_dims=num_time_embedding_dims,
@@ -232,6 +235,7 @@ class EncoderBlock(nn.Module):
 
         # Downsampling Block
         self.downsample_block = DownsampleBlock(
+            num_spatial_dimensions,
             out_channels,
             out_channels,
             scale_factor=2,
@@ -251,7 +255,7 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
         # Residual Blocks with Optional Self-Attention Blocks
@@ -260,6 +264,7 @@ class DecoderBlock(nn.Module):
         for block_index in range(num_rb_blocks):
             self.res_att_blocks.append(
                 ResidualAttentionBlock(
+                    num_spatial_dimensions,
                     out_channels if block_index != 0 else in_channels,
                     out_channels,
                     num_time_embedding_dims=num_time_embedding_dims,
@@ -273,10 +278,11 @@ class DecoderBlock(nn.Module):
 
         # Upsampling Block
         self.upsample_block = UpsampleBlock(
+            num_spatial_dimensions,
             out_channels,
             out_channels,
             scale_factor=2,
-            mode='trilinear',
+            mode='trilinear' if num_spatial_dimensions == 3 else 'bilinear',
             activation=False,
             **kwargs
         )
@@ -293,7 +299,7 @@ class DecoderBlock(nn.Module):
 
 
 class BottleneckBlock(nn.Module):
-    def __init__(self, in_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
         super().__init__()
 
         # Residual Blocks with Optional Self-Attention Blocks
@@ -302,6 +308,7 @@ class BottleneckBlock(nn.Module):
         for _ in range(num_rb_blocks):
             self.res_att_blocks.append(
                 ResidualAttentionBlock(
+                    num_spatial_dimensions,
                     in_channels,
                     in_channels,
                     num_time_embedding_dims=num_time_embedding_dims,
@@ -323,9 +330,12 @@ class BottleneckBlock(nn.Module):
 
 
 class NoisePredictor(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rb_blocks=2, num_rb_conv_blocks=2, attention_levels=((False,) * 2 + (True,) * 2), num_attention_heads=8, num_groups=8, scale_factor=1):
+    def __init__(self, num_spatial_dimensions=3, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rb_blocks=2, num_rb_conv_blocks=2, attention_levels=((False,) * 2 + (True,) * 2), num_attention_heads=8, num_groups=8, scale_factor=1):
         super().__init__()
         assert len(feature_multipliers) == len(attention_levels), f'Array size of attention levels ({len(attention_levels)}) must match array size of feature multipliers ({len(feature_multipliers)})'
+
+        # Number of Spatial Dimensions
+        self.num_spatial_dimensions = num_spatial_dimensions
 
         # Positional Encoding
         self.time_positional_encoding = SinusoidalPositionalEncoding(num_inner_features)
@@ -339,16 +349,18 @@ class NoisePredictor(nn.Module):
 
         # Upsample/Projection block for condition
         self.upsample_cond = UpsampleBlock(
+            num_spatial_dimensions,
             num_cond_features,
             num_inner_features,
             scale_factor=scale_factor,
-            mode='trilinear',
+            mode='trilinear' if num_spatial_dimensions == 3 else 'bilinear',
             activation=False,
             kernel_size=3, stride=1, padding=1
         ) if scale_factor > 1 or num_cond_features != num_inner_features else nn.Identity()
 
         # Input Layer
         self.input = ConvolutionalBlock(
+            num_spatial_dimensions,
             in_channels,
             num_inner_features,
             num_groups=0,
@@ -367,6 +379,7 @@ class NoisePredictor(nn.Module):
 
             self.encoder_blocks.append(
                 EncoderBlock(
+                    num_spatial_dimensions,
                     num_inner_features * prev_multiplier if prev_multiplier is not None else num_inner_features,
                     num_inner_features * multiplier,
                     num_time_embedding_dims=num_inner_features,
@@ -381,6 +394,7 @@ class NoisePredictor(nn.Module):
 
         # Bottleneck block
         self.bottleneck_block = BottleneckBlock(
+            num_spatial_dimensions,
             num_inner_features * feature_multipliers[-1],
             num_time_embedding_dims=num_inner_features,
             num_rb_blocks=num_rb_blocks,
@@ -405,6 +419,7 @@ class NoisePredictor(nn.Module):
 
             self.decoder_blocks.append(
                 DecoderBlock(
+                    num_spatial_dimensions,
                     num_inner_features * multiplier + (num_inner_features * prev_multiplier if prev_multiplier is not None else num_inner_features * multiplier),
                     num_inner_features * multiplier,
                     num_time_embedding_dims=num_inner_features,
@@ -420,6 +435,7 @@ class NoisePredictor(nn.Module):
         # Output Block
         self.output = nn.Sequential(
             ConvolutionalBlock(
+                num_spatial_dimensions,
                 num_inner_features + num_inner_features * reversed_feature_multipliers[-1],
                 num_inner_features,
                 num_groups=num_groups,
@@ -428,6 +444,7 @@ class NoisePredictor(nn.Module):
                 kernel_size=3, stride=1, padding=1
             ),
             ConvolutionalBlock(
+                num_spatial_dimensions,
                 num_inner_features,
                 out_channels,
                 num_groups=0,
@@ -439,7 +456,7 @@ class NoisePredictor(nn.Module):
 
     def initialize_weights(self, scale=1.0):
         for module in self.modules():
-            if isinstance(module, (nn.Conv3d, nn.Linear)):
+            if isinstance(module, (nn.Conv3d if self.num_spatial_dimensions == 3 else nn.Conv2d, nn.Linear)):
                 nn.init.kaiming_normal_(module.weight.data)
                 module.weight.data *= scale
                 if module.bias is not None:
@@ -489,7 +506,7 @@ class NoisePredictor(nn.Module):
 
 
 class DenseBlock(nn.Module):
-    def __init__(self, in_channels, num_growth_features=32, num_conv_blocks=3, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, num_growth_features=32, num_conv_blocks=3, **kwargs):
         super().__init__()
 
         # Convolutional Blocks
@@ -498,6 +515,7 @@ class DenseBlock(nn.Module):
         for block_index in range(num_conv_blocks):
             self.conv_blocks.append(
                 ConvolutionalBlock(
+                    num_spatial_dimensions,
                     in_channels + block_index * num_growth_features,
                     num_growth_features if block_index != (num_conv_blocks - 1) else in_channels,
                     num_groups=0,
@@ -519,7 +537,7 @@ class DenseBlock(nn.Module):
 
 
 class ResidualInResidualDenseBlock(nn.Module):
-    def __init__(self, in_channels, num_db_growth_features=32, num_db_blocks=2, num_db_conv_blocks=3, beta=0.2, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, num_db_growth_features=32, num_db_blocks=2, num_db_conv_blocks=3, beta=0.2, **kwargs):
         super().__init__()
 
         # Residual Scale Factor
@@ -531,6 +549,7 @@ class ResidualInResidualDenseBlock(nn.Module):
         for _ in range(num_db_blocks):
             self.dense_blocks.append(
                 DenseBlock(
+                    num_spatial_dimensions,
                     in_channels,
                     num_growth_features=num_db_growth_features,
                     num_conv_blocks=num_db_conv_blocks,
@@ -552,11 +571,15 @@ class ResidualInResidualDenseBlock(nn.Module):
 
 
 class LREncoder(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, num_features=64, num_rrdb_blocks=1, num_rrdb_db_blocks=2, num_rrdb_db_conv_blocks=3, num_rrdb_db_growth_features=32, scale_factor=1):
+    def __init__(self, num_spatial_dimensions=3, in_channels=1, out_channels=1, num_features=64, num_rrdb_blocks=1, num_rrdb_db_blocks=2, num_rrdb_db_conv_blocks=3, num_rrdb_db_growth_features=32, scale_factor=1):
         super().__init__()
+
+        # Number of Spatial Dimensions
+        self.num_spatial_dimensions = num_spatial_dimensions
 
         # Input Layer
         self.input = ConvolutionalBlock(
+            num_spatial_dimensions,
             in_channels,
             num_features,
             num_groups=0,
@@ -567,6 +590,7 @@ class LREncoder(nn.Module):
 
         # Residual in Residual Dense Blocks
         self.res_in_res_blocks = nn.Sequential(*[ResidualInResidualDenseBlock(
+            num_spatial_dimensions,
             num_features,
             num_db_growth_features=num_rrdb_db_growth_features,
             num_db_blocks=num_rrdb_db_blocks,
@@ -576,6 +600,7 @@ class LREncoder(nn.Module):
 
         # Convolutional Layer
         self.conv = ConvolutionalBlock(
+            num_spatial_dimensions,
             num_features,
             num_features,
             num_groups=0,
@@ -586,10 +611,11 @@ class LREncoder(nn.Module):
 
         # Upsampling Blocks
         self.upsample_blocks = nn.Sequential(*[UpsampleBlock(
+            num_spatial_dimensions,
             num_features,
             num_features,
             scale_factor=2,
-            mode='trilinear',
+            mode='trilinear' if num_spatial_dimensions == 3 else 'bilinear',
             activation=True,
             kernel_size=3, stride=1, padding=1
         ) for _ in range(int(math.log2(scale_factor)))])
@@ -597,6 +623,7 @@ class LREncoder(nn.Module):
         # Output Block
         self.output = nn.Sequential(
             ConvolutionalBlock(
+                num_spatial_dimensions,
                 num_features,
                 num_features,
                 num_groups=0,
@@ -605,6 +632,7 @@ class LREncoder(nn.Module):
                 kernel_size=3, stride=1, padding=1
             ),
             ConvolutionalBlock(
+                num_spatial_dimensions,
                 num_features,
                 out_channels,
                 num_groups=0,
@@ -616,7 +644,7 @@ class LREncoder(nn.Module):
 
     def initialize_weights(self, scale=1.0):
         for module in self.modules():
-            if isinstance(module, (nn.Conv3d, nn.Linear)):
+            if isinstance(module, (nn.Conv3d if self.num_spatial_dimensions == 3 else nn.Conv2d, nn.Linear)):
                 nn.init.kaiming_normal_(module.weight.data)
                 module.weight.data *= scale
                 if module.bias is not None:
@@ -642,12 +670,13 @@ class LREncoder(nn.Module):
 
 
 class GaussianDiffusion(nn.Module):
-    def __init__(self, num_timesteps=1000, num_sampling_timesteps=10, sampling_timestep_schedule='LINEAR', beta_schedule='GENERAL_SIGMOID', gamma=0.1, eta=0.1, scale_factor=1, lr_condition_encoding=True, **kwargs):
+    def __init__(self, num_timesteps=1000, num_sampling_timesteps=10, sampling_timestep_schedule='LINEAR', beta_schedule='GENERAL_SIGMOID', gamma=0.1, eta=0.1, num_spatial_dimensions=3, scale_factor=1, lr_condition_encoding=True, **kwargs):
         super().__init__()
 
         self.num_timesteps = num_timesteps
         self.gamma = gamma
         self.eta = eta
+        self.num_spatial_dimensions = num_spatial_dimensions
         self.scale_factor = scale_factor
         self.lr_condition_encoding = lr_condition_encoding
 
@@ -851,7 +880,7 @@ class GaussianDiffusion(nn.Module):
             lr_encoder.eval()
 
         # Upsample volume
-        x_lr_up = torch.stack([upsample(volume, self.scale_factor) for volume in x_lr])
+        x_lr_up = torch.stack([upsample(volume, self.scale_factor, self.num_spatial_dimensions) for volume in x_lr])
 
         # Sample last timestep
         x_t = x_lr_up + math.sqrt(math.pow(self.gamma, 2)) * torch.randn_like(x_lr_up)

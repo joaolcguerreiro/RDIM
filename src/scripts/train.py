@@ -31,14 +31,14 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
 
     # Compute training data statistics
-    _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_channels=config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"])
+    _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], num_channels=config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"])
 
     # Define datasets and data loaders
-    train_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], scale_factor=config["MODEL"]["SCALE_FACTOR"], lr_patch_size=config["TRAINING"]["LR_PATCH_SIZE"], _min=_min, _max=_max, mean=mean, std=std, repeat_sample_factor=config["TRAINING"]["REPEAT_SAMPLE_FACTOR"], augmentation=config["TRAINING"]["AUGMENTATION"])
+    train_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], scale_factor=config["MODEL"]["SCALE_FACTOR"], lr_patch_size=config["TRAINING"]["LR_PATCH_SIZE"], _min=_min, _max=_max, mean=mean, std=std, repeat_sample_factor=config["TRAINING"]["REPEAT_SAMPLE_FACTOR"], augmentation=config["TRAINING"]["AUGMENTATION"])
     train_dataloader = DataLoader(train_dataset, batch_size=config["TRAINING"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
-    val_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["VALIDATION"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["VALIDATION"]["HR_DIR_PATH"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False) if args.val else None
+    val_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["VALIDATION"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["VALIDATION"]["HR_DIR_PATH"], num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], _min=_min, _max=_max, mean=mean, std=std, augmentation=False) if args.val else None
     val_dataloader = DataLoader(val_dataset, batch_size=config["VALIDATION"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate) if args.val else None
-    pre_train_lr_encoder_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], scale_factor=config["MODEL"]["SCALE_FACTOR"], lr_patch_size=config["TRAINING"]["LR_PATCH_SIZE"], _min=_min, _max=_max, mean=mean, std=std, repeat_sample_factor=config["PRE_TRAINING_LR_ENCODER"]["REPEAT_SAMPLE_FACTOR"], augmentation=config["TRAINING"]["AUGMENTATION"]) if config["MODEL"]["LR_CONDITION_ENCODING"] else None
+    pre_train_lr_encoder_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], scale_factor=config["MODEL"]["SCALE_FACTOR"], lr_patch_size=config["TRAINING"]["LR_PATCH_SIZE"], _min=_min, _max=_max, mean=mean, std=std, repeat_sample_factor=config["PRE_TRAINING_LR_ENCODER"]["REPEAT_SAMPLE_FACTOR"], augmentation=config["TRAINING"]["AUGMENTATION"]) if config["MODEL"]["LR_CONDITION_ENCODING"] else None
     pre_train_lr_encoder_dataloader = DataLoader(pre_train_lr_encoder_dataset, batch_size=config["PRE_TRAINING_LR_ENCODER"]["BATCH_SIZE"], shuffle=True, num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate) if config["MODEL"]["LR_CONDITION_ENCODING"] else None
 
     # Define models
@@ -49,12 +49,14 @@ def main():
         beta_schedule=config["MODEL"]["GAUSSIAN_DIFFUSION"]["BETA_SCHEDULE"],
         gamma=config["MODEL"]["GAUSSIAN_DIFFUSION"]["GAMMA"],
         eta=config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
+        num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
         scale_factor=config["MODEL"]["SCALE_FACTOR"],
         lr_condition_encoding=config["MODEL"]["LR_CONDITION_ENCODING"],
         **{key.lower(): value for key, value in config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["GAUSSIAN_DIFFUSION"]["BETA_SCHEDULE"]].items()}
     ).to(device)
 
     noise_predictor = NoisePredictor(
+        num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
         in_channels=config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"],
         out_channels=config["MODEL"]["NOISE_PREDICTOR"]["OUT_CHANNELS"],
         num_cond_features=(config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["LR_CONDITION_ENCODING"] else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"]),
@@ -70,6 +72,7 @@ def main():
 
     if config["MODEL"]["LR_CONDITION_ENCODING"]:
         lr_encoder = LREncoder(
+            num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
             in_channels=config["MODEL"]["LR_ENCODER"]["IN_CHANNELS"],
             out_channels=config["MODEL"]["LR_ENCODER"]["OUT_CHANNELS"],
             num_features=config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"],
@@ -122,7 +125,7 @@ def main():
 
     # Define the loss function
     diffusion_criterion = nn.MSELoss().to(device)
-    perceptual_criterion = VGGLoss(_min=_min, _max=_max, mean=mean, std=std, patch_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True)).to(device) if config['PRE_TRAINING_LR_ENCODER']['PERCEPTUAL_LOSS_VGG'] else SSIMLoss(num_spatial_dims=len(train_dataset.get_low_resolution_shape(only_spatial_dims=True)), _min=_min, _max=_max, mean=mean, std=std).to(device)
+    perceptual_criterion = VGGLoss(num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], _min=_min, _max=_max, mean=mean, std=std, patch_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True)).to(device) if config['PRE_TRAINING_LR_ENCODER']['PERCEPTUAL_LOSS_VGG'] else SSIMLoss(num_spatial_dims=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], _min=_min, _max=_max, mean=mean, std=std).to(device)
     content_criterion = nn.L1Loss().to(device)
 
     # Define number of epochs and resume training if applicable
@@ -264,7 +267,7 @@ def main():
             volumes_0 = hr_volumes
 
             # Upsample volumes
-            lr_volumes_up = torch.stack([upsample(lr_volume, config["MODEL"]["SCALE_FACTOR"]) for lr_volume in lr_volumes])
+            lr_volumes_up = torch.stack([upsample(lr_volume, config["MODEL"]["SCALE_FACTOR"], config["MODEL"]["NUM_SPATIAL_DIMENSIONS"]) for lr_volume in lr_volumes])
 
             # Define residual
             delta = hr_volumes - lr_volumes_up
@@ -344,7 +347,7 @@ def main():
                     volumes_0 = hr_volumes
 
                     # Upsample volumes
-                    lr_volumes_up = torch.stack([upsample(lr_volume, config["MODEL"]["SCALE_FACTOR"]) for lr_volume in lr_volumes])
+                    lr_volumes_up = torch.stack([upsample(lr_volume, config["MODEL"]["SCALE_FACTOR"], config["MODEL"]["NUM_SPATIAL_DIMENSIONS"]) for lr_volume in lr_volumes])
 
                     # Define residual
                     delta = hr_volumes - lr_volumes_up
@@ -414,6 +417,8 @@ def main():
                 'gaussian_diffusion_beta_schedule_parameters': config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["GAUSSIAN_DIFFUSION"]["BETA_SCHEDULE"]],
                 'gaussian_diffusion_gamma': config["MODEL"]["GAUSSIAN_DIFFUSION"]["GAMMA"],
                 'gaussian_diffusion_eta': config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
+                'num_spatial_dimensions': config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
+                'gaussian_diffusion_num_spatial_dimensions': config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
                 'gaussian_diffusion_scale_factor': config["MODEL"]["SCALE_FACTOR"],
                 'gaussian_diffusion_lr_condition_encoding': config["MODEL"]["LR_CONDITION_ENCODING"],
                 'noise_predictor_in_channels': config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"],

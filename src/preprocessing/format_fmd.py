@@ -1,7 +1,7 @@
+import re
 import os
 import shutil
 import argparse
-import re
 from glob import glob
 from PIL import Image
 

@@ -10,7 +10,7 @@ from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, Normal
 
 
 class SuperResolutionDataset(Dataset):
-    def __init__(self, lr_data_dir=None, hr_data_dir=None, scale_factor=None, lr_patch_size=(-1, -1, -1), _min=None, _max=None, mean=None, std=None, repeat_sample_factor=1, augmentation=False):
+    def __init__(self, num_spatial_dimensions, lr_data_dir=None, hr_data_dir=None, scale_factor=None, lr_patch_size=None, _min=None, _max=None, mean=None, std=None, repeat_sample_factor=1, augmentation=False):
         super().__init__()
 
         # Data Directory Paths
@@ -29,7 +29,7 @@ class SuperResolutionDataset(Dataset):
 
         # Common Transforms
         self.initial_transforms = transforms.Compose([
-            EnsureChannelExists(),
+            EnsureChannelExists(num_spatial_dimensions=num_spatial_dimensions),
             ThresholdIntensity(threshold=_min, above=True, cval=_min, channel_wise=True) if _min is not None else transforms.Identity(),
             ThresholdIntensity(threshold=_max, above=False, cval=_max, channel_wise=True) if _max is not None else transforms.Identity(),
         ])
@@ -45,13 +45,16 @@ class SuperResolutionDataset(Dataset):
             transforms.RandFlip(prob=0.3),
             transforms.RandRotate(prob=0.3, range_x=math.radians(10), range_y=math.radians(10), range_z=math.radians(10), padding_mode="zeros"),
             transforms.RandGridDistortion(prob=0.1, num_cells=5, distort_limit=0.05, padding_mode="zeros"),
-            transforms.RandZoom(prob=0.3, min_zoom=0.95, max_zoom=1.05, mode="trilinear", padding_mode="constant", value=0),
+            transforms.RandZoom(prob=0.3, min_zoom=0.95, max_zoom=1.05, mode="trilinear" if num_spatial_dimensions == 3 else "bilinear", padding_mode="constant", value=0),
             transforms.RandAffine(prob=0.1, shear_range=0.05, padding_mode="zeros"),
             RandTranslate(prob=0.3, translate_range=0.05, padding_mode="zeros"),
             NormalizeIntensity(mean=-_min/(_max-_min), std=1/(_max-_min), channel_wise=True) if (_min is not None and _max is not None) else transforms.Identity(),
         ]) if augmentation else transforms.Compose([])
 
         # Patch-based computation transform
+        if lr_patch_size is None:
+            lr_patch_size = (-1,) * num_spatial_dimensions
+
         self.patch_transform = RandSpatialCrop(lr_patch_size=lr_patch_size)
 
     def __len__(self):

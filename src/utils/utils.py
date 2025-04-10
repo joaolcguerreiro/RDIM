@@ -1,3 +1,4 @@
+import re
 import os
 import sys
 import shutil
@@ -11,16 +12,21 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import monai.transforms as transforms
 from monai.utils import ensure_tuple, ensure_tuple_rep
+from PIL import Image
 from glob import glob
 from tqdm import tqdm
 from matplotlib.patches import Patch
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.logger import print_divisor
-from src.utils.transforms import PermuteDimensions, ReverseDimensions, NormalizeIntensity, ThresholdIntensity, EnsureExactChannels
+from src.utils.transforms import PermuteDimensions, ReverseDimensions, MoveDimension, NormalizeIntensity, ThresholdIntensity, EnsureExactChannels
 
 
 def load_volume(volume_dir):
     return nib.load(volume_dir)
+
+
+def load_image(image_dir):
+    return Image.open(image_dir)
 
 
 def save_volume(volume, affine, header, filename, save_dir):
@@ -28,15 +34,30 @@ def save_volume(volume, affine, header, filename, save_dir):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    nib.save(
-        nib.Nifti1Image(volume, affine=affine, header=header),
-        os.path.join(save_dir, filename),
-    )
+    file_extension = (re.search(r'(\.[^.]+(?:\.[^.]+)*)$', os.path.basename(filename)) or ['']).group(1).lower()
+
+    if file_extension in ['.nii', '.nii.gz']:
+        nib.save(
+            nib.Nifti1Image(volume, affine=affine, header=header),
+            os.path.join(save_dir, filename),
+        )
+    elif file_extension in ['.png', '.jpg', '.jpeg']:
+        Image.fromarray(volume.astype(np.uint8)).save(os.path.join(save_dir, filename))
+    else:
+        raise ValueError(f"Unsupported image format: {file_extension}")
 
 
 def get_volume_data(volume_dir):
-    # Reverse NIfTI volume dimensions (W, H, D, C) into PyTorch volume dimensions (C, D, H, W) = (C, Z, Y, X)
-    return reverse_dimensions(load_volume(volume_dir).get_fdata().astype(np.float32))
+    file_extension = (re.search(r'(\.[^.]+(?:\.[^.]+)*)$', os.path.basename(volume_dir)) or ['']).group(1).lower()
+
+    if file_extension in ['.nii', '.nii.gz']:
+        # Reverse NIfTI volume dimensions (W, H, D, C) into PyTorch volume dimensions (C, D, H, W) = (C, Z, Y, X)
+        return reverse_dimensions(load_volume(volume_dir).get_fdata().astype(np.float32))
+    elif file_extension in ['.png', '.jpg', '.jpeg']:
+        # Reverse PIL image dimensions (H, W, C) into PyTorch image dimensions (C, H, W) = (C, Y, X) if channel dimension exists
+        return move_dimension(image, -1, 0) if (image := np.array(load_image(volume_dir)).astype(np.float32)).ndim == 3 else image
+    else:
+        raise ValueError(f"Unsupported image format: {file_extension}")
 
 
 def get_volume_affine(volume_dir):
@@ -48,32 +69,29 @@ def get_volume_header(volume_dir):
 
 
 def get_volume_metadata(volume_dir):
+    file_extension = (re.search(r'(\.[^.]+(?:\.[^.]+)*)$', os.path.basename(volume_dir)) or ['']).group(1).lower()
+
     return {
         'filename': os.path.basename(volume_dir),
-        'affine': get_volume_affine(volume_dir),
-        'header': get_volume_header(volume_dir)
+        'affine': get_volume_affine(volume_dir) if file_extension in ['.nii', '.nii.gz'] else None,
+        'header': get_volume_header(volume_dir) if file_extension in ['.nii', '.nii.gz'] else None
     }
 
 
 def slice_volume(slice_index, plane, volume):
     """
     Get Volume Slice (2D).
-    Expected Volume Dimensions Order is (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C).
-
-    Note:
-        X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
-        Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
-        Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
+    Expected Volume Dimensions Order is (Z, Y, X, C).
     """
 
     if plane == 'axial':
-        # 3D volume (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) => Slice along Longitudinal Axis => 2D image (Anteroposterior Axis, Mediolateral Axis, Channel) = (Y, X, C)
+        # 3D volume (Z, Y, X, C) => Slice along Z-axis => 2D image (Y, X, C)
         return volume[slice_index, :, :, :]     # For display purposes keep the orientation
     elif plane == 'coronal':
-        # 3D volume (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) => Slice along Anteroposterior Axis => 2D image (Longitudinal Axis, Mediolateral Axis, Channel) = (Z, X, C)
+        # 3D volume (Z, Y, X, C) => Slice along Y-axis => 2D image (Z, X, C)
         return volume[:, slice_index, :, :]     # For display purposes keep the orientation
     elif plane == 'sagittal':
-        # 3D volume (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) => Slice along Mediolateral Axis => 2D image (Longitudinal Axis, Anteroposterior Axis, Channel) = (Z, Y, C)
+        # 3D volume (Z, Y, X, C) => Slice along X-axis => 2D image (Z, Y, C)
         return volume[:, :, slice_index, :]     # For display purposes keep the orientation
     else:
         raise NotImplementedError('Invalid plane')
@@ -100,39 +118,42 @@ def get_num_plane_slices(plane, volume):
         raise NotImplementedError('Invalid plane')
 
 
-def reorder_volume_dimensions(volume, channel_dim=0, longitudinal_axis_dim=1, anteroposterior_axis_dim=2, mediolateral_axis_dim=3):
+def reorder_volume_dimensions(volume, num_spatial_dimensions, axes=None):
     """
-    Rearrange Volume Dimensions Order from an Arbitrary Order of Dimensions into (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C).
+    Rearrange Volume Dimensions Order from an Arbitrary Order of Dimensions.
     Expected Volume Dimensions Order is Arbitrary.
+    Default behavior assumes channel dimension is the first dimension and moves it to last position.
 
     Note:
-        X-axis: Extends in (Left - Right) direction, and it is perpendicular to Sagittal plane.
-        Y-axis: Extends in (Anterior - Posterior) direction, and it is perpendicular to Coronal plane.
-        Z-axis: Extends in (Inferior - Superior) direction, and it is perpendicular to Axial plane.
+        Z-axis is optional.
     """
 
-    # Reorder arbitrary volume dimensions into (Longitudinal Axis, Anteroposterior Axis, Mediolateral Axis, Channel) = (Z, Y, X, C)
-    return permute_dimensions(volume, (longitudinal_axis_dim, anteroposterior_axis_dim, mediolateral_axis_dim, channel_dim))
+    if axes is None:
+        # Move channel dimension to last position assuming it was the first dimension
+        axes = tuple(range(1, num_spatial_dimensions + 1)) + (0,)
+
+    # Reorder arbitrary volume dimensions
+    return permute_dimensions(volume, axes)
 
 
-def format_volume(volume, _min=None, _max=None):
+def format_volume(volume, num_spatial_dimensions, _min=None, _max=None):
     """
     Adjust Volume for Visualization.
     Expected Volume Dimensions Order is Flexible, but Channel Dimension is required to be First (Channel, ...) = (C, ...).
     """
 
     # Scale volume to the valid range for imshow ([0, 1] for floats or [0, 255] for integers)
-    _min = ensure_tuple(_min or volume.min())
-    _max = ensure_tuple(_max or volume.max())
+    _min = ensure_tuple(_min if _min is not None else volume.min())
+    _max = ensure_tuple(_max if _max is not None else volume.max())
 
     volume = min_max_scaling(volume, _min=np.minimum(_min, ensure_tuple_rep(volume.min(), len(_min))), _max=np.maximum(_max, ensure_tuple_rep(volume.max(), len(_max)))) * (255 if not torch.is_floating_point(volume) else 1.0)
 
     # Ensure valid number of channels (Grayscale: 1, RGB: 3, RGBA: 4)
     if volume.shape[0] not in (1, 3, 4):
-        volume = force_valid_channels(volume, num_channel=1)
+        volume = force_valid_channels(volume, num_channel=1, num_spatial_dimensions=num_spatial_dimensions)
 
     # Reorder volume dimensions for visualization
-    volume = reorder_volume_dimensions(volume)
+    volume = reorder_volume_dimensions(volume, num_spatial_dimensions=num_spatial_dimensions)
 
     return volume
 
@@ -165,25 +186,29 @@ def draw_image_3d(volumes, n_rows=1, n_cols=1, labels=None, show=True, ax=None, 
     pass
 
 
-def display_volumes(volumes, plane, dimension, n_rows=None, n_cols=None, volume_filenames=None, slice_index=-1, labels=None, show=True, ax=None, fig_size=(3, 3), theme='light'):
-    if dimension == '2D':
-        if int(slice_index) >= 0:
-            slice_indexes = [slice_index]
+def display_volumes(volumes, num_spatial_dimensions, plane, visualization_dimension, n_rows=None, n_cols=None, volume_filenames=None, slice_index=-1, labels=None, show=True, ax=None, fig_size=(3, 3), theme='light'):
+    if num_spatial_dimensions == 3:
+        if visualization_dimension == '2D':
+            if int(slice_index) >= 0:
+                slice_indexes = [slice_index]
+            else:
+                slice_indexes = range(get_num_plane_slices(plane, volumes[0]))
+
+            for slice_index in slice_indexes:
+                print(f'Volumes at Slice {slice_index}:\n' + '\n'.join(f'- {volume_filename}' for volume_filename in volume_filenames)) if show else None
+                imgs = [slice_volume(slice_index, plane, volume) for volume in volumes]
+                draw_image_2d(imgs, n_rows, n_cols, labels=labels, show=show, ax=ax, fig_size=fig_size, theme=theme)
+        elif visualization_dimension == '3D':
+            print('Volumes:\n' + '\n'.join(f'- {volume_filename}' for volume_filename in volume_filenames)) if show else None
+            draw_image_3d(volumes, n_rows, n_cols, labels=labels, show=show, ax=ax, fig_size=fig_size, theme=theme)
         else:
-            slice_indexes = range(get_num_plane_slices(plane, volumes[0]))
-
-        for slice_index in slice_indexes:
-            print(f'Volumes at Slice {slice_index}:\n' + '\n'.join(f'- {volume_filename}' for volume_filename in volume_filenames)) if show else None
-            imgs = [slice_volume(slice_index, plane, volume) for volume in volumes]
-            draw_image_2d(imgs, n_rows, n_cols, labels=labels, show=show, ax=ax, fig_size=fig_size, theme=theme)
-    elif dimension == '3D':
-        print('Volumes:\n' + '\n'.join(f'- {volume_filename}' for volume_filename in volume_filenames)) if show else None
-        draw_image_3d(volumes, n_rows, n_cols, labels=labels, show=show, ax=ax, fig_size=fig_size, theme=theme)
+            raise NotImplementedError('Invalid dimension')
     else:
-        raise NotImplementedError('Invalid dimension')
+        print('\n'.join(f'- {volume_filename}' for volume_filename in volume_filenames)) if show else None
+        draw_image_2d(volumes, n_rows, n_cols, labels=labels, show=show, ax=ax, fig_size=fig_size, theme=theme)
 
 
-def compute_data_statistics(data_dir, num_channels):
+def compute_data_statistics(data_dir, num_spatial_dimensions, num_channels):
     print_divisor()
 
     # Fetch all data file paths
@@ -201,8 +226,8 @@ def compute_data_statistics(data_dir, num_channels):
         # Load file
         volume = get_volume_data(file)
 
-        # Ensure multichannel data
-        if volume.ndim == 3:
+        # Ensure channel dimension
+        if volume.ndim == num_spatial_dimensions:
             volume = np.expand_dims(volume, axis=0)
 
         for channel in range(num_channels):
@@ -234,12 +259,13 @@ def compute_super_resolution_volume_metadata(lr_metadata, scale_factor=None):
 
     if scale_factor is not None and scale_factor > 0:
         # Create copies of the header and affine matrix
-        super_resolution_header = lr_metadata['header'].copy()
-        super_resolution_affine = lr_metadata['affine'].copy()
+        super_resolution_header = lr_metadata['header'].copy() if lr_metadata['header'] is not None else super_resolution_header
+        super_resolution_affine = lr_metadata['affine'].copy() if lr_metadata['affine'] is not None else super_resolution_affine
 
         # Update the header to account for the new voxel size
-        super_resolution_header.set_data_shape(list(np.array(super_resolution_header.get_data_shape()) * scale_factor)[:3] + list(super_resolution_header.get_data_shape())[3:])
-        super_resolution_header.set_zooms(list(np.array(super_resolution_header.get_zooms()) / scale_factor)[:3] + list(super_resolution_header.get_zooms())[3:])
+        if super_resolution_header is not None:
+            super_resolution_header.set_data_shape(list(np.array(super_resolution_header.get_data_shape()) * scale_factor)[:3] + list(super_resolution_header.get_data_shape())[3:])
+            super_resolution_header.set_zooms(list(np.array(super_resolution_header.get_zooms()) / scale_factor)[:3] + list(super_resolution_header.get_zooms())[3:])
 
     return {
         'filename': lr_metadata['filename'],
@@ -265,12 +291,16 @@ def reverse_dimensions(volume):
     return ReverseDimensions()(volume)
 
 
-def force_valid_channels(volume, num_channel):
-    return EnsureExactChannels(num_channels=num_channel)(volume)
+def move_dimension(volume, source, destination):
+    return MoveDimension(source=source, destination=destination)(volume)
 
 
-def upsample(volume, scale_factor):
-    return transforms.Zoom(zoom=scale_factor, mode="trilinear", keep_size=False)(volume)
+def force_valid_channels(volume, num_channel, num_spatial_dimensions):
+    return EnsureExactChannels(num_channels=num_channel, num_spatial_dimensions=num_spatial_dimensions)(volume)
+
+
+def upsample(volume, scale_factor, num_spatial_dimensions):
+    return transforms.Zoom(zoom=scale_factor, mode="trilinear" if num_spatial_dimensions == 3 else "bilinear", keep_size=False)(volume)
 
 
 def min_max_scaling(volume, _min=None, _max=None):
@@ -306,48 +336,56 @@ def compute_scale_factor(lr_volume, hr_volume):
     return scale_factor
 
 
-def display_batch(lr_volumes=None, sr_volumes=None, gt_volumes=None, _min=None, _max=None, plane='axial', dimension='2D', volume_filenames=None, slice_index=-1, labels=True, fig_size=(3, 3), theme='light'):
+def display_batch(lr_volumes=None, gen_volumes=None, gt_volumes=None, _min=None, _max=None, plane='axial', visualization_dimension='2D', volume_filenames=None, slice_index=-1, labels=True, fig_size=(3, 3), theme='light'):
     lr_volumes = list() if lr_volumes is None else list(lr_volumes.to('cpu'))
-    sr_volumes = list() if sr_volumes is None else list(sr_volumes.to('cpu'))
+    gen_volumes = list() if gen_volumes is None else list(gen_volumes.to('cpu'))
     gt_volumes = list() if gt_volumes is None else list(gt_volumes.to('cpu'))
 
-    if not all(len(_list) == 0 or len(_list) == max(len(lr_volumes), len(gt_volumes), len(sr_volumes)) for _list in [lr_volumes, gt_volumes, sr_volumes]):
+    if not all(len(_list) == 0 or len(_list) == max(len(lr_volumes), len(gt_volumes), len(gen_volumes)) for _list in [lr_volumes, gt_volumes, gen_volumes]):
         raise ValueError("The numbers of low-resolution, super-resolution and ground truth volumes do not match.")
 
-    if gt_volumes and sr_volumes and not (gt_volumes[0].shape == sr_volumes[0].shape):
+    if gt_volumes and gen_volumes and not (gt_volumes[0].shape == gen_volumes[0].shape):
         raise ValueError("The shapes of the super-resolution and ground truth volumes do not match.")
 
+    # Determine the number of spatial dimensions
+    num_spatial_dimensions = (lr_volumes or gen_volumes or gt_volumes)[0].dim() - 1
+
+    if num_spatial_dimensions < 1:
+        raise ValueError(f"Volume must have at least one spatial dimension. Got {num_spatial_dimensions} spatial dimensions.")
+
     # Compute scale factor
-    hr_volumes = gt_volumes if gt_volumes else sr_volumes
-    scale_factor = compute_scale_factor(lr_volumes[0], hr_volumes[0]) if (lr_volumes and hr_volumes) else (1, 1, 1)
+    hr_volumes = gt_volumes if gt_volumes else gen_volumes
+    scale_factor = compute_scale_factor(lr_volumes[0], hr_volumes[0]) if (lr_volumes and hr_volumes) else (1,) * num_spatial_dimensions
 
     # Adjust volumes for visualization
-    lr_volumes = list(format_volume(upsample(lr_volume, scale_factor), _min=_min, _max=_max) for lr_volume in lr_volumes)
-    sr_volumes = list(format_volume(sr_volume, _min=_min, _max=_max) for sr_volume in sr_volumes)
-    gt_volumes = list(format_volume(gt_volume, _min=_min, _max=_max) for gt_volume in gt_volumes)
+    lr_volumes = list(format_volume(upsample(lr_volume, scale_factor, num_spatial_dimensions), num_spatial_dimensions=num_spatial_dimensions, _min=_min, _max=_max) for lr_volume in lr_volumes)
+    gen_volumes = list(format_volume(sr_volume, num_spatial_dimensions=num_spatial_dimensions, _min=_min, _max=_max) for sr_volume in gen_volumes)
+    gt_volumes = list(format_volume(gt_volume, num_spatial_dimensions=num_spatial_dimensions, _min=_min, _max=_max) for gt_volume in gt_volumes)
 
     # Interleave volumes for visualization
-    volumes = [volume for interleaved_volumes in zip(*list(filter(None, [lr_volumes, sr_volumes, gt_volumes]))) for volume in interleaved_volumes]
+    volumes = [volume for interleaved_volumes in zip(*list(filter(None, [lr_volumes, gen_volumes, gt_volumes]))) for volume in interleaved_volumes]
 
     # Number of series (volume types) and samples per series (batch size)
-    num_volume_types = sum(1 for _array in [lr_volumes, sr_volumes, gt_volumes] if _array)
-    batch_size = len(lr_volumes or sr_volumes or gt_volumes)
-    _labels = list(label for label, _array in zip(['Low-Quality', 'Reconstruction', 'Ground Truth'], [lr_volumes, sr_volumes, gt_volumes]) if _array) * batch_size if labels else None
+    num_volume_types = sum(1 for _array in [lr_volumes, gen_volumes, gt_volumes] if _array)
+    batch_size = len(lr_volumes or gen_volumes or gt_volumes)
+    _labels = list(label for label, _array in zip(['Low-Quality', 'Reconstruction', 'Ground Truth'], [lr_volumes, gen_volumes, gt_volumes]) if _array) * batch_size if labels else None
 
     print_divisor(width=50)
 
-    display_volumes(volumes, plane=plane, dimension=dimension, n_rows=batch_size, n_cols=num_volume_types, volume_filenames=volume_filenames, slice_index=slice_index, labels=_labels, fig_size=fig_size, theme=theme)
+    display_volumes(volumes, num_spatial_dimensions=num_spatial_dimensions, plane=plane, visualization_dimension=visualization_dimension, n_rows=batch_size, n_cols=num_volume_types, volume_filenames=volume_filenames, slice_index=slice_index, labels=_labels, fig_size=fig_size, theme=theme)
 
     print_divisor(width=50)
 
 
 def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):
     for volume, filename, affine, header in zip(volumes, volumes_metadata['filename'], volumes_metadata['affine'], volumes_metadata['header']):
+        file_extension = (re.search(r'(\.[^.]+(?:\.[^.]+)*)$', os.path.basename(filename)) or ['']).group(1).lower()
+
         # Denormalize volume
         volume = denormalize(volume, mean=mean, std=std)
 
-        # Reverse volume dimension order
-        volume = reverse_dimensions(volume)
+        # Correct volume dimension order
+        volume = reverse_dimensions(volume) if file_extension in ['.nii', '.nii.gz'] else move_dimension(volume, 0, -1)
 
         save_volume(volume.to('cpu').numpy(), affine, header, filename, save_dir_path)
 
@@ -375,9 +413,15 @@ def compute_max_frequency(pixel_values, bins, _min=None, _max=None):
     return torch.histc(torch.tensor(pixel_values), bins=bins, min=float(torch.tensor(_min if _min is not None else 0).min()), max=float(torch.tensor(_max if _max is not None else 0).max())).max().item() if (torch.tensor(pixel_values).numel() > 0 and isinstance(bins, int)) else None
 
 
-def save_sample(save_filename, lr_volume=None, gen_volume=None, gt_volume=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=True, bound_range=True):
+def save_sample(save_filename, lr_volume=None, gen_volume=None, gt_volume=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', visualization_dimension='2D', fig_size=(3, 3), theme='light', with_histogram=True, bound_range=True):
     if all(volume is None for volume in [lr_volume, gen_volume, gt_volume]):
         raise ValueError("It is required at least one volume type.")
+
+    # Determine the number of spatial dimensions
+    num_spatial_dimensions = (lr_volume if lr_volume is not None else (gen_volume if gen_volume is not None else gt_volume)).dim() - 1
+
+    if num_spatial_dimensions < 1:
+        raise ValueError(f"Volume must have at least one spatial dimension. Got {num_spatial_dimensions} spatial dimensions.")
 
     # Denormalize volumes
     lr_volume = denormalize(lr_volume, mean=mean, std=std) if lr_volume is not None else lr_volume
@@ -386,15 +430,15 @@ def save_sample(save_filename, lr_volume=None, gen_volume=None, gt_volume=None, 
 
     # Compute scale factor
     hr_volume = gt_volume if gt_volume is not None else gen_volume
-    scale_factor = compute_scale_factor(lr_volume, hr_volume) if (lr_volume is not None and hr_volume is not None) else (1, 1, 1)
+    scale_factor = compute_scale_factor(lr_volume, hr_volume) if (lr_volume is not None and hr_volume is not None) else (1,) * num_spatial_dimensions
 
     # Adjust volumes for visualization
-    lr_volume = format_volume(raw_lr_volume := upsample(lr_volume, scale_factor).to('cpu'), _min=_min, _max=_max) if lr_volume is not None else (raw_lr_volume := lr_volume)
-    gen_volume = format_volume(raw_gen_volume := gen_volume.to('cpu'), _min=_min, _max=_max) if gen_volume is not None else (raw_gen_volume := gen_volume)
-    gt_volume = format_volume(raw_gt_volume := gt_volume.to('cpu'), _min=_min, _max=_max) if gt_volume is not None else (raw_gt_volume := gt_volume)
+    lr_volume = format_volume(raw_lr_volume := upsample(lr_volume, scale_factor, num_spatial_dimensions).to('cpu'), num_spatial_dimensions=num_spatial_dimensions, _min=_min, _max=_max) if lr_volume is not None else (raw_lr_volume := lr_volume)
+    gen_volume = format_volume(raw_gen_volume := gen_volume.to('cpu'), num_spatial_dimensions=num_spatial_dimensions, _min=_min, _max=_max) if gen_volume is not None else (raw_gen_volume := gen_volume)
+    gt_volume = format_volume(raw_gt_volume := gt_volume.to('cpu'), num_spatial_dimensions=num_spatial_dimensions, _min=_min, _max=_max) if gt_volume is not None else (raw_gt_volume := gt_volume)
 
     # Define slice index
-    slice_index = (get_num_plane_slices(plane=plane, volume=(gt_volume if gt_volume is not None else (gen_volume if gen_volume is not None else lr_volume))) // 2) if dimension == '2D' else None
+    slice_index = (get_num_plane_slices(plane=plane, volume=(gt_volume if gt_volume is not None else (gen_volume if gen_volume is not None else lr_volume))) // 2) if visualization_dimension == '2D' and num_spatial_dimensions == 3 else None
 
     # Create a new figure
     n_columns = sum(1 for volume in [lr_volume, gen_volume, gt_volume] if volume is not None)
@@ -420,12 +464,12 @@ def save_sample(save_filename, lr_volume=None, gen_volume=None, gt_volume=None, 
 
     # Draw slices
     volumes, labels = zip(*filter(lambda slice_label_pair: slice_label_pair[0] is not None, zip([lr_volume, gen_volume, gt_volume], ['Low-Quality', 'Reconstruction', 'Ground Truth'])))
-    display_volumes(volumes, plane=plane, dimension=dimension, slice_index=slice_index, labels=labels, show=False, ax=ax_img, theme=theme)
+    display_volumes(volumes, num_spatial_dimensions=num_spatial_dimensions, plane=plane, visualization_dimension=visualization_dimension, slice_index=slice_index, labels=labels, show=False, ax=ax_img, theme=theme)
 
     if with_histogram:
-        lr_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_lr_volume)) if dimension == '2D' else raw_lr_volume).flatten().tolist() if raw_lr_volume is not None else list()
-        gen_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_gen_volume)) if dimension == '2D' else raw_gen_volume).flatten().tolist() if raw_gen_volume is not None else list()
-        gt_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_gt_volume)) if dimension == '2D' else raw_gt_volume).flatten().tolist() if raw_gt_volume is not None else list()
+        lr_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_lr_volume, num_spatial_dimensions)) if visualization_dimension == '2D' and num_spatial_dimensions == 3 else raw_lr_volume).flatten().tolist() if raw_lr_volume is not None else list()
+        gen_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_gen_volume, num_spatial_dimensions)) if visualization_dimension == '2D' and num_spatial_dimensions == 3 else raw_gen_volume).flatten().tolist() if raw_gen_volume is not None else list()
+        gt_pixel_values = (slice_volume(slice_index=slice_index, plane=plane, volume=reorder_volume_dimensions(raw_gt_volume, num_spatial_dimensions)) if visualization_dimension == '2D' and num_spatial_dimensions == 3 else raw_gt_volume).flatten().tolist() if raw_gt_volume is not None else list()
 
         # Create grid for histogram
         grid_hist = plt.GridSpec(n_hist_rows, n_columns, top=grid_img_bottom * 0.875)
@@ -456,7 +500,7 @@ def save_sample(save_filename, lr_volume=None, gen_volume=None, gt_volume=None, 
     plt.close()
 
 
-def save_samples(save_dir_path, volumes_metadata, lr_volumes=None, gen_volumes=None, gt_volumes=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', dimension='2D', fig_size=(3, 3), theme='light', with_histogram=False, bound_range=False):
+def save_samples(save_dir_path, volumes_metadata, lr_volumes=None, gen_volumes=None, gt_volumes=None, bins='auto', _min=None, _max=None, mean=None, std=None, plane='axial', visualization_dimension='2D', fig_size=(3, 3), theme='light', with_histogram=False, bound_range=False):
     save_filenames = [os.path.join(save_dir_path, f'{filename.split(".")[0]}') for filename in volumes_metadata['filename']]
 
     # Parse samples
@@ -475,7 +519,7 @@ def save_samples(save_dir_path, volumes_metadata, lr_volumes=None, gen_volumes=N
             _min=_min, _max=_max, mean=mean, std=std,
             save_filename=save_filename,
             plane=plane,
-            dimension=dimension,
+            visualization_dimension=visualization_dimension,
             fig_size=fig_size,
             theme=theme,
             with_histogram=with_histogram,

@@ -11,7 +11,7 @@
 
 1) Run script:
    ```
-   python visualization.py --mode=<mode> [--lr-dir=<lr_dir>] [--sr-dir=<sr_dir>] [--gt-dir=<gt_dir>] [--augmentation=<bool>] [--plane=<plane>] [--dim=<dimension>] [--volume=<volume_index>] [--slice=<slice_index>] [--batch-size=<batch_size>] [--num-workers=<num_workers>] [--labels=<bool>]
+   python visualization.py --mode=<mode> [--lr-dir=<lr_dir>] [--gen-dir=<gen_dir>] [--gt-dir=<gt_dir>] [--augmentation=<bool>] [--num-spatial-dims=<num_spatial_dimensions>] [--plane=<plane>] [--visualization-dim=<visualization_dimension>] [--volume=<volume_index>] [--slice=<slice_index>] [--batch-size=<batch_size>] [--num-workers=<num_workers>] [--labels=<bool>]
    ```
 
 <hr style="border:1px solid gray">
@@ -26,14 +26,14 @@ Detailed definition and description of all available visualization script argume
 
 `--mode`
 
-| Option          | Description                                               |
-|-----------------|-----------------------------------------------------------|
-| `'lr_scans'`    | Display low-resolution scan counterpart                   |
-| `'sr_scans'`    | Display super-resolution scan counterpart                 |
-| `'gt_scans'`    | Display ground truth scan counterpart                     |
-| `'lr_sr_scans'` | Display low-resolution and super-resolution scans jointly |
-| `'lr_gt_scans'` | Display low-resolution and ground truth scans jointly     |
-| `'sr_gt_scans'` | Display super-resolution and ground truth scans jointly   |
+| Option           | Description                                           |
+|------------------|-------------------------------------------------------|
+| `'lr_scans'`     | Display low-resolution scan counterpart               |
+| `'gen_scans'`    | Display generated scan counterpart                    |
+| `'gt_scans'`     | Display ground truth scan counterpart                 |
+| `'lr_gen_scans'` | Display low-resolution and generated scans jointly    |
+| `'lr_gt_scans'`  | Display low-resolution and ground truth scans jointly |
+| `'gen_gt_scans'` | Display generated and ground truth scans jointly      |
 
 ---
 
@@ -45,19 +45,19 @@ Detailed definition and description of all available visualization script argume
 |--------|----------------------------------------|
 | `str`  | Path to low-resolution data directory  |
 
-Required when mode is `lr_scans`, `lr_sr_scans` or `lr_gt_scans`
+Required when mode is `lr_scans`, `lr_gen_scans` or `lr_gt_scans`
 
 ---
 
 - Super-Resolution Data Directory <span style="color: orange">[CONDITIONAL]</span>
 
-`--sr-dir`
+`--gen-dir`
 
-| Option | Description                             |
-|--------|-----------------------------------------|
-| `str`  | Path to super-resolution data directory |
+| Option | Description                      |
+|--------|----------------------------------|
+| `str`  | Path to generated data directory |
 
-Required when mode is `sr_scans`, `lr_sr_scans` or `sr_gt_scans`
+Required when mode is `gen_scans`, `lr_gen_scans` or `gen_gt_scans`
 
 ---
 
@@ -69,7 +69,7 @@ Required when mode is `sr_scans`, `lr_sr_scans` or `sr_gt_scans`
 |--------|-------------------------------------|
 | `str`  | Path to ground truth data directory |
 
-Required when mode is `gt_scans`, `lr_gt_scans` or `sr_gt_scans`
+Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 ---
 
@@ -93,6 +93,16 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `sr_gt_scans`
 
 ---
 
+- Number of Spatial Dimensions <span style="color: orange">[OPTIONAL]</span>
+
+`--num-spatial-dims`
+
+| Option | Description                              | Default |
+|--------|------------------------------------------|:-------:|
+| `int`  | Number of spatial dimensions in the data |    3    |
+
+---
+
 - View Plane <span style="color: orange">[OPTIONAL]</span>
 
 `--plane`
@@ -107,7 +117,7 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `sr_gt_scans`
 
 - Visualization Spacial Dimension <span style="color: orange">[OPTIONAL]</span>
 
-`--dim`
+`--visualization-dim`
 
 | Option   | Description           | Default |
 |----------|-----------------------|:-------:|

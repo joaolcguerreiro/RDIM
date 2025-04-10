@@ -32,7 +32,7 @@ def main():
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
     # Define dataset and data loader
-    inference_dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, scale_factor=checkpoint['gaussian_diffusion_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
+    inference_dataset = SuperResolutionDataset(lr_data_dir=args.lr_dir, num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'], scale_factor=checkpoint['gaussian_diffusion_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     inference_dataloader = DataLoader(inference_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
     # Define models
@@ -43,12 +43,14 @@ def main():
         beta_schedule=checkpoint['gaussian_diffusion_beta_schedule'],
         gamma=checkpoint['gaussian_diffusion_gamma'],
         eta=(args.eta or checkpoint['gaussian_diffusion_eta']),
+        num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
         scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
         lr_condition_encoding=checkpoint['gaussian_diffusion_lr_condition_encoding'],
         **{key.lower(): value for key, value in checkpoint['gaussian_diffusion_beta_schedule_parameters'].items()}
     ).to(device)
 
     noise_predictor = NoisePredictor(
+        num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
         in_channels=checkpoint['noise_predictor_in_channels'],
         out_channels=checkpoint['noise_predictor_out_channels'],
         num_cond_features=(checkpoint['lr_encoder_num_features'] if checkpoint['gaussian_diffusion_lr_condition_encoding'] else checkpoint['noise_predictor_in_channels']),
@@ -64,6 +66,7 @@ def main():
 
     if checkpoint['gaussian_diffusion_lr_condition_encoding']:
         lr_encoder = LREncoder(
+            num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
             in_channels=checkpoint['lr_encoder_in_channels'],
             out_channels=checkpoint['lr_encoder_out_channels'],
             num_features=checkpoint['lr_encoder_num_features'],

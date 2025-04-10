@@ -16,11 +16,11 @@ def main():
         # Common transforms
         initial_transforms = transforms.Compose([
             ReverseDimensions(),
-            RemoveChannelDimension(),
+            RemoveChannelDimension(num_spatial_dimensions=3),
         ])
 
         final_transforms = transforms.Compose([
-            EnsureChannelExists(),
+            EnsureChannelExists(num_spatial_dimensions=3),
             ReverseDimensions(),
             transforms.ToNumpy()
         ])

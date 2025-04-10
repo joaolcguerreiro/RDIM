@@ -16,24 +16,26 @@ from skimage.transform import radon, iradon
 
 class EnsureChannelExists(Transform):
     """
-    Adds a channel dimension to a 3D input tensor if it does not exist.
+    Adds a channel dimension to input tensor if it does not exist.
 
     Args:
+        num_spatial_dimensions: Number of spatial dimensions in the input tensor.
         channel_dim: Channel dimension index.
-        strict_check: Whether to raise an error when the input is not a 3D or 4D tensor.
+        strict_check: Whether to raise an error when the number of dimensions in the input is not expected.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, channel_dim: int = 0, strict_check: bool = True):
+    def __init__(self, num_spatial_dimensions: int, channel_dim: int = 0, strict_check: bool = True):
+        self.num_spatial_dimensions = num_spatial_dimensions
         self.channel_dim = channel_dim
         self.strict_check = strict_check
 
     def __call__(self, volume: torch.Tensor) -> torch.Tensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
-        if volume.dim() not in [3, 4]:
-            msg = "Input tensor is not 3D or 4D. EnsureChannelExists may not be applied correctly."
+        if volume.dim() not in [self.num_spatial_dimensions, self.num_spatial_dimensions + 1]:
+            msg = f"Expected input tensor with {self.num_spatial_dimensions} or {self.num_spatial_dimensions + 1} dimension considering the number of spatial dimensions is {self.num_spatial_dimensions}. Got input with {volume.dim()} dimensions."
 
             if self.strict_check:
                 raise ValueError(msg)
@@ -42,7 +44,7 @@ class EnsureChannelExists(Transform):
                 return volume
 
         # Add the channel dimension if it does not exist
-        if volume.dim() == 3:
+        if volume.dim() == self.num_spatial_dimensions:
             volume = volume.unsqueeze(dim=self.channel_dim)
 
         return volume
@@ -50,24 +52,26 @@ class EnsureChannelExists(Transform):
 
 class RemoveChannelDimension(Transform):
     """
-    Remove singleton channel dimension to a 4D input tensor if it does exist.
+    Remove singleton channel dimension of input tensor if it does exist.
 
     Args:
+        num_spatial_dimensions: Number of spatial dimensions in the input tensor.
         channel_dim: Channel dimension index.
-        strict_check: Whether to raise an error when the input is not a 3D or 4D tensor.
+        strict_check: Whether to raise an error when the number of dimensions in the input is not expected.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, channel_dim: int = 0, strict_check: bool = True):
+    def __init__(self, num_spatial_dimensions: int, channel_dim: int = 0, strict_check: bool = True):
+        self.num_spatial_dimensions = num_spatial_dimensions
         self.channel_dim = channel_dim
         self.strict_check = strict_check
 
     def __call__(self, volume: torch.Tensor) -> torch.Tensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
-        if volume.dim() not in [3, 4]:
-            msg = "Input tensor is not 3D or 4D. EnsureChannelExists may not be applied correctly."
+        if volume.dim() not in [self.num_spatial_dimensions, self.num_spatial_dimensions + 1]:
+            msg = f"Expected input tensor with {self.num_spatial_dimensions} or {self.num_spatial_dimensions + 1} dimension considering the number of spatial dimensions is {self.num_spatial_dimensions}. Got input with {volume.dim()} dimensions."
 
             if self.strict_check:
                 raise ValueError(msg)
@@ -76,7 +80,7 @@ class RemoveChannelDimension(Transform):
                 return volume
 
         # Remove the channel dimension if it does exist
-        if volume.dim() == 4:
+        if volume.dim() == self.num_spatial_dimensions + 1:
             volume = volume.squeeze(dim=self.channel_dim)
 
         return volume
@@ -84,32 +88,35 @@ class RemoveChannelDimension(Transform):
 
 class EnsureExactChannels(Transform):
     """
-    Ensures a 4D input tensor has exactly `num_channels` channels. If it does not, it either repeats or reshapes the channels.
+    Ensures input tensor has exactly `num_channels` channels. If it does not, it either repeats or reshapes the channels.
 
     Args:
         num_channels: The exact number of channels the input tensor should have after applying the transform.
-        strict_check: Whether to raise an error when the input is not a 4D tensor or flexibility is not intended while the input size is invalid for an integral reshape.
+        num_spatial_dimensions: Number of spatial dimensions in the input tensor.
+        strict_check: Whether to raise an error when flexibility is not intended while the input size is invalid for an integral reshape.
         flexible_reshape: Whether to allow flexible reshaping when the number of channels is not a multiple or divisor of the current number of channels in the volume.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, num_channels: int, flexible_reshape: bool = True, strict_check: bool = True):
+    def __init__(self, num_channels: int, num_spatial_dimensions: int, strict_check: bool = True, flexible_reshape: bool = True):
         self.num_channels = num_channels
+        self.num_spatial_dimensions = num_spatial_dimensions
         self.strict_check = strict_check
         self.flexible_reshape = flexible_reshape
 
     def __call__(self, volume: torch.Tensor) -> torch.Tensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
-        if volume.dim() != 4:
-            msg = "Input tensor is not 4D. EnsureExactChannels may not be applied correctly."
+        # Check the number of dimensions
+        if volume.dim() != self.num_spatial_dimensions + 1:
+            raise ValueError(f"Expected tensor with {self.num_spatial_dimensions + 1} dimensions. Got {volume.dim()} dimensions.")
 
-            if self.strict_check:
-                raise ValueError(msg)
-            else:
-                warnings.warn(msg)
-                return volume
+        # Determine the number of spatial dimensions
+        num_spatial_dimensions = volume.dim() - 1
+
+        if num_spatial_dimensions < 1:
+            raise ValueError(f"Volume must have at least one spatial dimension. Got shape {volume.shape}.")
 
         # Get number of channels
         num_volume_channels = volume.shape[0]
@@ -125,8 +132,8 @@ class EnsureExactChannels(Transform):
                     return volume
 
             repeats = (self.num_channels + num_volume_channels - 1) // num_volume_channels
-            volume = volume.repeat(repeats, *([1] * 3))
-            volume = volume[:self.num_channels, :, :, :]
+            volume = volume.repeat(repeats, *([1] * num_spatial_dimensions))
+            volume = volume[:self.num_channels, ...]
 
         elif num_volume_channels > self.num_channels:
             if num_volume_channels % self.num_channels != 0 and not self.flexible_reshape:
@@ -143,7 +150,7 @@ class EnsureExactChannels(Transform):
 
             # Repeat excess channels and trim them if applicable
             excess_volume = volume[((num_volume_channels // self.num_channels) * self.num_channels):, ...]
-            excess_volume = excess_volume.repeat(math.ceil(kernel_volume.shape[0] / excess_volume.shape[0]), *([1] * 3))[:kernel_volume.shape[0]] if excess_volume.numel() > 0 else None
+            excess_volume = excess_volume.repeat(math.ceil(kernel_volume.shape[0] / excess_volume.shape[0]), *([1] * num_spatial_dimensions))[:kernel_volume.shape[0]] if excess_volume.numel() > 0 else None
 
             # Stack kernel and excess horizontally
             volume = torch.cat([kernel_volume, excess_volume], dim=-1) if excess_volume is not None else kernel_volume
@@ -157,7 +164,7 @@ class PermuteDimensions(Transform):
 
     Args:
         axes: Volume dimensions order.
-        strict_check: Whether to raise an error when the input is not a 3D or 4D tensor.
+        strict_check: Whether to raise an error when the number of dimensions in the input does not match the size of axes.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
@@ -202,6 +209,41 @@ class ReverseDimensions(Transform):
 
         # Reverse volume dimensions
         volume = PermuteDimensions(axes=[*range(volume.dim() - 1, -1, -1)])(volume)
+
+        return volume
+
+
+class MoveDimension(Transform):
+    """
+    Move volume dimension.
+
+    Args:
+        source: Volume source dimension.
+        destination: Volume destination dimension.
+        strict_check: Whether to raise an error when the source or destination dimensions are out of bounds for the input volume.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, source: int, destination: int, strict_check: bool = True):
+        self.source = source
+        self.destination = destination
+        self.strict_check = strict_check
+
+    def __call__(self, volume: torch.Tensor) -> torch.Tensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if not all(-volume.dim() <= axis < volume.dim() for axis in [self.source, self.destination]):
+            msg = f"Out of bound source ({self.source}) or destination ({self.destination}) dimensions for input with {volume.dim()} dimensions."
+
+            if self.strict_check:
+                raise ValueError(msg)
+            else:
+                warnings.warn(msg)
+                return volume
+
+        # Move volume dimension
+        volume = volume.moveaxis(source=self.source, destination=self.destination)
 
         return volume
 
@@ -277,9 +319,15 @@ class NormalizeIntensity(Transform):
         device = volume.device
         dtype = volume.dtype
 
+        # Determine the number of spatial dimensions
+        num_spatial_dimensions = volume.dim() - 1
+
+        if num_spatial_dimensions < 1:
+            raise ValueError(f"Volume must have at least one spatial dimension. Got shape {volume.shape}.")
+
         # Reshape and move to device and dtype of the input
-        mean = mean.view(-1, *([1] * 3)).to(device, dtype)
-        std = std.view(-1, *([1] * 3)).to(device, dtype)
+        mean = mean.view(-1, *([1] * num_spatial_dimensions)).to(device, dtype)
+        std = std.view(-1, *([1] * num_spatial_dimensions)).to(device, dtype)
 
         # Normalize channel-wise
         volume = (volume - mean) / std
@@ -294,11 +342,15 @@ class NormalizeIntensity(Transform):
         if self.channel_wise:
             if isinstance(self.mean, (float, int, np.integer, np.floating)):
                 mean = [self.mean] * normalized_volume.shape[0]
+            elif (isinstance(self.mean, torch.Tensor) and self.mean.numel() == 1) or (isinstance(self.mean, np.ndarray) and self.mean.size == 1):
+                mean = [self.mean.item()] * normalized_volume.shape[0]
             else:
                 mean = self.mean
 
             if isinstance(self.std, (float, int, np.integer, np.floating)):
                 std = [self.std] * normalized_volume.shape[0]
+            elif (isinstance(self.std, torch.Tensor) and self.std.numel() == 1) or (isinstance(self.std, np.ndarray) and self.std.size == 1):
+                std = [self.std.item()] * normalized_volume.shape[0]
             else:
                 std = self.std
 
@@ -387,9 +439,15 @@ class ThresholdIntensity(Transform):
         device = volume.device
         dtype = volume.dtype
 
+        # Determine the number of spatial dimensions
+        num_spatial_dimensions = volume.dim() - 1
+
+        if num_spatial_dimensions < 1:
+            raise ValueError(f"Volume must have at least one spatial dimension. Got shape {volume.shape}.")
+
         # Reshape and move to device and dtype of the input
-        threshold = threshold.view(-1, *([1] * 3)).to(device, dtype)
-        cval = cval.view(-1, *([1] * 3)).to(device, dtype)
+        threshold = threshold.view(-1, *([1] * num_spatial_dimensions)).to(device, dtype)
+        cval = cval.view(-1, *([1] * num_spatial_dimensions)).to(device, dtype)
 
         # Clamp channel-wise
         mask = volume > threshold if self.above else volume < threshold
@@ -405,11 +463,15 @@ class ThresholdIntensity(Transform):
         if self.channel_wise:
             if isinstance(self.threshold, (float, int, np.integer, np.floating)):
                 threshold = [self.threshold] * clipped_volume.shape[0]
+            elif (isinstance(self.threshold, torch.Tensor) and self.threshold.numel() == 1) or (isinstance(self.threshold, np.ndarray) and self.threshold.size == 1):
+                threshold = [self.threshold.item()] * clipped_volume.shape[0]
             else:
                 threshold = self.threshold
 
             if isinstance(self.cval, (float, int, np.integer, np.floating)):
                 cval = [self.cval] * clipped_volume.shape[0]
+            elif (isinstance(self.cval, torch.Tensor) and self.cval.numel() == 1) or (isinstance(self.cval, np.ndarray) and self.cval.size == 1):
+                cval = [self.cval.item()] * clipped_volume.shape[0]
             else:
                 cval = self.cval
 
@@ -490,7 +552,7 @@ class RandTranslate(RandomizableTransform):
     def __init__(self, prob: float = 0.1, translate_range: Union[float, Sequence[float], Sequence[Sequence[float]]] = 0.5, padding_mode: str = 'zeros') -> None:
         RandomizableTransform.__init__(self, prob)
         self.translate_range = translate_range
-        self.rand_translate = [0, 0, 0]
+        self.rand_translate = []
         self.padding_mode = padding_mode
 
     def randomize(self, data: Optional[Any] = None) -> None:
@@ -505,11 +567,14 @@ class RandTranslate(RandomizableTransform):
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
         # Determine the number of spatial dimensions
-        num_spatial_dims = len(self.rand_translate)
+        num_spatial_dimensions = volume.dim() - 1
+
+        if num_spatial_dimensions < 1:
+            raise ValueError(f"Volume must have at least one spatial dimension. Got shape {volume.shape}.")
 
         # Process translate_range based on volume dimensions
         if isinstance(self.translate_range, (float, int)):
-            self.translate_range = ((-self.translate_range, self.translate_range),) * num_spatial_dims
+            self.translate_range = ((-self.translate_range, self.translate_range),) * num_spatial_dimensions
         elif isinstance(self.translate_range, (list, tuple)) and all(isinstance(item, (float, int)) for item in self.translate_range):
             self.translate_range = tuple((-val, val) for val in self.translate_range)
         else:
@@ -520,9 +585,12 @@ class RandTranslate(RandomizableTransform):
         if not self._do_transform:
             return volume
 
+        if len(self.translate_range) != num_spatial_dimensions:
+            raise ValueError(f"Volume must have {len(self.translate_range)} spatial dimensions. Got {num_spatial_dimensions} dimensions.")
+
         # Create an affine translation matrix
-        theta = torch.eye(3, 4, device=volume.device).unsqueeze(0)
-        theta[..., :3, -1] = torch.tensor(self.rand_translate, device=volume.device)
+        theta = torch.eye(num_spatial_dimensions, num_spatial_dimensions + 1, device=volume.device).unsqueeze(0)
+        theta[..., :num_spatial_dimensions, -1] = torch.tensor(self.rand_translate, device=volume.device)
 
         # Add batch dimension temporarily
         volume = volume.unsqueeze(0)
@@ -556,13 +624,13 @@ class RandSpatialCrop(RandomizableTransform):
             return None
 
         # Ensure low-resolution patch size matches with spatial dimensions
-        num_spatial_dims = len(lr_size)
+        num_spatial_dimensions = len(lr_size)
 
-        if len(self.lr_patch_size) < num_spatial_dims:
-            self.lr_patch_size = ensure_tuple_rep(self.lr_patch_size, num_spatial_dims)
+        if len(self.lr_patch_size) < num_spatial_dimensions:
+            self.lr_patch_size = ensure_tuple_rep(self.lr_patch_size, num_spatial_dimensions)
 
         start_pos = []
-        for dim_index in range(num_spatial_dims):
+        for dim_index in range(num_spatial_dimensions):
             if 0 < self.lr_patch_size[dim_index] <= lr_size[dim_index]:
                 max_val = lr_size[dim_index] - self.lr_patch_size[dim_index] + 1
                 start_pos.append(self.R.randint(max_val))
@@ -581,8 +649,14 @@ class RandSpatialCrop(RandomizableTransform):
         if scale_factor is None:
             return volume
 
+        # Determine the number of spatial dimensions
+        num_spatial_dimensions = volume.dim() - 1
+
+        if num_spatial_dimensions < 1:
+            raise ValueError(f"Volume must have at least one spatial dimension. Got shape {volume.shape}.")
+
         if randomize:
-            lr_size = tuple(dim // scale_factor for dim in volume.shape[-3:]) if scale_factor > 1 else volume.shape[-3:]
+            lr_size = tuple(dim // scale_factor for dim in volume.shape[-num_spatial_dimensions:]) if scale_factor > 1 else volume.shape[-num_spatial_dimensions:]
             self.randomize(lr_size=lr_size)
 
         if not self._do_transform:

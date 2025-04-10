@@ -15,13 +15,19 @@ from src.utils.transforms import NormalizeIntensity, EnsureExactChannels
 
 class VGGLoss(nn.Module):
     """
-    2.5D VGG Loss, computes average 2D perceptual loss on slices from all three axes.
+    Computes perceptual loss. For 3D settings, a 2.5D VGG Loss is computed by averaging the 2D perceptual loss values on slices from all three axes.
     Expected volume dimensions order is arbitrary.
     """
 
-    def __init__(self, _min, _max, mean=None, std=None, volume_size=None, patch_size=(-1, -1, -1), min_spatial_size=(16, 16, 16)):
+    def __init__(self, num_spatial_dimensions, _min, _max, mean=None, std=None, volume_size=None, patch_size=None, min_spatial_size=None):
         super().__init__()
-        assert not (volume_size is None and np.any(np.array(patch_size) < 0)), f'Volume size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
+        assert not (volume_size is None and (np.any(np.array(patch_size) < 0) or patch_size is None)), f'Volume size is required when any patch size dimension is unknown (at indexes: {np.where(np.array(patch_size) < 0)[0]})'
+
+        if patch_size is None:
+            patch_size = (-1,) * num_spatial_dimensions
+
+        if min_spatial_size is None:
+            min_spatial_size = (16,) * num_spatial_dimensions
 
         # Define Criterion
         self.criterion = nn.L1Loss()
@@ -40,7 +46,7 @@ class VGGLoss(nn.Module):
             NormalizeIntensity(mean=-mean/std, std=1/std, channel_wise=True) if (mean is not None and std is not None) else transforms.Identity(),
             NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True),
             transforms.SpatialPad(spatial_size=min_spatial_size),
-            EnsureExactChannels(num_channels=3),
+            EnsureExactChannels(num_channels=3, num_spatial_dimensions=num_spatial_dimensions),
             NormalizeIntensity(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], channel_wise=True),
             transforms.ToTensor(),
         ])
@@ -53,6 +59,8 @@ class VGGLoss(nn.Module):
             {'orthogonal_axis_dim': -3, 'coplanar_axes_dims': [-2, -1]},
             {'orthogonal_axis_dim': -2, 'coplanar_axes_dims': [-3, -1]},
             {'orthogonal_axis_dim': -1, 'coplanar_axes_dims': [-3, -2]},
+        ] if num_spatial_dimensions == 3 else [
+            {'coplanar_axes_dims': [-2, -1]},
         ]
 
     def forward(self, predictions, ground_truths):
@@ -69,8 +77,8 @@ class VGGLoss(nn.Module):
             inferer = PatchInferer(splitter=SlidingWindowSplitter(patch_size=list(self.patch_size[dim] for dim in plane['coplanar_axes_dims']), overlap=0.125, device=next(self.parameters()).device), match_spatial_shape=True, device=next(self.parameters()).device)
 
             # Convert 3D data to 2D
-            transformed_predictions_2d = transformed_predictions.permute(-5, plane['orthogonal_axis_dim'], -4, *plane['coplanar_axes_dims']).contiguous().view(-1, 3, *(transformed_predictions.shape[dim] for dim in plane['coplanar_axes_dims']))
-            transformed_ground_truths_2d = transformed_ground_truths.permute(-5, plane['orthogonal_axis_dim'], -4, *plane['coplanar_axes_dims']).contiguous().view(-1, 3, *(transformed_ground_truths.shape[dim] for dim in plane['coplanar_axes_dims']))
+            transformed_predictions_2d = transformed_predictions.permute(-5, plane['orthogonal_axis_dim'], -4, *plane['coplanar_axes_dims']).contiguous().view(-1, 3, *(transformed_predictions.shape[dim] for dim in plane['coplanar_axes_dims'])) if transformed_predictions.dim() == 5 else transformed_predictions
+            transformed_ground_truths_2d = transformed_ground_truths.permute(-5, plane['orthogonal_axis_dim'], -4, *plane['coplanar_axes_dims']).contiguous().view(-1, 3, *(transformed_ground_truths.shape[dim] for dim in plane['coplanar_axes_dims'])) if transformed_ground_truths.dim() == 5 else transformed_ground_truths
 
             # Compute VGG features
             vgg_features_predictions_2d = inferer(inputs=transformed_predictions_2d, network=self.vgg)

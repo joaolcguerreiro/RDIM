@@ -33,7 +33,7 @@ def main():
     _min, _max, mean, std = checkpoint['training_data_min'], checkpoint['training_data_max'], checkpoint['training_data_mean'], checkpoint['training_data_std']
 
     # Define dataset and data loader
-    test_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TESTING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TESTING"]["HR_DIR_PATH"], scale_factor=checkpoint['gaussian_diffusion_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
+    test_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TESTING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TESTING"]["HR_DIR_PATH"], num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'], scale_factor=checkpoint['gaussian_diffusion_scale_factor'], _min=_min, _max=_max, mean=mean, std=std, augmentation=False)
     test_dataloader = DataLoader(test_dataset, batch_size=config["TESTING"]["BATCH_SIZE"], num_workers=config["DATA"]["NUM_WORKERS"], collate_fn=SuperResolutionDataset.sr_dataset_collate)
 
     # Define models
@@ -44,12 +44,14 @@ def main():
         beta_schedule=checkpoint['gaussian_diffusion_beta_schedule'],
         gamma=checkpoint['gaussian_diffusion_gamma'],
         eta=(args.eta or checkpoint['gaussian_diffusion_eta']),
+        num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
         scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
         lr_condition_encoding=checkpoint['gaussian_diffusion_lr_condition_encoding'],
         **{key.lower(): value for key, value in checkpoint['gaussian_diffusion_beta_schedule_parameters'].items()}
     ).to(device)
 
     noise_predictor = NoisePredictor(
+        num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
         in_channels=checkpoint['noise_predictor_in_channels'],
         out_channels=checkpoint['noise_predictor_out_channels'],
         num_cond_features=(checkpoint['lr_encoder_num_features'] if checkpoint['gaussian_diffusion_lr_condition_encoding'] else checkpoint['noise_predictor_in_channels']),
@@ -65,6 +67,7 @@ def main():
 
     if checkpoint['gaussian_diffusion_lr_condition_encoding']:
         lr_encoder = LREncoder(
+            num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
             in_channels=checkpoint['lr_encoder_in_channels'],
             out_channels=checkpoint['lr_encoder_out_channels'],
             num_features=checkpoint['lr_encoder_num_features'],
@@ -94,7 +97,7 @@ def main():
     noise_predictor_inferer = MultiScaleConditionalSlidingWindowInferer(roi_size=list(map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (args.lr_patch_size if args.lr_patch_size is not None else checkpoint['training_lr_patch_size']))), scale_factor=checkpoint['gaussian_diffusion_scale_factor'], overlap=0.125, mode='gaussian', sw_batch_size=config["TESTING"]["PATCH_SLIDING_WINDOW_BATCH_SIZE"], sw_device=device, device=device)
 
     # Define metrics
-    metrics = SuperResolutionMetrics(num_spatial_dims=len(checkpoint['training_lr_patch_size']), _min=_min, _max=_max, mean=mean, std=std)
+    metrics = SuperResolutionMetrics(num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'], _min=_min, _max=_max, mean=mean, std=std)
 
     # Initialize models weights
     (noise_predictor.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else noise_predictor).load_state_dict(checkpoint['noise_predictor_state_dict'])
