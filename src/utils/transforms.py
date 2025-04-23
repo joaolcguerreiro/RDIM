@@ -617,7 +617,7 @@ class RandSpatialCrop(RandomizableTransform):
         self.lr_patch_size = ensure_tuple(lr_patch_size)
         self.start_pos = (0,) * len(self.lr_patch_size)
 
-    def randomize(self, lr_size: Union[Sequence[int], int]) -> None:
+    def randomize(self, lr_size: Sequence[int]) -> None:
         super().randomize(None)
 
         if not self._do_transform:
