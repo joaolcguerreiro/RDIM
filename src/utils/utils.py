@@ -51,10 +51,10 @@ def get_volume_data(volume_dir):
     file_extension = (re.search(r'(\.[^.]+(?:\.[^.]+)*)$', os.path.basename(volume_dir)) or ['']).group(1).lower()
 
     if file_extension in ['.nii', '.nii.gz']:
-        # Reverse NIfTI volume dimensions (W, H, D, C) into PyTorch volume dimensions (C, D, H, W) = (C, Z, Y, X)
+        # Reverse NIfTI volume dimensions (W, H, [D], [C]) into PyTorch volume dimensions ([C], [D], H, W) = ([C], [Z], Y, X)
         return reverse_dimensions(load_volume(volume_dir).get_fdata().astype(np.float32))
     elif file_extension in ['.png', '.jpg', '.jpeg']:
-        # Reverse PIL image dimensions (H, W, C) into PyTorch image dimensions (C, H, W) = (C, Y, X) if channel dimension exists
+        # Reverse PIL image dimensions (H, W, [C]) into PyTorch image dimensions ([C], H, W) = ([C], Y, X) if channel dimension exists
         return move_dimension(image, -1, 0) if (image := np.array(load_image(volume_dir)).astype(np.float32)).ndim == 3 else image
     else:
         raise ValueError(f"Unsupported image format: {file_extension}")
@@ -253,7 +253,7 @@ def compute_data_statistics(data_dir, num_spatial_dimensions, num_channels):
     return _min, _max, mean, std
 
 
-def compute_super_resolution_volume_metadata(lr_metadata, scale_factor=None):
+def compute_super_resolution_volume_metadata(lr_metadata, num_spatial_dimensions, scale_factor=None):
     super_resolution_header = None
     super_resolution_affine = None
 
@@ -264,8 +264,8 @@ def compute_super_resolution_volume_metadata(lr_metadata, scale_factor=None):
 
         # Update the header to account for the new voxel size
         if super_resolution_header is not None:
-            super_resolution_header.set_data_shape(list(np.array(super_resolution_header.get_data_shape()) * scale_factor)[:3] + list(super_resolution_header.get_data_shape())[3:])
-            super_resolution_header.set_zooms(list(np.array(super_resolution_header.get_zooms()) / scale_factor)[:3] + list(super_resolution_header.get_zooms())[3:])
+            super_resolution_header.set_data_shape(list(np.array(super_resolution_header.get_data_shape()) * scale_factor)[:num_spatial_dimensions] + list(super_resolution_header.get_data_shape())[num_spatial_dimensions:])
+            super_resolution_header.set_zooms(list(np.array(super_resolution_header.get_zooms()) / scale_factor)[:num_spatial_dimensions] + list(super_resolution_header.get_zooms())[num_spatial_dimensions:])
 
     return {
         'filename': lr_metadata['filename'],

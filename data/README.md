@@ -6,7 +6,9 @@
 2) [Prepare LDCT-and-Projection-Data Dataset](#prepare-ldct-and-projection-data-dataset)
 3) [Prepare BraTS 2023 Dataset](#prepare-brats-2023-dataset)
 4) [Prepare FMD Dataset](#prepare-fmd-dataset)
-5) [Prepare Other Dataset](#prepare-other-dataset)
+5) [Prepare DIV2K Dataset](#prepare-div2k-dataset)
+6) [Prepare SIDD Dataset](#prepare-sidd-dataset)
+7) [Prepare Other Dataset](#prepare-other-dataset)
 
 <hr style="border:1px solid gray">
 
@@ -90,43 +92,6 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
-#### Prepare FMD Dataset
-
-1) Download [FMD](https://curate.nd.edu/articles/dataset/Fluorescence_Microscopy_Denoising_FMD_dataset/24744648) dataset.
-
-2) Navigate to `preprocessing` directory:
-   ```
-   cd src/preprocessing
-   ```
-
-3) Run clone data script to duplicate dataset into `data` directory:
-   ```
-   python clone_data.py --dir=<path_to_raw_fmd> --dataset-name="FMD"
-   ```
-
-4) Run data cleaning script:
-   ```
-   python clean_fmd.py --dir="../../data/FMD"
-   ```
-
-5) Run data formatting script:
-   ```
-   python format_fmd.py --dir="../../data/FMD"
-   ```
-
-6) Run data splitting script for each subset:
-   ```
-   python split_data.py --dir="../../data/Confocal-BPAE-Raw" --pair-wise=True
-   python split_data.py --dir="../../data/Two-Photon-BPAE-Raw" --pair-wise=True
-   python split_data.py --dir="../../data/Wide-Field-BPAE-Raw" --pair-wise=True
-   ```
-
-> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
-
-> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py`.
-
-<hr style="border:1px solid gray">
-
 #### Prepare BraTS 2023 Dataset
 
 1) Download [BraTS 2023](https://www.synapse.org/#!Synapse:syn51156910/wiki/621282) dataset training split.
@@ -169,19 +134,104 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
+#### Prepare FMD Dataset
+
+1) Download [FMD](https://curate.nd.edu/articles/dataset/Fluorescence_Microscopy_Denoising_FMD_dataset/24744648) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_fmd> --dataset-name="FMD"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_fmd.py --dir="../../data/FMD"
+   ```
+
+5) Run data formatting script:
+   ```
+   python format_fmd.py --dir="../../data/FMD"
+   ```
+
+6) Run data splitting script for each subset:
+   ```
+   python split_data.py --dir="../../data/Confocal-BPAE-Raw" --pair-wise=True
+   python split_data.py --dir="../../data/Two-Photon-BPAE-Raw" --pair-wise=True
+   python split_data.py --dir="../../data/Wide-Field-BPAE-Raw" --pair-wise=True
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py`.
+
+<hr style="border:1px solid gray">
+
+#### Prepare DIV2K Dataset
+
+1) Download [DIV2K](https://data.vision.ee.ethz.ch/cvl/DIV2K/) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_div2k> --dataset-name="DIV2K"
+   ```
+
+4) Run data formatting script:
+   ```
+   python format_div2k.py --dir="../../data/DIV2K"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
+#### Prepare SIDD Dataset
+
+1) Download [SIDD](https://abdokamel.github.io/sidd/) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_sidd> --dataset-name="SIDD"
+   ```
+
+4) Run data formatting script:
+   ```
+   python format_sidd.py --dir="../../data/SIDD"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
 #### Prepare Other Dataset
 
 Supported file formats:
 
-* NifTI;
+* 2D Data - NifTI, PNG, JPG, and JPEG.
+
+* 3D Data - NifTI.
 
 Accepted data shapes are as follows:
 
-* `(W, H, D)`.
+* 2D Data - `(H, W)` and `(H, W, C)`.
 
-* `(W, H, D, C)`.
+* 3D Data - `(W, H, D)` and `(W, H, D, C)`.
 
-> Note: The dimensions order is reversed during execution to align with PyTorch. 
+> Note: For NifTI the dimensions order is reversed during execution to align with PyTorch. For the other file formats the channel dimension is moved to the first position.
 
 Every low-resolution image should have a corresponding high-resolution image. The image files of each LR-HR pair should have the same filename. The following illustrates a valid dataset structure:
 
