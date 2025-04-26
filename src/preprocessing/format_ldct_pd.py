@@ -153,7 +153,6 @@ def main():
             # Fetch all data file paths
             dataset_file_paths = sorted(file_path for file_path in glob(os.path.join(dir_path, '*')) if os.path.basename(file_path) not in ['.DS_Store', 'LR', 'HR'])
 
-            # Transform DICOM to NIfTI file format
             for volume_dir_path in dataset_file_paths:
                 # Remove old directory
                 shutil.rmtree(volume_dir_path)
