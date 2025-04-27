@@ -16,42 +16,42 @@ def main():
             if not os.path.exists(dir_path):
                 continue
 
-            # Remove and create noisy and clean directories
-            noisy_dir_path = os.path.join(dir_path, 'noisy')
-            clean_dir_path = os.path.join(dir_path, 'clean')
+            # Remove and create LR and HR directories
+            lr_dir_path = os.path.join(dir_path, 'LR')
+            hr_dir_path = os.path.join(dir_path, 'HR')
 
-            if os.path.exists(noisy_dir_path):
-                shutil.rmtree(noisy_dir_path)
+            if os.path.exists(lr_dir_path):
+                shutil.rmtree(lr_dir_path)
 
-            os.makedirs(noisy_dir_path)
+            os.makedirs(lr_dir_path)
 
-            if os.path.exists(clean_dir_path):
-                shutil.rmtree(clean_dir_path)
+            if os.path.exists(hr_dir_path):
+                shutil.rmtree(hr_dir_path)
 
-            os.makedirs(clean_dir_path)
+            os.makedirs(hr_dir_path)
 
             # Fetch all data file paths
-            dataset_file_paths = sorted(file_path for file_path in glob(os.path.join(dir_path, '*')) if os.path.basename(file_path) not in ['.DS_Store', 'noisy', 'clean'])
+            dataset_file_paths = sorted(file_path for file_path in glob(os.path.join(dir_path, '*')) if os.path.basename(file_path) not in ['.DS_Store', 'LR', 'HR'])
 
-            # Move files to noisy and clean directories
+            # Move files to LR and HR directories
             for image_dir_path in dataset_file_paths:
                 for file_path in sorted(glob(os.path.join(image_dir_path, '*'))):
                     if "GT" in file_path:
                         # Define old image paths
-                        noisy_img_path = os.path.join(os.path.dirname(file_path), os.path.basename(file_path).replace("GT", "NOISY"))
-                        clean_img_path = file_path
+                        lr_img_path = os.path.join(os.path.dirname(file_path), os.path.basename(file_path).replace("GT", "NOISY"))
+                        hr_img_path = file_path
 
                         # Define new image paths
-                        new_noisy_img_file_path = os.path.join(noisy_dir_path, os.path.basename(file_path).replace("GT_", ""))
-                        new_clean_img_file_path = os.path.join(clean_dir_path, os.path.basename(file_path).replace("GT_", ""))
+                        new_lr_img_file_path = os.path.join(lr_dir_path, os.path.basename(file_path).replace("GT_", ""))
+                        new_hr_img_file_path = os.path.join(hr_dir_path, os.path.basename(file_path).replace("GT_", ""))
 
-                        shutil.copy(noisy_img_path, new_noisy_img_file_path)
-                        shutil.copy(clean_img_path, new_clean_img_file_path)
+                        shutil.copy(lr_img_path, new_lr_img_file_path)
+                        shutil.copy(hr_img_path, new_hr_img_file_path)
 
         # Delete old directories
         for dir_path in [train_dir_path, val_dir_path, test_dir_path]:
             # Fetch all data file paths
-            dataset_file_paths = sorted(file_path for file_path in glob(os.path.join(dir_path, '*')) if os.path.basename(file_path) not in ['.DS_Store', 'noisy', 'clean'])
+            dataset_file_paths = sorted(file_path for file_path in glob(os.path.join(dir_path, '*')) if os.path.basename(file_path) not in ['.DS_Store', 'LR', 'HR'])
 
             for volume_dir_path in dataset_file_paths:
                 # Remove old directory
