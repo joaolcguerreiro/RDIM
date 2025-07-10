@@ -19,7 +19,9 @@ If you find this project useful, please consider citing the paper:
 
 # <span style="color: orange">Quick Inference</span>
 
-<details><summary>&nbsp;Run the following code to conduct 2D image reconstruction.</summary><br>
+<details>
+<summary>&nbsp;Run the following code to conduct 2D image reconstruction.</summary>
+<br>
 
 ```python
    import torch
@@ -70,9 +72,9 @@ If you find this project useful, please consider citing the paper:
    ```
 </details>
 
-<hr style="border:1px solid gray">
-
-<details><summary>&nbsp;Run the following code to conduct 3D image reconstruction.</summary><br>
+<details>
+<summary>&nbsp;Run the following code to conduct 3D image reconstruction.</summary>
+<br>
 
    ```python
    import torch
