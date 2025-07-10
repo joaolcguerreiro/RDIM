@@ -39,7 +39,7 @@ class SinusoidalPositionalEncoding(nn.Module):
 
 
 class ConvolutionalBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_groups=8, activation=True, max_pool=False, conv_first=True, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_groups=16, activation=True, max_pool=False, conv_first=True, **kwargs):
         super().__init__()
 
         # Convolutional Layer
@@ -93,7 +93,7 @@ class UpsampleBlock(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_conv_blocks=2, num_groups=8, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_conv_blocks=2, num_groups=16, **kwargs):
         super().__init__()
         assert num_conv_blocks > 0 if in_channels != out_channels else True, f'Number of convolutional blocks ({num_conv_blocks}) must be greater than 0'
 
@@ -147,7 +147,7 @@ class ResidualBlock(nn.Module):
 
 
 class SelfAttentionBlock(nn.Module):
-    def __init__(self, in_channels, num_heads=8, num_groups=8):
+    def __init__(self, in_channels, num_heads=16, num_groups=16):
         super().__init__()
 
         # Group Normalization Layer
@@ -188,7 +188,7 @@ class SelfAttentionBlock(nn.Module):
 
 
 class ResidualAttentionBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=16, num_groups=16, **kwargs):
         super().__init__()
 
         # Residual Block
@@ -218,7 +218,7 @@ class ResidualAttentionBlock(nn.Module):
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=16, num_groups=16, **kwargs):
         super().__init__()
 
         # Residual Blocks with Optional Self-Attention Blocks
@@ -261,7 +261,7 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=16, num_groups=16, **kwargs):
         super().__init__()
 
         # Residual Blocks with Optional Self-Attention Blocks
@@ -305,7 +305,7 @@ class DecoderBlock(nn.Module):
 
 
 class BottleneckBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=8, num_groups=8, **kwargs):
+    def __init__(self, num_spatial_dimensions, in_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=16, num_groups=16, **kwargs):
         super().__init__()
 
         # Residual Blocks with Optional Self-Attention Blocks
@@ -336,7 +336,7 @@ class BottleneckBlock(nn.Module):
 
 
 class NoisePredictor(nn.Module):
-    def __init__(self, num_spatial_dimensions=3, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=64, feature_multipliers=(1, 2, 4, 8), num_rb_blocks=2, num_rb_conv_blocks=2, attention_levels=((False,) * 2 + (True,) * 2), num_attention_heads=8, num_groups=8, scale_factor=1):
+    def __init__(self, num_spatial_dimensions=3, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=128, feature_multipliers=(1, 2, 4, 8), num_rb_blocks=2, num_rb_conv_blocks=2, attention_levels=((False,) * 2 + (True,) * 2), num_attention_heads=16, num_groups=16, scale_factor=1):
         super().__init__()
         assert len(feature_multipliers) == len(attention_levels), f'Array size of attention levels ({len(attention_levels)}) must match array size of feature multipliers ({len(feature_multipliers)})'
 
@@ -676,7 +676,7 @@ class LREncoder(nn.Module):
 
 
 class GaussianDiffusion(nn.Module):
-    def __init__(self, num_timesteps=1000, num_sampling_timesteps=10, sampling_timestep_schedule='LINEAR', beta_schedule='GENERAL_SIGMOID', gamma=0.1, eta=0.1, num_spatial_dimensions=3, scale_factor=1, lr_condition_encoding=True, **kwargs):
+    def __init__(self, num_timesteps=100, num_sampling_timesteps=1, sampling_timestep_schedule='GEOMETRIC', beta_schedule='CIRCULAR', gamma=0.0, eta=0.0, num_spatial_dimensions=3, scale_factor=1, lr_condition_encoding=False, **kwargs):
         super().__init__()
 
         self.num_timesteps = num_timesteps
@@ -695,7 +695,7 @@ class GaussianDiffusion(nn.Module):
         self.register_buffer('lambdas', lambdas)
 
     @staticmethod
-    def general_sigmoid_beta_schedule(num_timesteps=1000, p=2):
+    def general_sigmoid_beta_schedule(num_timesteps=100, p=2):
         """
         General sigmoid-like schedule.
         """
@@ -709,7 +709,7 @@ class GaussianDiffusion(nn.Module):
         return betas, lambdas
 
     @staticmethod
-    def general_sigmoid_antiderivative_beta_schedule(num_timesteps=1000, p=8):
+    def general_sigmoid_antiderivative_beta_schedule(num_timesteps=100, p=10):
         """
         General sigmoid-like antiderivative schedule.
         """
@@ -723,7 +723,7 @@ class GaussianDiffusion(nn.Module):
         return betas, lambdas
 
     @staticmethod
-    def circular_beta_schedule(num_timesteps=1000, p=3):
+    def circular_beta_schedule(num_timesteps=100, p=5):
         """
         Circular schedule.
         """
@@ -736,7 +736,7 @@ class GaussianDiffusion(nn.Module):
         return betas, lambdas
 
     @staticmethod
-    def parabolic_beta_schedule(num_timesteps=1000, p=2):
+    def parabolic_beta_schedule(num_timesteps=100, p=2):
         """
         Parabolic schedule.
         """
@@ -748,7 +748,7 @@ class GaussianDiffusion(nn.Module):
 
         return betas, lambdas
 
-    def compute_beta_schedule(self, beta_schedule='GENERAL_SIGMOID', num_timesteps=1000, **kwargs):
+    def compute_beta_schedule(self, beta_schedule='CIRCULAR', num_timesteps=100, **kwargs):
         if beta_schedule == 'GENERAL_SIGMOID':
             return self.general_sigmoid_beta_schedule(num_timesteps=num_timesteps, **kwargs)
         elif beta_schedule == 'GENERAL_SIGMOID_ANTIDERIVATIVE':
@@ -763,7 +763,7 @@ class GaussianDiffusion(nn.Module):
     def sample_timesteps(self, num_samples):
         return torch.randint(low=1, high=self.num_timesteps + 1, size=(num_samples,), dtype=torch.long)
 
-    def reverse_trajectory_timesteps(self, sampling_timestep_schedule='LINEAR', num_sampling_timesteps=10):
+    def reverse_trajectory_timesteps(self, sampling_timestep_schedule='GEOMETRIC', num_sampling_timesteps=1):
         assert 1 <= num_sampling_timesteps <= self.num_timesteps, f'Number of sampling timesteps ({num_sampling_timesteps}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
 
         if sampling_timestep_schedule == 'LINEAR':

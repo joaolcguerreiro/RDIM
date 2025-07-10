@@ -19,7 +19,60 @@ If you find this project useful, please consider citing the paper:
 
 # <span style="color: orange">Quick Inference</span>
 
-Run the following code to conduct 3D image reconstruction:
+<details><summary>Run the following code to conduct 2D image reconstruction</summary>
+
+```python
+   import torch
+   import torch.nn as nn
+   
+   # Define device
+   device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
+   
+   # Set patch size (H, W)
+   patch_size = (64, 64)
+   
+   # Define inferer (Optional)
+   inferer = torch.hub.load(
+      'joaolcguerreiro/RDIM', 'load_inferer',
+      roi_size=patch_size, scale_factor=2, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
+   )
+   
+   # Define LQ images to be reconstructed. Mean is 0 and STD is 1.
+   # For simplicity, two random volumes with 3 channel and size of 256x256 (H, W) are sampled. Replace them with your images.
+   images = torch.randn(2, 3, 256, 256).to(device)
+   
+   # Avoid HTTP Error 403
+   torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
+   
+   # Load models (check pretrained_models/README.md)
+   gaussian_diffusion, noise_predictor, lr_encoder = torch.hub.load(
+      'joaolcguerreiro/RDIM', 'load_model',
+      checkpoint_url='???', pretrained=True,
+      gaussian_diffusion_kwargs={???},
+      noise_predictor_kwargs={???},
+      lr_encoder_kwargs={???}
+   )
+   gaussian_diffusion.to(device)
+   noise_predictor.to(device)
+   lr_encoder.to(device) if lr_encoder else None
+   
+   # Use multiple GPUs if available
+   if torch.cuda.device_count() > 1 or torch.mps.device_count() > 1:
+      noise_predictor = nn.DataParallel(noise_predictor, device_ids=None)
+      lr_encoder = nn.DataParallel(lr_encoder, device_ids=None) if lr_encoder else None
+   
+   # Set models to evaluation mode
+   noise_predictor.eval()
+   lr_encoder.eval() if lr_encoder else None
+   
+   # Generated images. Model expects z-score normalized input images.
+   gen_images = gaussian_diffusion.sample(images, noise_predictor, lr_encoder, inferer)
+   ```
+</details>
+
+<hr style="border:1px solid gray">
+
+<details><summary>Run the following code to conduct 3D image reconstruction</summary>
 
    ```python
    import torch
@@ -29,7 +82,7 @@ Run the following code to conduct 3D image reconstruction:
    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
    
    # Set patch size (D, H, W)
-   patch_size = (16, 16, 16)
+   patch_size = (32, 32, 32)
    
    # Define inferer (Optional)
    inferer = torch.hub.load(
@@ -37,9 +90,9 @@ Run the following code to conduct 3D image reconstruction:
       roi_size=patch_size, scale_factor=2, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
    )
    
-   # Define LQ images to be reconstructed. Mean is 0 and STD is 1.
-   # For simplicity, two random volumes with 1 channel and size of 64x64x64 (D, H, W) are sampled. Replace them with your images.
-   volumes = torch.randn(2, 1, 64, 64, 64).to(device)
+   # Define LQ volumes to be reconstructed. Mean is 0 and STD is 1.
+   # For simplicity, two random volumes with 1 channel and size of 128x128x128 (D, H, W) are sampled. Replace them with your volumes.
+   volumes = torch.randn(2, 1, 128, 128, 128).to(device)
    
    # Avoid HTTP Error 403
    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
@@ -68,6 +121,7 @@ Run the following code to conduct 3D image reconstruction:
    # Generated volumes. Model expects z-score normalized input volumes.
    gen_volumes = gaussian_diffusion.sample(volumes, noise_predictor, lr_encoder, inferer)
    ```
+</details>
 
 <hr style="border:2px solid orange">
 
@@ -116,7 +170,7 @@ Run the following code to conduct 3D image reconstruction:
 
 > Note: Validation is optional. Use option `--val=True` if validation is intended.
 
-> Note: Set `LR_PATCH_SIZE` in `config.yaml` file for patch-based training (recommended). Patch-based training is not employed when `LR_PATCH_SIZE=[-1, -1, -1]` (more computationally expensive). Also, for `LR_PATCH_SIZE` equal or smaller than `[8, 8, 8]` the `batch_size` is required to be greater than `1` because of the discriminator batch normalization.
+> Note: Set `LR_PATCH_SIZE` in `config.yaml` file for patch-based training (recommended). Patch-based training is not employed when `LR_PATCH_SIZE=[-1, -1, -1]` (more computationally expensive).
 
 <hr style="border:1px solid gray">
 

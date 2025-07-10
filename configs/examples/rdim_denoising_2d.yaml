@@ -1,0 +1,134 @@
+#=================================================================================================================#
+#                                               Data Configuration                                                #
+#=================================================================================================================#
+
+DATA:
+  TRAINING:
+    LR_DIR_PATH: /path/to/dataset/training/LR
+    HR_DIR_PATH: /path/to/dataset/training/HR
+  VALIDATION:
+    LR_DIR_PATH: /path/to/dataset/validation/LR
+    HR_DIR_PATH: /path/to/dataset/validation/HR
+  TESTING:
+    LR_DIR_PATH: /path/to/dataset/testing/LR
+    HR_DIR_PATH: /path/to/dataset/testing/HR
+  NUM_WORKERS: 8
+  GPU_IDS: ~
+
+
+#=================================================================================================================#
+#                                               Model Configuration                                               #
+#=================================================================================================================#
+
+MODEL:
+  NUM_SPATIAL_DIMENSIONS: 2
+  SCALE_FACTOR: 1
+  LR_CONDITION_ENCODING: False
+  GAUSSIAN_DIFFUSION:
+    NUM_TIMESTEPS: 100
+    NUM_SAMPLING_TIMESTEPS: 1
+    SAMPLING_TIMESTEP_SCHEDULE: 'GEOMETRIC'
+    BETA_SCHEDULE: 'CIRCULAR'
+    GAMMA: 0.0
+    ETA: 0.0
+  NOISE_PREDICTOR:
+    IN_CHANNELS: 3
+    OUT_CHANNELS: 3
+    NUM_INNER_FEATURES: 128
+    FEATURE_MULTIPLIERS: [1, 2, 4, 8]
+    NUM_RB_BLOCKS: 2
+    NUM_RB_CONV_BLOCKS: 2
+    ATTENTION_LEVELS: [False, False, True, True]
+    NUM_ATTENTION_HEADS: 16
+    NUM_GROUPS: 16
+    PRE_TRAINED_PATH:
+  LR_ENCODER:
+    IN_CHANNELS: 3
+    OUT_CHANNELS: 3
+    NUM_FEATURES: 64
+    NUM_RRDB_BLOCKS: 1
+    NUM_RRDB_DB_BLOCKS: 2
+    NUM_RRDB_DB_CONV_BLOCKS: 3
+    NUM_RRDB_DB_GROWTH_FEATURES: 32
+    PRE_TRAINED_PATH:
+
+SAMPLING_TIMESTEP_SCHEDULE_OPTIONS:
+  - 'LINEAR'
+  - 'GEOMETRIC'
+
+BETA_SCHEDULE_OPTIONS:
+  - 'GENERAL_SIGMOID'
+  - 'GENERAL_SIGMOID_ANTIDERIVATIVE'
+  - 'CIRCULAR'
+  - 'PARABOLIC'
+
+BETA_SCHEDULE_PARAMETERS:
+  GENERAL_SIGMOID:
+    P: 2
+  GENERAL_SIGMOID_ANTIDERIVATIVE:
+    P: 10
+  CIRCULAR:
+    P: 5
+  PARABOLIC:
+    P: 2
+
+
+#=================================================================================================================#
+#                                           Learning Stage Configuration                                          #
+#=================================================================================================================#
+
+TRAINING:
+  EPOCHS: 10000
+  BATCH_SIZE: 64
+  NUM_GRADIENT_ACCUMULATION_STEPS: 1
+  LR_PATCH_SIZE: [64, 64]
+  REPEAT_SAMPLE_FACTOR: 32
+  AUGMENTATION: False
+  FIX_LR_ENCODER: True
+  SAVE_INTERVAL: 100
+
+PRE_TRAINING_LR_ENCODER:
+  EPOCHS: -1
+  BATCH_SIZE: 64
+  NUM_GRADIENT_ACCUMULATION_STEPS: 1
+  REPEAT_SAMPLE_FACTOR: 32
+  PERCEPTUAL_LOSS_VGG: True
+
+OPTIMIZER:
+  NOISE_PREDICTOR:
+    LEARNING_RATE: 1.0e-4
+    WEIGHT_DECAY: 0
+    BETA_1: 0.9
+    BETA_2: 0.999
+  PRE_TRAIN_LR_ENCODER:
+    LEARNING_RATE: 1.0e-4
+    WEIGHT_DECAY: 0
+    BETA_1: 0.9
+    BETA_2: 0.999
+
+SCHEDULER:
+  NOISE_PREDICTOR:
+    ETA_MIN: 1.0e-9
+  PRE_TRAIN_LR_ENCODER:
+    STEP_SIZE: 200
+    GAMMA: 0.5
+
+LOSS_WEIGHTS:
+  NOISE_PREDICTOR:
+    DIFFUSION_LOSS: 1.0
+  PRE_TRAIN_LR_ENCODER:
+    PERCEPTUAL_LOSS: 1.0e-2
+    CONTENT_LOSS: 1.0
+
+
+#=================================================================================================================#
+#                                         Evaluation Stage Configuration                                          #
+#=================================================================================================================#
+
+VALIDATION:
+  BATCH_SIZE: 1
+  PATCH_SLIDING_WINDOW_BATCH_SIZE: 16
+
+TESTING:
+  BATCH_SIZE: 1
+  PATCH_SLIDING_WINDOW_BATCH_SIZE: 16
