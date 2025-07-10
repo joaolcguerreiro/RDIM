@@ -1,6 +1,6 @@
 # <span style="color: orange">RDIM</span>
 
-Official repository of Residual Diffusion Implicit Model (RDIM), a diffusion model for medical image reconstruction. 
+Official repository of Residual Diffusion Implicit Model (RDIM), a diffusion model tailored for inverse problems. 
 
 <img src="./figures/sample.gif" alt="RDIM qualitative results across every training epoch" width="100%">
 
