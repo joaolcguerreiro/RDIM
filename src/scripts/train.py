@@ -302,6 +302,9 @@ def main():
             })
 
             if (batch_index + 1) % config['TRAINING']['NUM_GRADIENT_ACCUMULATION_STEPS'] == 0 or batch_index + 1 == len(train_pbar):
+                # Clip gradients before updating parameters
+                nn.utils.clip_grad_norm_(list(noise_predictor.parameters()) + (list(lr_encoder.parameters()) if not config["TRAINING"]["FIX_LR_ENCODER"] and config["MODEL"]["LR_CONDITION_ENCODING"] else []), max_norm=1.0)
+
                 # Update model parameters
                 noise_predictor_optimizer.step()
 

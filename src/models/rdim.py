@@ -150,6 +150,9 @@ class SelfAttentionBlock(nn.Module):
     def __init__(self, in_channels, num_heads=8, num_groups=8):
         super().__init__()
 
+        # Group Normalization Layer
+        self.pre_gn = nn.GroupNorm(num_groups, in_channels) if num_groups > 0 else nn.Identity()
+
         # Multi-Head Attention Mechanism
         self.attention = nn.MultiheadAttention(
             embed_dim=in_channels,
@@ -158,25 +161,28 @@ class SelfAttentionBlock(nn.Module):
         )
 
         # Group Normalization Layer
-        self.gn = nn.GroupNorm(num_groups, in_channels) if num_groups > 0 else nn.Identity()
+        self.post_gn = nn.GroupNorm(num_groups, in_channels) if num_groups > 0 else nn.Identity()
 
     def forward(self, x):
         skip_connection = x
 
-        # Reshape and transpose input tensor to process depth feature maps rather than spatial maps
+        # Apply normalization
+        out = self.pre_gn(x)
+
+        # Reshape and transpose normalized input tensor to process depth feature maps rather than spatial maps
         # [batch, in_channels, D, H, W] => [batch, D*H*W, in_channels] = [batch, sequence_len, num_embedding_dims]
-        batch, in_channels, *spatial_shape = x.shape
-        x = x.view(batch, in_channels, torch.tensor(spatial_shape).prod()).transpose(-2, -1).contiguous()
+        batch, in_channels, *spatial_shape = out.shape
+        out = out.view(batch, in_channels, torch.tensor(spatial_shape).prod()).transpose(-2, -1).contiguous()
 
         # Apply Attention Mechanism
-        out, _ = self.attention(query=x, key=x, value=x, need_weights=False)
+        out, _ = self.attention(query=out, key=out, value=out, need_weights=False)
 
         # Transpose and reshape output tensor to match input shape
         # [batch, D*H*W, in_channels] => [batch, in_channels, D, H, W]
         out = out.transpose(-2, -1).contiguous().view(batch, in_channels, *spatial_shape)
 
         # Add skip connection and apply normalization
-        out = self.gn(out + skip_connection)
+        out = self.post_gn(out + skip_connection)
 
         return out
 
@@ -758,16 +764,16 @@ class GaussianDiffusion(nn.Module):
         return torch.randint(low=1, high=self.num_timesteps + 1, size=(num_samples,), dtype=torch.long)
 
     def reverse_trajectory_timesteps(self, sampling_timestep_schedule='LINEAR', num_sampling_timesteps=10):
-        assert num_sampling_timesteps <= self.num_timesteps, f'Number of sampling timesteps ({num_sampling_timesteps}) must be less than or equal to ({self.num_timesteps})'
+        assert 1 <= num_sampling_timesteps <= self.num_timesteps, f'Number of sampling timesteps ({num_sampling_timesteps}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
 
         if sampling_timestep_schedule == 'LINEAR':
-            return torch.linspace(1, self.num_timesteps, steps=num_sampling_timesteps, dtype=torch.long)
+            return reversed(torch.linspace(1, self.num_timesteps, steps=num_sampling_timesteps, dtype=torch.long)) if num_sampling_timesteps > 1 else torch.tensor([self.num_timesteps])
         elif sampling_timestep_schedule == 'GEOMETRIC':
-            geometric_steps = torch.exp(torch.linspace(0, math.log(self.num_timesteps), num_sampling_timesteps)).round().long()
+            geometric_steps = torch.exp(torch.linspace(0, math.log(self.num_timesteps), num_sampling_timesteps)).floor().long()
 
             # Compute unique geometric steps
             steps = []
-            prev_step = -1
+            prev_step = 0
 
             for step in geometric_steps:
                 # Ensure step > prev_step
@@ -783,7 +789,9 @@ class GaussianDiffusion(nn.Module):
             # Ensure the last step is exactly num_timesteps
             steps[-1] = self.num_timesteps
 
-            return torch.tensor(steps, dtype=torch.long)
+            return reversed(torch.tensor(steps, dtype=torch.long))
+        else:
+            raise NotImplementedError(f'Sampling timestep schedule {sampling_timestep_schedule} not implemented.')
 
     def q_sample(self, x_0, delta, timestep):
         """
@@ -809,28 +817,30 @@ class GaussianDiffusion(nn.Module):
 
         return x_t
 
-    def p_sample(self, x_tau_k, x_0, y_0, tau_k):
+    def p_sample(self, x_tau_k, x_0, y_0, tau_k, tau_k_m1):
         """
         Compute the volume at the distant timestep (tau_k - 1) given the volume at a specific timestep (tau_k) and the LQ data. p_θ(x_tau_k_m1|x_tau_k, y_0).
         """
 
         assert torch.all((tau_k >= 1) & (tau_k <= self.num_timesteps)), f'Timestep(s) ({tau_k}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
+        assert torch.all((tau_k_m1 >= 0) & (tau_k_m1 < self.num_timesteps)), f'Previous timestep(s) ({tau_k_m1}) must be (a) greater than or equal to 0 and (b) less than ({self.num_timesteps})'
 
-        # Define condition to check if timestep is greater than 1
-        timestep_condition = tau_k > 1
+        # Define condition to check if timestep is greater than last sampling timestep (tau_1)
+        timestep_condition = tau_k > int(self.sampling_timesteps[-1])
 
         # Define condition to check if gamma is not 0
         gamma_condition = torch.tensor(self.gamma != 0, device=tau_k.device)
 
         # Get timestep index
         tau_k_index = tau_k - 1
+        tau_k_m1_index = tau_k_m1 - 1
 
         # Count dimension mismatch between volume and timestep
         num_diff_dims = x_tau_k.dim() - tau_k.dim()
 
         # Compute diffusion parameters and match volume dimensions
         beta_tau_k = self.betas[tau_k_index].view(*tau_k.shape, *([1] * num_diff_dims))
-        beta_tau_k_m1 = torch.where(timestep_condition, self.betas[tau_k_index - 1], 0).view(*tau_k.shape, *([1] * num_diff_dims))
+        beta_tau_k_m1 = torch.where(timestep_condition, self.betas[tau_k_m1_index], 0).view(*tau_k.shape, *([1] * num_diff_dims))
         lambda_tau_k = self.lambdas[tau_k_index].view(*tau_k.shape, *([1] * num_diff_dims))
         gamma = torch.tensor(self.gamma, device=tau_k.device)
         eta = torch.tensor(self.eta, device=tau_k.device)
@@ -845,7 +855,7 @@ class GaussianDiffusion(nn.Module):
         variance = torch.pow(eta, 2) * torch.pow(gamma, 2) * (beta_tau_k_m1 / beta_tau_k) * lambda_tau_k
         mean = torch.where(gamma_condition.view(*tau_k.shape, *([1] * num_diff_dims)), x_0 - beta_tau_k_m1 * delta + torch.sqrt(torch.pow(gamma, 2) * beta_tau_k_m1 - variance) * ((x_tau_k - x_0 + beta_tau_k * delta) / torch.sqrt(torch.pow(gamma, 2) * beta_tau_k)), x_0 - beta_tau_k_m1 * delta)
 
-        x_tau_k_m1 = torch.where(timestep_condition.view(*tau_k.shape, *([1] * num_diff_dims)), mean + torch.sqrt(variance) * z, x_0)
+        x_tau_k_m1 = mean + torch.sqrt(variance) * z
 
         return x_tau_k_m1
 
@@ -857,11 +867,12 @@ class GaussianDiffusion(nn.Module):
 
         return x_t
 
-    def reverse_diffusion(self, x_t, x_0, y_0, timestep):
+    def reverse_diffusion(self, x_t, x_0, y_0, timestep, timestep_m1):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
+        assert torch.all((timestep_m1 >= 0) & (timestep_m1 < self.num_timesteps)), f'Previous timestep(s) ({timestep_m1}) must be (a) greater than or equal to 0 and (b) less than ({self.num_timesteps})'
 
         # Predict volume at the previous timestep
-        x_t_m1_pred = self.p_sample(x_t, x_0, y_0, timestep)
+        x_t_m1_pred = self.p_sample(x_t, x_0, y_0, timestep, timestep_m1)
 
         return x_t_m1_pred
 
@@ -885,15 +896,19 @@ class GaussianDiffusion(nn.Module):
         # Sample last timestep
         x_t = x_lr_up + math.sqrt(math.pow(self.gamma, 2)) * torch.randn_like(x_lr_up)
 
-        for timestep in reversed(self.sampling_timesteps):
+        # Define previous sampling timesteps
+        sampling_timesteps_m1 = torch.cat([self.sampling_timesteps[1:], torch.tensor([0], device=self.sampling_timesteps.device)], dim=0)
+
+        for timestep, timestep_m1 in zip(self.sampling_timesteps, sampling_timesteps_m1):
             # Adapt timestep for batch processing
             timestep = torch.full((num_samples,), timestep, dtype=torch.long, device=timestep.device)
+            timestep_m1 = torch.full((num_samples,), timestep_m1, dtype=torch.long, device=timestep_m1.device)
 
-            # Predict noise
+            # Predict initial volume
             x_0_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None), cache_conditions=True) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
 
             # Reverse diffusion to compute volume at previous timestep
-            x_t = self.reverse_diffusion(x_t, x_0_pred, x_lr_up, timestep)
+            x_t = self.reverse_diffusion(x_t, x_0_pred, x_lr_up, timestep, timestep_m1)
 
         # Clear cached memory
         noise_predictor_inferer.clear_conditions_cache()
