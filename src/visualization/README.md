@@ -107,11 +107,11 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 `--plane`
 
-| Option       | Description           | Default |
-|--------------|-----------------------|:-------:|
-| `'axial'`    | Your description here |    ✓    |
-| `'coronal'`  | Your description here |         |
-| `'sagittal'` | Your description here |         |
+| Option       | Description                             | Default |
+|--------------|-----------------------------------------|:-------:|
+| `'axial'`    | Display slices along the axial plane    |    ✓    |
+| `'coronal'`  | Display slices along the coronal plane  |         |
+| `'sagittal'` | Display slices along the sagittal plane |         |
 
 ---
 
@@ -119,10 +119,10 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 `--visualization-dim`
 
-| Option   | Description           | Default |
-|----------|-----------------------|:-------:|
-| `'2D'`   | Your description here |    ✓    |
-| `'3D'`   | Your description here |         |
+| Option   | Description                              | Default |
+|----------|------------------------------------------|:-------:|
+| `'2D'`   | Visualize slices as 2D images            |    ✓    |
+| `'3D'`   | Visualize volumes as 3D rendered objects |         |
 
 ---
 
