@@ -41,9 +41,9 @@ Detailed definition and description of all available visualization script argume
 
 `--lr-dir`
 
-| Option | Description                            |
-|--------|----------------------------------------|
-| `str`  | Path to low-resolution data directory  |
+| Type  | Description                            |
+|-------|----------------------------------------|
+| `str` | Path to low-resolution data directory  |
 
 Required when mode is `lr_scans`, `lr_gen_scans` or `lr_gt_scans`
 
@@ -53,9 +53,9 @@ Required when mode is `lr_scans`, `lr_gen_scans` or `lr_gt_scans`
 
 `--gen-dir`
 
-| Option | Description                      |
-|--------|----------------------------------|
-| `str`  | Path to generated data directory |
+| Type  | Description                      |
+|-------|----------------------------------|
+| `str` | Path to generated data directory |
 
 Required when mode is `gen_scans`, `lr_gen_scans` or `gen_gt_scans`
 
@@ -65,9 +65,9 @@ Required when mode is `gen_scans`, `lr_gen_scans` or `gen_gt_scans`
 
 `--gt-dir`
 
-| Option | Description                         |
-|--------|-------------------------------------|
-| `str`  | Path to ground truth data directory |
+| Type  | Description                         |
+|-------|-------------------------------------|
+| `str` | Path to ground truth data directory |
 
 Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
@@ -77,7 +77,7 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 `--augmentation`
 
-| Option | Description                                               | Default |
+| Type   | Description                                               | Default |
 |--------|-----------------------------------------------------------|:-------:|
 | `bool` | Apply augmentation techniques to the visualization data   |  False  |
 
@@ -87,7 +87,7 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 `--pixel-range`
 
-| Option     | Description                                                                                     |   Default    |
+| Type       | Description                                                                                     |   Default    |
 |------------|-------------------------------------------------------------------------------------------------|:------------:|
 | `sequence` | Window range of pixel values (min, max). For multi-channel scaling provide ((min...), (max...)) | (None, None) |
 
@@ -97,9 +97,9 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 `--num-spatial-dims`
 
-| Option | Description                              | Default |
-|--------|------------------------------------------|:-------:|
-| `int`  | Number of spatial dimensions in the data |    3    |
+| Type  | Description                              | Default |
+|-------|------------------------------------------|:-------:|
+| `int` | Number of spatial dimensions in the data |    3    |
 
 ---
 
@@ -130,9 +130,9 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 `--volume`
 
-| Option | Description                                                                  | Default |
-|--------|------------------------------------------------------------------------------|:-------:|
-| `int`  | Non-negative integer (n > 0) referencing volume. (-1 to display all volumes) |   -1    |
+| Type  | Description                                                                  | Default |
+|-------|------------------------------------------------------------------------------|:-------:|
+| `int` | Non-negative integer (n > 0) referencing volume. (-1 to display all volumes) |   -1    |
 
 ---
 
@@ -140,9 +140,9 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 `--slice`
 
-| Option | Description              | Default |
-|--------|--------------------------|:-------:|
-| `int`  | Slice index (-1 for all) |   -1    |
+| Type  | Description              | Default |
+|-------|--------------------------|:-------:|
+| `int` | Slice index (-1 for all) |   -1    |
 
 ---
 
@@ -150,9 +150,9 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 `--batch-size`
 
-| Option | Description                    | Default |
-|--------|--------------------------------|:-------:|
-| `int`  | Number of samples to visualize |    2    |
+| Type  | Description                    | Default |
+|-------|--------------------------------|:-------:|
+| `int` | Number of samples to visualize |    2    |
 
 ---
 
@@ -160,9 +160,9 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 `--num-workers`
 
-| Option | Description                                  | Default |
-|--------|----------------------------------------------|:-------:|
-| `int`  | Number of subprocesses used for data loading |    4    |
+| Type  | Description                                  | Default |
+|-------|----------------------------------------------|:-------:|
+| `int` | Number of subprocesses used for data loading |    4    |
 
 ---
 
@@ -170,6 +170,6 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 `--labels`
 
-| Option | Description          | Default |
+| Type   | Description          | Default |
 |--------|----------------------|:-------:|
 | `bool` | Display image labels |  True   |

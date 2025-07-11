@@ -37,9 +37,9 @@ Defines dataset paths and data loading settings.
 | `NUM_WORKERS`                 | Number of CPU workers for data loading                                     |    8    |
 | `GPU_IDS`                     | List of GPU device IDs, e.g., [0,1] (~ defaults to all available devices). |    ~    |
 
-> Note: Validation data split is optional. The remaining split paths are required.
+> Note: Validation data split is optional and is only used during the training stage. Other splits are required depending on the phase being executed (training or testing).
 
-> Note: Dataset directory structure should follow the convention described in [data/README.md](data/README.md).
+> Note: See [data/README.md](data/README.md) for an illustration of a valid dataset directory structure. This convention is not mandatory.
 
 <hr style="border:1px solid gray">
 
@@ -59,14 +59,14 @@ Contains architecture and diffusion-related parameters.
 
 * Gaussian Diffusion Parameters
 
-| Parameter                    | Description                               |   Default   |
-|------------------------------|-------------------------------------------|:-----------:|
-| `NUM_TIMESTEPS`              | Total diffusion timesteps during training |     100     |
-| `NUM_SAMPLING_TIMESTEPS`     | Diffusion timesteps during sampling       |      1      |
-| `SAMPLING_TIMESTEP_SCHEDULE` | Schedule type for sampling timesteps      | 'GEOMETRIC' |
-| `BETA_SCHEDULE`              | Schedule type for beta schedule           | 'CIRCULAR'  |
-| `GAMMA`                      | Diffusion hyperparameter                  |     0.0     |
-| `ETA`                        | Noise scale for sampling                  |     0.0     |
+| Parameter                    | Description                                                                                                                |   Default   |
+|------------------------------|----------------------------------------------------------------------------------------------------------------------------|:-----------:|
+| `NUM_TIMESTEPS`              | Number of diffusion timesteps during training (Size of forward chain)                                                      |     100     |
+| `NUM_SAMPLING_TIMESTEPS`     | Number of diffusion timesteps during sampling (Size of reverse chain)                                                      |      1      |
+| `SAMPLING_TIMESTEP_SCHEDULE` | Schedule type for sampling timesteps                                                                                       | 'GEOMETRIC' |
+| `BETA_SCHEDULE`              | Schedule type for beta schedule                                                                                            | 'CIRCULAR'  |
+| `GAMMA`                      | Diffusion hyperparameter that controls the strength of the variance                                                        |     0.0     |
+| `ETA`                        | Diffusion hyperparameter that enables interpolation between deterministic (η=0.0) and stochastic (η=1.0) reverse processes |     0.0     |
 
 ---
 
@@ -77,10 +77,10 @@ Contains architecture and diffusion-related parameters.
 | `IN_CHANNELS`         | Number of input channels                              |             1              |
 | `OUT_CHANNELS`        | Number of output channels                             |             1              |
 | `NUM_INNER_FEATURES`  | Number of base features inside the U-Net-like network |            128             |
-| `FEATURE_MULTIPLIERS` | Feature expansion multipliers per U-Net-like level    |        [1, 2, 4, 8]        |
+| `FEATURE_MULTIPLIERS` | Feature growth multipliers per U-Net-like level       |        [1, 2, 4, 8]        |
 | `NUM_RB_BLOCKS`       | Number of residual blocks                             |             2              |
 | `NUM_RB_CONV_BLOCKS`  | Number of convolutional layers per residual block     |             2              |
-| `ATTENTION_LEVELS`    | Boolean list to use attention at specific levels      | [False, False, True, True] |
+| `ATTENTION_LEVELS`    | Apply attention at specific levels                    | [False, False, True, True] |
 | `NUM_ATTENTION_HEADS` | Number of attention heads                             |             16             |
 | `NUM_GROUPS`          | Number of groups for group normalization              |             16             |
 | `PRE_TRAINED_PATH`    | Path to pretrained noise predictor weights [OPTIONAL] |                            |
@@ -108,21 +108,21 @@ Contains architecture and diffusion-related parameters.
 
 * Sampling Timestep Schedule Options
 
-| Option        | Description                 |
-|---------------|-----------------------------|
-| `'LINEAR'`    | Linear timestep schedule    |
-| `'GEOMETRIC'` | Geometric timestep schedule |
+| Option        | Description                 | Default |
+|---------------|-----------------------------|:-------:|
+| `'LINEAR'`    | Linear timestep schedule    |         |
+| `'GEOMETRIC'` | Geometric timestep schedule |    ✓    |
 
 ---
 
 * Beta Schedule Options
 
-| Option                             | Description                                | Parameter `P` Default |
-|------------------------------------|--------------------------------------------|:---------------------:|
-| `'GENERAL_SIGMOID'`                | Sigmoid-like noise schedule                |           2           |
-| `'GENERAL_SIGMOID_ANTIDERIVATIVE'` | Sigmoid-like antiderivative noise schedule |          10           |
-| `'CIRCULAR'`                       | Circular noise schedule                    |           5           |
-| `'PARABOLIC'`                      | Parabolic noise schedule                   |           2           |
+| Option                             | Description                            | Parameter `P` Default | Default |
+|------------------------------------|----------------------------------------|:---------------------:|:-------:|
+| `'GENERAL_SIGMOID'`                | Sigmoid-like β-schedule                |           2           |         |
+| `'GENERAL_SIGMOID_ANTIDERIVATIVE'` | Sigmoid-like antiderivative β-schedule |          10           |         |
+| `'CIRCULAR'`                       | Circular β-schedule                    |           5           |    ✓    |
+| `'PARABOLIC'`                      | Parabolic β-schedule                   |           2           |         |
 
 <hr style="border:1px solid gray">
 
@@ -132,16 +132,16 @@ Defines training parameters and optimization settings.
 
 * Noise Predictor Training Parameters
 
-| Parameter                         | Description                                                                           |   Default    |
-|-----------------------------------|---------------------------------------------------------------------------------------|:------------:|
-| `EPOCHS`                          | Number of training epochs                                                             |    10000     |
-| `BATCH_SIZE`                      | Mini-batch size                                                                       |      8       |
-| `NUM_GRADIENT_ACCUMULATION_STEPS` | Gradient accumulation steps before optimizer update                                   |      1       |
-| `LR_PATCH_SIZE`                   | Low-resolution patch size ([-1, -1, -1] for full images)                              | [32, 32, 32] |
-| `REPEAT_SAMPLE_FACTOR`            | Number of times each sample is repeated per epoch                                     |      1       |
-| `AUGMENTATION`                    | Apply data augmentation                                                               |    False     |
-| `FIX_LR_ENCODER`                  | Freeze LR encoder during noise predictor training                                     |     True     |
-| `SAVE_INTERVAL`                   | Epoch interval to save checkpoints                                                    |     100      |
+| Parameter                         | Description                                                   |   Default    |
+|-----------------------------------|---------------------------------------------------------------|:------------:|
+| `EPOCHS`                          | Number of training epochs                                     |    10000     |
+| `BATCH_SIZE`                      | Mini-batch size                                               |      8       |
+| `NUM_GRADIENT_ACCUMULATION_STEPS` | Number of gradient accumulation steps before optimizer update |      1       |
+| `LR_PATCH_SIZE`                   | Low-resolution patch size ([-1, -1, -1] for full images)      | [32, 32, 32] |
+| `REPEAT_SAMPLE_FACTOR`            | Number of times each sample is repeated per epoch             |      4       |
+| `AUGMENTATION`                    | Apply data augmentation                                       |    False     |
+| `FIX_LR_ENCODER`                  | Freeze LR encoder during noise predictor training             |     True     |
+| `SAVE_INTERVAL`                   | Epoch interval to save checkpoints                            |     100      |
 
 > Note: Patch-based training is not employed when `LR_PATCH_SIZE=[-1, -1, -1]`. In this scenario the training is done on full images, which is computationally more expensive.
 
@@ -170,13 +170,13 @@ Defines training parameters and optimization settings.
 
 * LR Encoder Pre-training Parameters
 
-| Parameter                                     | Description                                         | Default |
-|-----------------------------------------------|-----------------------------------------------------|:-------:|
-| `EPOCHS`                                      | Number of training epochs (-1 to skip pre-training) |   -1    |
-| `BATCH_SIZE`                                  | Mini-batch size                                     |    8    |
-| `NUM_GRADIENT_ACCUMULATION_STEPS`             | Gradient accumulation steps before optimizer update |    1    |
-| `REPEAT_SAMPLE_FACTOR`                        | Number of times each sample is repeated per epoch   |    1    |
-| `PRE_TRAINING_LR_ENCODER.PERCEPTUAL_LOSS_VGG` | Use VGG perceptual loss                             |  False  |
+| Parameter                         | Description                                                   | Default |
+|-----------------------------------|---------------------------------------------------------------|:-------:|
+| `EPOCHS`                          | Number of training epochs (-1 to skip pre-training)           |   -1    |
+| `BATCH_SIZE`                      | Mini-batch size                                               |    8    |
+| `NUM_GRADIENT_ACCUMULATION_STEPS` | Number of gradient accumulation steps before optimizer update |    1    |
+| `REPEAT_SAMPLE_FACTOR`            | Number of times each sample is repeated per epoch             |    4    |
+| `PERCEPTUAL_LOSS_VGG`             | Use VGG perceptual loss                                       |  True   |
 
 ---
 
