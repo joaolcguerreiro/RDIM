@@ -687,7 +687,7 @@ class GaussianDiffusion(nn.Module):
         self.lr_condition_encoding = lr_condition_encoding
 
         # Register buffers
-        sampling_timesteps = self.reverse_trajectory_timesteps(sampling_timestep_schedule=sampling_timestep_schedule, num_sampling_timesteps=num_sampling_timesteps)
+        sampling_timesteps = self.compute_reverse_trajectory_timesteps(sampling_timestep_schedule=sampling_timestep_schedule, num_sampling_timesteps=num_sampling_timesteps, num_timesteps=num_timesteps)
         betas, lambdas = self.compute_beta_schedule(beta_schedule=beta_schedule, num_timesteps=num_timesteps, **kwargs)
 
         self.register_buffer('sampling_timesteps', sampling_timesteps)
@@ -760,16 +760,14 @@ class GaussianDiffusion(nn.Module):
         else:
             raise NotImplementedError(f'Beta schedule {beta_schedule} not implemented.')
 
-    def sample_timesteps(self, num_samples):
-        return torch.randint(low=1, high=self.num_timesteps + 1, size=(num_samples,), dtype=torch.long)
-
-    def reverse_trajectory_timesteps(self, sampling_timestep_schedule='GEOMETRIC', num_sampling_timesteps=1):
-        assert 1 <= num_sampling_timesteps <= self.num_timesteps, f'Number of sampling timesteps ({num_sampling_timesteps}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
+    @staticmethod
+    def compute_reverse_trajectory_timesteps(sampling_timestep_schedule='GEOMETRIC', num_sampling_timesteps=1, num_timesteps=100):
+        assert 1 <= num_sampling_timesteps <= num_timesteps, f'Number of sampling timesteps ({num_sampling_timesteps}) must be (a) greater than or equal to 1 and (b) less than or equal to ({num_timesteps})'
 
         if sampling_timestep_schedule == 'LINEAR':
-            return reversed(torch.linspace(1, self.num_timesteps, steps=num_sampling_timesteps, dtype=torch.long)) if num_sampling_timesteps > 1 else torch.tensor([self.num_timesteps])
+            return reversed(torch.linspace(0, num_timesteps, steps=num_sampling_timesteps + 1, dtype=torch.long))[:-1]
         elif sampling_timestep_schedule == 'GEOMETRIC':
-            geometric_steps = torch.exp(torch.linspace(0, math.log(self.num_timesteps), num_sampling_timesteps)).floor().long()
+            geometric_steps = torch.exp(torch.linspace(0, math.log(num_timesteps), steps=num_sampling_timesteps + 1)).floor().long()[1:]
 
             # Compute unique geometric steps
             steps = []
@@ -780,18 +778,21 @@ class GaussianDiffusion(nn.Module):
                 step = max(step, prev_step + 1)
 
                 # Ensure step <= num_timesteps
-                step = min(step, self.num_timesteps)
+                step = min(step, num_timesteps)
 
                 # Save step and update previous step
                 steps.append(step)
                 prev_step = step
 
             # Ensure the last step is exactly num_timesteps
-            steps[-1] = self.num_timesteps
+            steps[-1] = num_timesteps
 
             return reversed(torch.tensor(steps, dtype=torch.long))
         else:
             raise NotImplementedError(f'Sampling timestep schedule {sampling_timestep_schedule} not implemented.')
+
+    def sample_timesteps(self, num_samples):
+        return torch.randint(low=1, high=self.num_timesteps + 1, size=(num_samples,), dtype=torch.long)
 
     def q_sample(self, x_0, delta, timestep):
         """
