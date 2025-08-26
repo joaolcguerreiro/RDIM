@@ -8,7 +8,8 @@
 4) [Prepare FMD Dataset](#prepare-fmd-dataset)
 5) [Prepare DIV2K Dataset](#prepare-div2k-dataset)
 6) [Prepare SIDD Dataset](#prepare-sidd-dataset)
-7) [Prepare Other Dataset](#prepare-other-dataset)
+7) [Prepare FFHQ Dataset](#prepare-ffhq-dataset)
+8) [Prepare Other Dataset](#prepare-other-dataset)
 
 <hr style="border:1px solid gray">
 
@@ -226,6 +227,48 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
 
 > Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py`.
+
+<hr style="border:1px solid gray">
+
+#### Prepare FFHQ Dataset
+
+1) Download [FFHQ](https://drive.google.com/drive/folders/1tZUcXDBeOibC6jcMCtgRRz67pzrAHeHL?usp=drive_open) dataset training split.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_ffhq> --dataset-name="FFHQ-<task>"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_ffhq.py --dir="../../data/FFHQ-<task>"
+   ```
+
+5) Run data formatting script:
+   ```
+   python format_ffhq.py --dir="../../data/FFHQ-<task>"
+   ```
+
+6) Run data splitting script:
+   ```
+   python split_data.py --dir="../../data/FFHQ-<task>"
+   ```
+
+7) Run data corruption script to create corrupted-original pairs for a specific task (inpainting, colorization or deblurring):
+   ```
+   python simulate_task.py --dir="../../data/FFHQ-<task>/training" --task=<task>
+   python simulate_task.py --dir="../../data/FFHQ-<task>/validation" --task=<task>
+   python simulate_task.py --dir="../../data/FFHQ-<task>/testing" --task=<task>
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py` and ignore `simulate_task.py` for `validation` directory.
 
 <hr style="border:1px solid gray">
 

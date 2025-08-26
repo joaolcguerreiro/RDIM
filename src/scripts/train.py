@@ -420,7 +420,6 @@ def main():
                 'gaussian_diffusion_beta_schedule_parameters': config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["GAUSSIAN_DIFFUSION"]["BETA_SCHEDULE"]],
                 'gaussian_diffusion_gamma': config["MODEL"]["GAUSSIAN_DIFFUSION"]["GAMMA"],
                 'gaussian_diffusion_eta': config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
-                'num_spatial_dimensions': config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
                 'gaussian_diffusion_num_spatial_dimensions': config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
                 'gaussian_diffusion_scale_factor': config["MODEL"]["SCALE_FACTOR"],
                 'gaussian_diffusion_lr_condition_encoding': config["MODEL"]["LR_CONDITION_ENCODING"],
