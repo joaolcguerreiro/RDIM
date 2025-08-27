@@ -13,16 +13,16 @@ def main():
             os.remove(license_file_path)
 
         # Move the data from the redundant intermediary directories to the root directory
-        src_dir_path = next(iter(glob(os.path.join(args.dir, '*'))), None)
+        src_dir_paths = [sub_dir for sub_dir in sorted(glob(os.path.join(args.dir, '*'))) if os.path.isdir(sub_dir)]
         dest_dir_path = args.dir
 
-        if src_dir_path and os.path.exists(src_dir_path):
+        for src_dir_path in src_dir_paths:
             for file_path in os.listdir(src_dir_path):
                 if file_path != ".DS_Store":
                     shutil.move(os.path.join(src_dir_path, file_path), dest_dir_path)
 
             # Remove redundant intermediary directory
-            shutil.rmtree(os.path.dirname(src_dir_path))
+            shutil.rmtree(src_dir_path)
     except Exception as e:
         print(f'An error occurred: {e}.\n' + 'If error remains download data again.')
 

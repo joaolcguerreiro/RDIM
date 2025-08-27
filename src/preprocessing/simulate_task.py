@@ -27,10 +27,10 @@ def main():
 
         # Task Specific Transforms
         task_transforms = {
-            'inpainting': transforms.Compose([
+            'Inpainting': transforms.Compose([
                 transforms.Lambda(lambda x: x * (np.random.rand(*x.shape) > args.mask_prob))
             ]),
-            'colorization': transforms.Compose([
+            'Colorization': transforms.Compose([
                 transforms.ToTensor(),
                 T.Grayscale(num_output_channels=1)
             ]),
@@ -65,13 +65,13 @@ def main():
             img = np.array(Image.open(file_path)).astype(np.uint8)
 
             # Apply the transformations
-            transformed_img = task_transforms[args.task](initial_transforms(img))
+            transformed_img = final_transforms(task_transforms[args.task](initial_transforms(img)))
 
             # Save volumes
             filename = os.path.basename(file_path)
 
             # Save image pair
-            Image.fromarray(transformed_img.astype(np.uint8)).save(os.path.join(args.dir, 'LR', filename))
+            Image.fromarray((transformed_img if transformed_img.shape[-1] > 1 else transformed_img.squeeze(-1)).astype(np.uint8)).save(os.path.join(args.dir, 'LR', filename))
             Image.fromarray(img.astype(np.uint8)).save(os.path.join(args.dir, 'HR', filename))
 
         # Remove root images
@@ -85,11 +85,11 @@ if __name__ == '__main__':
     # Define argument parser
     parser = argparse.ArgumentParser(description='Simulate Task Specific Corrupted Images')
     parser.add_argument('--dir', required=True, help='Path to directory with data', type=str)
-    parser.add_argument('--task', required=True, help='Image restoration task (inpainting, colorization, or deblurring)', type=str)
+    parser.add_argument('--task', required=True, help='Image restoration task (Inpainting, Colorization, or Deblurring)', type=str)
     parser.add_argument('--min', default=0, help='Minimum pixel value', type=int)
     parser.add_argument('--max', default=255, help='Maximum pixel value', type=int)
     parser.add_argument('--mask-prob', default=0.5, help='Probability of each pixel being masked and set to 0', type=float)
-    parser.add_argument('--blur-std', default=2.0, help='Gaussian blur kernel standard deviation', type=float)
+    parser.add_argument('--blur-std', default=3.0, help='Gaussian blur kernel standard deviation', type=float)
     parser.add_argument('--blur-size', default=15, help='Gaussian blur kernel size', type=int)
     args = parser.parse_args()
 
