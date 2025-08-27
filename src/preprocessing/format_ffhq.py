@@ -57,7 +57,7 @@ if __name__ == '__main__':
     parser.add_argument('--min', default=0, help='Minimum pixel value', type=int)
     parser.add_argument('--max', default=255, help='Maximum pixel value', type=int)
     parser.add_argument('--scale-factor', default=4, help='Scale factor to reduce data resolution and alleviate computation', type=int)
-    parser.add_argument('--keep-ratio', default=0.1, help='Fraction of samples kept in data reduction to alleviate computation', type=float)
+    parser.add_argument('--keep-ratio', default=1.0, help='Fraction of samples kept in data reduction to alleviate computation', type=float)
     args = parser.parse_args()
 
     main()
