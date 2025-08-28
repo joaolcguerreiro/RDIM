@@ -28,7 +28,7 @@ def main():
         # Task Specific Transforms
         task_transforms = {
             'Inpainting': transforms.Compose([
-                transforms.Lambda(lambda x: x * (np.random.rand(*x.shape) > args.mask_prob))
+                transforms.Lambda(lambda x: x * (np.random.rand(*x.shape[1:]) > args.mask_prob))
             ]),
             'Colorization': transforms.Compose([
                 transforms.ToTensor(),
