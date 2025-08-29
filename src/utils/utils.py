@@ -230,6 +230,10 @@ def compute_data_statistics(data_dir, num_spatial_dimensions, num_channels):
         if volume.ndim == num_spatial_dimensions:
             volume = np.expand_dims(volume, axis=0)
 
+        # Collapse to grayscale by averaging channels
+        if num_channels == 1 and volume.shape[0] > 1:
+            volume = np.mean(volume, axis=0, keepdims=True)
+
         for channel in range(num_channels):
             _min[channel] = min(_min[channel], np.min(volume[channel]))
             _max[channel] = max(_max[channel], np.max(volume[channel]))

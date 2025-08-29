@@ -53,6 +53,8 @@ Contains architecture and diffusion-related parameters.
 |--------------------------|----------------------------------------------------|:-------:|
 | `NUM_SPATIAL_DIMENSIONS` | Number of spatial dimensions (e.g., 3 for 3D data) |    3    |
 | `SCALE_FACTOR`           | Upsampling scale factor (1 for denoising tasks)    |    1    |
+| `IN_CHANNELS`            | Number of input channels                           |    1    |
+| `OUT_CHANNELS`           | Number of output channels                          |    1    |
 | `LR_CONDITION_ENCODING`  | Apply LR condition encoding                        |  False  |
 
 ---
@@ -74,8 +76,6 @@ Contains architecture and diffusion-related parameters.
 
 | Parameter             | Description                                           |          Default           |
 |-----------------------|-------------------------------------------------------|:--------------------------:|
-| `IN_CHANNELS`         | Number of input channels                              |             1              |
-| `OUT_CHANNELS`        | Number of output channels                             |             1              |
 | `NUM_INNER_FEATURES`  | Number of base features inside the U-Net-like network |            128             |
 | `FEATURE_MULTIPLIERS` | Feature growth multipliers per U-Net-like level       |        [1, 2, 4, 8]        |
 | `NUM_RB_BLOCKS`       | Number of residual blocks                             |             2              |
@@ -93,8 +93,6 @@ Contains architecture and diffusion-related parameters.
 
 | Parameter                     | Description                                        | Default |
 |-------------------------------|----------------------------------------------------|:-------:|
-| `IN_CHANNELS`                 | Number of input channels                           |    1    |
-| `OUT_CHANNELS`                | Number of output channels                          |    1    |
 | `NUM_FEATURES`                | Number of base features inside network             |   64    |
 | `NUM_RRDB_BLOCKS`             | Number of residual-in-residual dense blocks (RRDB) |    1    |
 | `NUM_RRDB_DB_BLOCKS`          | Number of dense blocks per RRDB block              |    2    |

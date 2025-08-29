@@ -51,9 +51,9 @@ def main():
 
     noise_predictor = NoisePredictor(
         num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
-        in_channels=checkpoint['noise_predictor_in_channels'],
-        out_channels=checkpoint['noise_predictor_out_channels'],
-        num_cond_features=(checkpoint['lr_encoder_num_features'] if checkpoint['gaussian_diffusion_lr_condition_encoding'] else checkpoint['noise_predictor_in_channels']),
+        in_channels=checkpoint['gaussian_diffusion_out_channels'],
+        out_channels=checkpoint['gaussian_diffusion_out_channels'],
+        num_cond_features=(checkpoint['lr_encoder_num_features'] if checkpoint['gaussian_diffusion_lr_condition_encoding'] else checkpoint['gaussian_diffusion_in_channels']),
         num_inner_features=checkpoint['noise_predictor_num_inner_features'],
         feature_multipliers=checkpoint['noise_predictor_feature_multipliers'],
         num_rb_blocks=checkpoint['noise_predictor_num_rb_blocks'],
@@ -67,8 +67,8 @@ def main():
     if checkpoint['gaussian_diffusion_lr_condition_encoding']:
         lr_encoder = LREncoder(
             num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
-            in_channels=checkpoint['lr_encoder_in_channels'],
-            out_channels=checkpoint['lr_encoder_out_channels'],
+            in_channels=checkpoint['gaussian_diffusion_in_channels'],
+            out_channels=checkpoint['gaussian_diffusion_out_channels'],
             num_features=checkpoint['lr_encoder_num_features'],
             num_rrdb_blocks=checkpoint['lr_encoder_num_rrdb_blocks'],
             num_rrdb_db_blocks=checkpoint['lr_encoder_num_rrdb_db_blocks'],
@@ -78,11 +78,11 @@ def main():
         ).to(device)
 
     # Log Noise Predictor and LR Encoder
-    summary(noise_predictor, input_data=[torch.randn(1, checkpoint['noise_predictor_in_channels'], *map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size']))), torch.randn(1, (checkpoint['lr_encoder_num_features'] if checkpoint['gaussian_diffusion_lr_condition_encoding'] else checkpoint['noise_predictor_in_channels']), *(lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size'])), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    summary(noise_predictor, input_data=[torch.randn(1, checkpoint['gaussian_diffusion_out_channels'], *map(lambda dim: dim * checkpoint['gaussian_diffusion_scale_factor'], (lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size']))), torch.randn(1, (checkpoint['lr_encoder_num_features'] if checkpoint['gaussian_diffusion_lr_condition_encoding'] else checkpoint['gaussian_diffusion_in_channels']), *(lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size'])), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
     if checkpoint['gaussian_diffusion_lr_condition_encoding']:
-        summary(lr_encoder, input_size=(1, checkpoint['lr_encoder_in_channels'], *(lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+        summary(lr_encoder, input_size=(1, checkpoint['gaussian_diffusion_in_channels'], *(lr_patch_size if (lr_patch_size := parse_patch_size(args.lr_patch_size, inference_dataset.get_low_resolution_shape(only_spatial_dims=True))) is not None else checkpoint['training_lr_patch_size'])), col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
         print_divisor(width=0, last=True, new_lines_offset=-1)
 
     # Use multiple GPUs if available

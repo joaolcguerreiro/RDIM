@@ -24,6 +24,8 @@ from src.utils.logger import setup_logging, print_divisor
 
 
 def main():
+    assert config["MODEL"]["IN_CHANNELS"] == 1 or config["MODEL"]["IN_CHANNELS"] == config["MODEL"]["OUT_CHANNELS"], f'Unsupported task. Expected 1 input channels or ({config["MODEL"]["OUT_CHANNELS"]}) to match output channels. Got ({config["MODEL"]["IN_CHANNELS"]}) input channels.'
+
     # Set seed for reproducibility
     set_seed(20)
 
@@ -31,7 +33,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
 
     # Compute training data statistics
-    _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], num_channels=config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"])
+    _min, _max, mean, std = compute_data_statistics(data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], num_channels=config["MODEL"]["IN_CHANNELS"])
 
     # Define datasets and data loaders
     train_dataset = SuperResolutionDataset(lr_data_dir=config["DATA"]["TRAINING"]["LR_DIR_PATH"], hr_data_dir=config["DATA"]["TRAINING"]["HR_DIR_PATH"], num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], scale_factor=config["MODEL"]["SCALE_FACTOR"], lr_patch_size=config["TRAINING"]["LR_PATCH_SIZE"], _min=_min, _max=_max, mean=mean, std=std, repeat_sample_factor=config["TRAINING"]["REPEAT_SAMPLE_FACTOR"], augmentation=config["TRAINING"]["AUGMENTATION"])
@@ -57,9 +59,9 @@ def main():
 
     noise_predictor = NoisePredictor(
         num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
-        in_channels=config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"],
-        out_channels=config["MODEL"]["NOISE_PREDICTOR"]["OUT_CHANNELS"],
-        num_cond_features=(config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["LR_CONDITION_ENCODING"] else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"]),
+        in_channels=config["MODEL"]["OUT_CHANNELS"],
+        out_channels=config["MODEL"]["OUT_CHANNELS"],
+        num_cond_features=(config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["LR_CONDITION_ENCODING"] else config["MODEL"]["IN_CHANNELS"]),
         num_inner_features=config["MODEL"]["NOISE_PREDICTOR"]["NUM_INNER_FEATURES"],
         feature_multipliers=config["MODEL"]["NOISE_PREDICTOR"]["FEATURE_MULTIPLIERS"],
         num_rb_blocks=config["MODEL"]["NOISE_PREDICTOR"]["NUM_RB_BLOCKS"],
@@ -73,8 +75,8 @@ def main():
     if config["MODEL"]["LR_CONDITION_ENCODING"]:
         lr_encoder = LREncoder(
             num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
-            in_channels=config["MODEL"]["LR_ENCODER"]["IN_CHANNELS"],
-            out_channels=config["MODEL"]["LR_ENCODER"]["OUT_CHANNELS"],
+            in_channels=config["MODEL"]["IN_CHANNELS"],
+            out_channels=config["MODEL"]["OUT_CHANNELS"],
             num_features=config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"],
             num_rrdb_blocks=config["MODEL"]["LR_ENCODER"]["NUM_RRDB_BLOCKS"],
             num_rrdb_db_blocks=config["MODEL"]["LR_ENCODER"]["NUM_RRDB_DB_BLOCKS"],
@@ -88,7 +90,7 @@ def main():
     lr_encoder.initialize_weights() if config["MODEL"]["LR_CONDITION_ENCODING"] else None
 
     # Log Noise Predictor and LR Encoder
-    summary(noise_predictor, input_data=[torch.randn(1, config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"], *train_dataset.get_high_resolution_shape(only_spatial_dims=True)), torch.randn(1, (config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["LR_CONDITION_ENCODING"] else config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"]), *train_dataset.get_low_resolution_shape(only_spatial_dims=True)), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
+    summary(noise_predictor, input_data=[torch.randn(1, *train_dataset.get_high_resolution_shape()), torch.randn(1, (config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["LR_CONDITION_ENCODING"] else config["MODEL"]["IN_CHANNELS"]), *train_dataset.get_low_resolution_shape(only_spatial_dims=True)), gaussian_diffusion.sample_timesteps(1)], col_names=("input_size", "output_size", "num_params"), depth=1, device=device)
     print_divisor(width=0, last=True, new_lines_offset=-1)
 
     if config["MODEL"]["LR_CONDITION_ENCODING"]:
@@ -422,9 +424,9 @@ def main():
                 'gaussian_diffusion_eta': config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
                 'gaussian_diffusion_num_spatial_dimensions': config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
                 'gaussian_diffusion_scale_factor': config["MODEL"]["SCALE_FACTOR"],
+                'gaussian_diffusion_in_channels': config["MODEL"]["IN_CHANNELS"],
+                'gaussian_diffusion_out_channels': config["MODEL"]["OUT_CHANNELS"],
                 'gaussian_diffusion_lr_condition_encoding': config["MODEL"]["LR_CONDITION_ENCODING"],
-                'noise_predictor_in_channels': config["MODEL"]["NOISE_PREDICTOR"]["IN_CHANNELS"],
-                'noise_predictor_out_channels': config["MODEL"]["NOISE_PREDICTOR"]["OUT_CHANNELS"],
                 'noise_predictor_num_inner_features': config["MODEL"]["NOISE_PREDICTOR"]["NUM_INNER_FEATURES"],
                 'noise_predictor_feature_multipliers': config["MODEL"]["NOISE_PREDICTOR"]["FEATURE_MULTIPLIERS"],
                 'noise_predictor_num_rb_blocks': config["MODEL"]["NOISE_PREDICTOR"]["NUM_RB_BLOCKS"],
@@ -444,8 +446,6 @@ def main():
 
             if config["MODEL"]["LR_CONDITION_ENCODING"]:
                 checkpoint_data['lr_encoder_state_dict'] = (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).state_dict()
-                checkpoint_data['lr_encoder_in_channels'] = config["MODEL"]["LR_ENCODER"]["IN_CHANNELS"]
-                checkpoint_data['lr_encoder_out_channels'] = config["MODEL"]["LR_ENCODER"]["OUT_CHANNELS"]
                 checkpoint_data['lr_encoder_num_features'] = config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"]
                 checkpoint_data['lr_encoder_num_rrdb_blocks'] = config["MODEL"]["LR_ENCODER"]["NUM_RRDB_BLOCKS"]
                 checkpoint_data['lr_encoder_num_rrdb_db_blocks'] = config["MODEL"]["LR_ENCODER"]["NUM_RRDB_DB_BLOCKS"]
