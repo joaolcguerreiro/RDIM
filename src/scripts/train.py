@@ -24,7 +24,7 @@ from src.utils.logger import setup_logging, print_divisor
 
 
 def main():
-    assert config["MODEL"]["IN_CHANNELS"] == 1 or config["MODEL"]["IN_CHANNELS"] == config["MODEL"]["OUT_CHANNELS"], f'Unsupported task. Expected 1 input channels or ({config["MODEL"]["OUT_CHANNELS"]}) to match output channels. Got ({config["MODEL"]["IN_CHANNELS"]}) input channels.'
+    assert config["MODEL"]["IN_CHANNELS"] == 1 or config["MODEL"]["IN_CHANNELS"] == config["MODEL"]["OUT_CHANNELS"], f'Unsupported task. Expected 1 input channel or input channels to match output channels ({config["MODEL"]["OUT_CHANNELS"]}). Got ({config["MODEL"]["IN_CHANNELS"]}) input channels instead.'
 
     # Set seed for reproducibility
     set_seed(20)
