@@ -42,7 +42,7 @@ def save_volume(volume, affine, header, filename, save_dir):
             os.path.join(save_dir, filename),
         )
     elif file_extension in ['.png', '.jpg', '.jpeg']:
-        Image.fromarray(volume.astype(np.uint8)).save(os.path.join(save_dir, filename))
+        Image.fromarray((volume if volume.shape[-1] > 1 else volume.squeeze(-1)).astype(np.uint8)).save(os.path.join(save_dir, filename))
     else:
         raise ValueError(f"Unsupported image format: {file_extension}")
 
