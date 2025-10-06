@@ -676,7 +676,7 @@ class LREncoder(nn.Module):
 
 
 class GaussianDiffusion(nn.Module):
-    def __init__(self, num_timesteps=100, num_sampling_timesteps=1, sampling_timestep_schedule='GEOMETRIC', beta_schedule='CIRCULAR', gamma=0.0, eta=0.0, num_spatial_dimensions=3, scale_factor=1, lr_condition_encoding=False, **kwargs):
+    def __init__(self, num_timesteps=100, num_sampling_timesteps=1, sampling_timestep_schedule='LINEAR', beta_schedule='CIRCULAR', gamma=0.0, eta=0.0, num_spatial_dimensions=3, scale_factor=1, in_channels=1, out_channels=1, lr_condition_encoding=False, **kwargs):
         super().__init__()
 
         self.num_timesteps = num_timesteps
@@ -684,6 +684,8 @@ class GaussianDiffusion(nn.Module):
         self.eta = eta
         self.num_spatial_dimensions = num_spatial_dimensions
         self.scale_factor = scale_factor
+        self.in_channels = in_channels
+        self.out_channels = out_channels
         self.lr_condition_encoding = lr_condition_encoding
 
         # Register buffers
@@ -761,7 +763,7 @@ class GaussianDiffusion(nn.Module):
             raise NotImplementedError(f'Beta schedule {beta_schedule} not implemented.')
 
     @staticmethod
-    def compute_reverse_trajectory_timesteps(sampling_timestep_schedule='GEOMETRIC', num_sampling_timesteps=1, num_timesteps=100):
+    def compute_reverse_trajectory_timesteps(sampling_timestep_schedule='LINEAR', num_sampling_timesteps=1, num_timesteps=100):
         assert 1 <= num_sampling_timesteps <= num_timesteps, f'Number of sampling timesteps ({num_sampling_timesteps}) must be (a) greater than or equal to 1 and (b) less than or equal to ({num_timesteps})'
 
         if sampling_timestep_schedule == 'LINEAR':
@@ -881,9 +883,6 @@ class GaussianDiffusion(nn.Module):
     def sample(self, x_lr, noise_predictor, lr_encoder=None, noise_predictor_inferer=None):
         assert not self.lr_condition_encoding or lr_encoder, f'LR Encoder is required because LR condition encoding is {self.lr_condition_encoding}'
 
-        # Get number of samples (batch size)
-        num_samples = x_lr.shape[0]
-
         # Set the noise predictor to evaluation mode
         noise_predictor.eval()
 
@@ -894,8 +893,11 @@ class GaussianDiffusion(nn.Module):
         # Upsample volume
         x_lr_up = torch.stack([upsample(volume, self.scale_factor, self.num_spatial_dimensions) for volume in x_lr])
 
+        # Get number of samples (batch size) and spatial dimensions
+        num_samples, _, *spatial_shape = x_lr_up.shape
+
         # Sample last timestep
-        x_t = x_lr_up + math.sqrt(math.pow(self.gamma, 2)) * torch.randn_like(x_lr_up)
+        x_t = x_lr_up + math.sqrt(math.pow(self.gamma, 2)) * torch.randn(num_samples, self.out_channels, *spatial_shape, device=x_lr_up.device)
 
         # Define previous sampling timesteps
         sampling_timesteps_m1 = torch.cat([self.sampling_timesteps[1:], torch.tensor([0], device=self.sampling_timesteps.device)], dim=0)

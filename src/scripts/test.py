@@ -46,6 +46,8 @@ def main():
         eta=(args.eta or checkpoint['gaussian_diffusion_eta']),
         num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
         scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
+        in_channels=checkpoint['gaussian_diffusion_in_channels'],
+        out_channels=checkpoint['gaussian_diffusion_out_channels'],
         lr_condition_encoding=checkpoint['gaussian_diffusion_lr_condition_encoding'],
         **{key.lower(): value for key, value in checkpoint['gaussian_diffusion_beta_schedule_parameters'].items()}
     ).to(device)
@@ -168,7 +170,7 @@ def main():
     for metric_name, metric_scores in metrics.get_scores().items():
         draw_box_plot(
             data=[
-                {'Model': ['SRMeDiff'] * len(metric_scores), 'Scale factor': [checkpoint['gaussian_diffusion_scale_factor']] * len(metric_scores), metric_name: metric_scores}
+                {'Model': ['RDIM'] * len(metric_scores), 'Scale factor': [checkpoint['gaussian_diffusion_scale_factor']] * len(metric_scores), metric_name: metric_scores}
             ],
             title='Quantitative Results',
             x_label='Scale factor',

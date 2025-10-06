@@ -2,7 +2,7 @@
 
 Official repository of Residual Diffusion Implicit Model (RDIM), a diffusion model tailored for inverse problems. 
 
-<img src="./figures/sample.gif" alt="RDIM qualitative results across every training epoch" width="100%">
+<img src="./figures/rdim.gif" alt="RDIM sampling" width="100%">
 
 <hr style="border:2px solid orange">
 

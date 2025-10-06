@@ -61,14 +61,14 @@ Contains architecture and diffusion-related parameters.
 
 * Gaussian Diffusion Parameters
 
-| Parameter                    | Description                                                                                                                |   Default   |
-|------------------------------|----------------------------------------------------------------------------------------------------------------------------|:-----------:|
-| `NUM_TIMESTEPS`              | Number of diffusion timesteps during training (Size of forward chain)                                                      |     100     |
-| `NUM_SAMPLING_TIMESTEPS`     | Number of diffusion timesteps during sampling (Size of reverse chain)                                                      |      1      |
-| `SAMPLING_TIMESTEP_SCHEDULE` | Schedule type for sampling timesteps                                                                                       | 'GEOMETRIC' |
-| `BETA_SCHEDULE`              | Schedule type for beta schedule                                                                                            | 'CIRCULAR'  |
-| `GAMMA`                      | Diffusion hyperparameter that controls the strength of the variance                                                        |     0.0     |
-| `ETA`                        | Diffusion hyperparameter that enables interpolation between deterministic (η=0.0) and stochastic (η=1.0) reverse processes |     0.0     |
+| Parameter                    | Description                                                                                                                |  Default   |
+|------------------------------|----------------------------------------------------------------------------------------------------------------------------|:----------:|
+| `NUM_TIMESTEPS`              | Number of diffusion timesteps during training (Size of forward chain)                                                      |    100     |
+| `NUM_SAMPLING_TIMESTEPS`     | Number of diffusion timesteps during sampling (Size of reverse chain)                                                      |     1      |
+| `SAMPLING_TIMESTEP_SCHEDULE` | Schedule type for sampling timesteps                                                                                       |  'LINEAR'  |
+| `BETA_SCHEDULE`              | Schedule type for beta schedule                                                                                            | 'CIRCULAR' |
+| `GAMMA`                      | Diffusion hyperparameter that controls the strength of the variance                                                        |    0.0     |
+| `ETA`                        | Diffusion hyperparameter that enables interpolation between deterministic (η=0.0) and stochastic (η=1.0) reverse processes |    0.0     |
 
 ---
 

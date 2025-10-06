@@ -53,6 +53,8 @@ def main():
         eta=config["MODEL"]["GAUSSIAN_DIFFUSION"]["ETA"],
         num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
         scale_factor=config["MODEL"]["SCALE_FACTOR"],
+        in_channels=config["MODEL"]["IN_CHANNELS"],
+        out_channels=config["MODEL"]["OUT_CHANNELS"],
         lr_condition_encoding=config["MODEL"]["LR_CONDITION_ENCODING"],
         **{key.lower(): value for key, value in config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["GAUSSIAN_DIFFUSION"]["BETA_SCHEDULE"]].items()}
     ).to(device)
