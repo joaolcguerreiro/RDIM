@@ -44,6 +44,10 @@ def main():
             # Take one slice along specified dimension
             image = np.take(volume, slice_index, axis=args.slice_dim)
 
+            if args.discard_background:
+                if np.mean(np.abs(image - args.min) < 1.0e-4) >= args.discard_background_threshold:
+                    continue
+
             # Save slice
             filename = f"{base_name}_slice_{slice_index:05d}.png"
             Image.fromarray((image if (image.ndim > 2 and image.shape[-1] > 1) else image.squeeze(-1)).astype(np.uint8)).save(os.path.join(save_dir, filename))
@@ -59,6 +63,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Slice 3D NIfTI volume into 2D images')
     parser.add_argument('--dir', required=True, help='Path to directory with processed 3D data', type=str)
     parser.add_argument('--slice-dim', default=2, help='Dimension along which to slice', type=int)
+    parser.add_argument('--discard-background', default=True, help='Discard slices that are mostly background', type=(lambda arg: (str(arg).lower() == 'true')))
+    parser.add_argument('--discard-background-threshold', default=0.95, help='Ratio of background pixels above which to discard slice', type=float)
+    parser.add_argument('--min', default=0, help='Minimum pixel value', type=int)
     args = parser.parse_args()
 
     main()
