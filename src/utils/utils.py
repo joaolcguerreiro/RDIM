@@ -41,7 +41,7 @@ def save_volume(volume, affine, header, filename, save_dir):
             nib.Nifti1Image(volume, affine=affine, header=header),
             os.path.join(save_dir, filename),
         )
-    elif file_extension in ['.png', '.jpg', '.jpeg']:
+    elif file_extension in ['.png', '.jpg', '.jpeg', '.tif', '.tiff']:
         Image.fromarray((volume if volume.shape[-1] > 1 else volume.squeeze(-1)).astype(np.uint8)).save(os.path.join(save_dir, filename))
     else:
         raise ValueError(f"Unsupported image format: {file_extension}")
@@ -53,7 +53,7 @@ def get_volume_data(volume_dir):
     if file_extension in ['.nii', '.nii.gz']:
         # Reverse NIfTI volume dimensions (W, H, [D], [C]) into PyTorch volume dimensions ([C], [D], H, W) = ([C], [Z], Y, X)
         return reverse_dimensions(load_volume(volume_dir).get_fdata().astype(np.float32))
-    elif file_extension in ['.png', '.jpg', '.jpeg']:
+    elif file_extension in ['.png', '.jpg', '.jpeg', '.tif', '.tiff']:
         # Reverse PIL image dimensions (H, W, [C]) into PyTorch image dimensions ([C], H, W) = ([C], Y, X) if channel dimension exists
         return move_dimension(image, -1, 0) if (image := np.array(load_image(volume_dir)).astype(np.float32)).ndim == 3 else image
     else:
