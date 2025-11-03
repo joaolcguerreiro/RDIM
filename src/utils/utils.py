@@ -5,6 +5,7 @@ import shutil
 import logging
 import torch
 import random
+import tifffile
 import nibabel as nib
 import numpy as np
 import seaborn as sns
@@ -26,7 +27,7 @@ def load_volume(volume_dir):
 
 
 def load_image(image_dir):
-    return Image.open(image_dir)
+    return tifffile.imread(image_dir) if get_file_extension(image_dir) in ['.tif', '.tiff'] else Image.open(image_dir)
 
 
 def save_volume(volume, affine, header, filename, save_dir):
@@ -34,26 +35,31 @@ def save_volume(volume, affine, header, filename, save_dir):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    file_extension = (re.search(r'(\.[^.]+(?:\.[^.]+)*)$', os.path.basename(filename)) or ['']).group(1).lower()
+    file_extension = get_file_extension(filename)
 
     if file_extension in ['.nii', '.nii.gz']:
         nib.save(
             nib.Nifti1Image(volume, affine=affine, header=header),
             os.path.join(save_dir, filename),
         )
-    elif file_extension in ['.png', '.jpg', '.jpeg', '.tif', '.tiff']:
+    elif file_extension in ['.tif', '.tiff']:
+        tifffile.imwrite(os.path.join(save_dir, filename), volume)
+    elif file_extension in ['.png', '.jpg', '.jpeg']:
         Image.fromarray((volume if volume.shape[-1] > 1 else volume.squeeze(-1)).astype(np.uint8)).save(os.path.join(save_dir, filename))
     else:
         raise ValueError(f"Unsupported image format: {file_extension}")
 
 
 def get_volume_data(volume_dir):
-    file_extension = (re.search(r'(\.[^.]+(?:\.[^.]+)*)$', os.path.basename(volume_dir)) or ['']).group(1).lower()
+    file_extension = get_file_extension(volume_dir)
 
     if file_extension in ['.nii', '.nii.gz']:
         # Reverse NIfTI volume dimensions (W, H, [D], [C]) into PyTorch volume dimensions ([C], [D], H, W) = ([C], [Z], Y, X)
         return reverse_dimensions(load_volume(volume_dir).get_fdata().astype(np.float32))
-    elif file_extension in ['.png', '.jpg', '.jpeg', '.tif', '.tiff']:
+    elif file_extension in ['.tif', '.tiff']:
+        # Reverse TIFF image dimensions (H, W, [C]) into PyTorch image dimensions ([C], H, W) = ([C], Y, X) if channel dimension exists
+        return move_dimension(image, -1, 0) if (image := load_image(volume_dir).astype(np.float32)).ndim == 3 else image
+    elif file_extension in ['.png', '.jpg', '.jpeg']:
         # Reverse PIL image dimensions (H, W, [C]) into PyTorch image dimensions ([C], H, W) = ([C], Y, X) if channel dimension exists
         return move_dimension(image, -1, 0) if (image := np.array(load_image(volume_dir)).astype(np.float32)).ndim == 3 else image
     else:
@@ -69,7 +75,7 @@ def get_volume_header(volume_dir):
 
 
 def get_volume_metadata(volume_dir):
-    file_extension = (re.search(r'(\.[^.]+(?:\.[^.]+)*)$', os.path.basename(volume_dir)) or ['']).group(1).lower()
+    file_extension = get_file_extension(volume_dir)
 
     return {
         'filename': os.path.basename(volume_dir),
@@ -383,7 +389,7 @@ def display_batch(lr_volumes=None, gen_volumes=None, gt_volumes=None, _min=None,
 
 def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):
     for volume, filename, affine, header in zip(volumes, volumes_metadata['filename'], volumes_metadata['affine'], volumes_metadata['header']):
-        file_extension = (re.search(r'(\.[^.]+(?:\.[^.]+)*)$', os.path.basename(filename)) or ['']).group(1).lower()
+        file_extension = get_file_extension(filename)
 
         # Denormalize volume
         volume = denormalize(volume, mean=mean, std=std)
@@ -645,6 +651,10 @@ def set_seed(seed=20):
     torch.backends.cudnn.benchmark = False
     random.seed(seed)
     np.random.seed(seed)
+
+
+def get_file_extension(file_path):
+    return (re.search(r'(\.[^.]+(?:\.[^.]+)*)$', os.path.basename(file_path)) or ['']).group(1).lower()
 
 
 def ensure_dir_exists(file_path):

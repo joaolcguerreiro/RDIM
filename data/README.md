@@ -276,7 +276,7 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 Supported file formats:
 
-* 2D Data - NifTI, PNG, JPG, JPEG, and TIFF.
+* 2D Data - NifTI, TIFF, PNG, JPG, and JPEG.
 
 * 3D Data - NifTI.
 
