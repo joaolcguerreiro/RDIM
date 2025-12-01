@@ -25,7 +25,7 @@ def main():
             os.remove(file_path)
 
         # Restructure dataset
-        dataset_names = ["Unknown-x2", "Unknown-x4"]
+        dataset_names = ["Unknown-x2", "Unknown-x4", "Bicubic-x2", "Bicubic-x4"]
 
         for dataset_name in dataset_names:
             new_dataset_path = os.path.join(os.path.dirname(args.dir), "DIV2K-" + dataset_name)

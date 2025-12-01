@@ -214,19 +214,12 @@ Every low-resolution image should have a corresponding high-resolution image. Th
    python clean_sidd.py --dir="../../data/SIDD"
    ```
 
-5) Run data splitting script:
-   ```
-   python split_data.py --dir="../../data/SIDD"
-   ```
-
-6) Run data formatting script:
+5) Run data formatting script:
    ```
    python format_sidd.py --dir="../../data/SIDD"
    ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
-
-> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py`.
 
 <hr style="border:1px solid gray">
 
