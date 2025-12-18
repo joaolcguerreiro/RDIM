@@ -130,16 +130,16 @@ Defines training parameters and optimization settings.
 
 * Noise Predictor Training Parameters
 
-| Parameter                         | Description                                                   |   Default    |
-|-----------------------------------|---------------------------------------------------------------|:------------:|
-| `EPOCHS`                          | Number of training epochs                                     |    10000     |
-| `BATCH_SIZE`                      | Mini-batch size                                               |      8       |
-| `NUM_GRADIENT_ACCUMULATION_STEPS` | Number of gradient accumulation steps before optimizer update |      1       |
-| `LR_PATCH_SIZE`                   | Low-resolution patch size ([-1, -1, -1] for full images)      | [32, 32, 32] |
-| `REPEAT_SAMPLE_FACTOR`            | Number of times each sample is repeated per epoch             |      4       |
-| `AUGMENTATION`                    | Apply data augmentation                                       |    False     |
-| `FIX_LR_ENCODER`                  | Freeze LR encoder during noise predictor training             |     True     |
-| `SAVE_INTERVAL`                   | Epoch interval to save checkpoints                            |     100      |
+| Parameter                         | Description                                                   |  Default   |
+|-----------------------------------|---------------------------------------------------------------|:----------:|
+| `EPOCHS`                          | Number of training epochs                                     |    1000    |
+| `BATCH_SIZE`                      | Mini-batch size                                               |     16     |
+| `NUM_GRADIENT_ACCUMULATION_STEPS` | Number of gradient accumulation steps before optimizer update |     1      |
+| `LR_PATCH_SIZE`                   | Low-resolution patch size ([-1, -1, -1] for full images)      | [128, 128] |
+| `REPEAT_SAMPLE_FACTOR`            | Number of times each sample is repeated per epoch             |     32     |
+| `AUGMENTATION`                    | Apply data augmentation                                       |   False    |
+| `FIX_LR_ENCODER`                  | Freeze LR encoder during noise predictor training             |    True    |
+| `SAVE_INTERVAL`                   | Epoch interval to save checkpoints                            |    100     |
 
 > Note: Patch-based training is not employed when `LR_PATCH_SIZE=[-1, -1, -1]`. In this scenario the training is done on full images, which is computationally more expensive.
 
@@ -171,9 +171,9 @@ Defines training parameters and optimization settings.
 | Parameter                         | Description                                                   | Default |
 |-----------------------------------|---------------------------------------------------------------|:-------:|
 | `EPOCHS`                          | Number of training epochs (-1 to skip pre-training)           |   -1    |
-| `BATCH_SIZE`                      | Mini-batch size                                               |    8    |
+| `BATCH_SIZE`                      | Mini-batch size                                               |   16    |
 | `NUM_GRADIENT_ACCUMULATION_STEPS` | Number of gradient accumulation steps before optimizer update |    1    |
-| `REPEAT_SAMPLE_FACTOR`            | Number of times each sample is repeated per epoch             |    4    |
+| `REPEAT_SAMPLE_FACTOR`            | Number of times each sample is repeated per epoch             |   32    |
 | `PERCEPTUAL_LOSS_VGG`             | Use VGG perceptual loss                                       |  True   |
 
 ---
