@@ -129,7 +129,7 @@ def main():
 
     # Define the loss function
     diffusion_criterion = nn.MSELoss().to(device)
-    perceptual_criterion = {'LPIPS': LPIPSLoss, 'SSIM': SSIMLoss}.get(config["TRAINING"]["PERCEPTUAL_LOSS"], (_ for _ in ()).throw(NotImplementedError(f'Perceptual loss {config["TRAINING"]["PERCEPTUAL_LOSS"]} not implemented.')))(num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], _min=_min, _max=_max, mean=mean, std=std).to(device)
+    perceptual_criterion = ({'LPIPS': LPIPSLoss, 'SSIM': SSIMLoss}.get(config["TRAINING"]["PERCEPTUAL_LOSS"]) or (_ for _ in ()).throw(NotImplementedError(f'Perceptual loss {config["TRAINING"]["PERCEPTUAL_LOSS"]} not implemented.')))(num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], _min=_min, _max=_max, mean=mean, std=std).to(device)
     content_criterion = nn.L1Loss().to(device)
 
     # Define number of epochs and resume training if applicable
