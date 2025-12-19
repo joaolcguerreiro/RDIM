@@ -18,7 +18,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.rdim import GaussianDiffusion, NoisePredictor, LREncoder
-from src.utils.losses import VGGLoss, SSIMLoss
+from src.utils.losses import LPIPSLoss, SSIMLoss
 from src.utils.utils import upsample, clamp, denormalize, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
@@ -129,7 +129,7 @@ def main():
 
     # Define the loss function
     diffusion_criterion = nn.MSELoss().to(device)
-    perceptual_criterion = VGGLoss(num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], _min=_min, _max=_max, mean=mean, std=std, patch_size=train_dataset.get_high_resolution_shape(only_spatial_dims=True)).to(device) if config['PRE_TRAINING_LR_ENCODER']['PERCEPTUAL_LOSS_VGG'] else SSIMLoss(num_spatial_dims=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], _min=_min, _max=_max, mean=mean, std=std).to(device)
+    perceptual_criterion = {'LPIPS': LPIPSLoss, 'SSIM': SSIMLoss}.get(config["TRAINING"]["PERCEPTUAL_LOSS"], (_ for _ in ()).throw(NotImplementedError(f'Perceptual loss {config["TRAINING"]["PERCEPTUAL_LOSS"]} not implemented.')))(num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], _min=_min, _max=_max, mean=mean, std=std).to(device)
     content_criterion = nn.L1Loss().to(device)
 
     # Define number of epochs and resume training if applicable
@@ -195,14 +195,14 @@ def main():
                 # Forward pass
                 gen_volumes = (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).pre_train_forward(lr_volumes)
 
-                # Compute perceptual loss
-                perceptual_loss = perceptual_criterion(gen_volumes, hr_volumes) if config['LOSS_WEIGHTS']['PRE_TRAIN_LR_ENCODER']['PERCEPTUAL_LOSS'] != 0.0 else 0.0
-
                 # Compute pixel-wise loss
                 content_loss = content_criterion(gen_volumes, hr_volumes) if config['LOSS_WEIGHTS']['PRE_TRAIN_LR_ENCODER']['CONTENT_LOSS'] != 0.0 else 0.0
 
+                # Compute perceptual loss
+                perceptual_loss = perceptual_criterion(gen_volumes, hr_volumes) if config['LOSS_WEIGHTS']['PRE_TRAIN_LR_ENCODER']['PERCEPTUAL_LOSS'] != 0.0 else 0.0
+
                 # LR Encoder Total loss
-                lr_encoder_total_loss = config['LOSS_WEIGHTS']['PRE_TRAIN_LR_ENCODER']['PERCEPTUAL_LOSS'] * perceptual_loss + config['LOSS_WEIGHTS']['PRE_TRAIN_LR_ENCODER']['CONTENT_LOSS'] * content_loss
+                lr_encoder_total_loss = config['LOSS_WEIGHTS']['PRE_TRAIN_LR_ENCODER']['CONTENT_LOSS'] * content_loss + config['LOSS_WEIGHTS']['PRE_TRAIN_LR_ENCODER']['PERCEPTUAL_LOSS'] * perceptual_loss
 
                 # Backward pass
                 remaining_batches = len(pre_train_lr_encoder_pbar) % config['PRE_TRAINING_LR_ENCODER']['NUM_GRADIENT_ACCUMULATION_STEPS']
@@ -288,8 +288,11 @@ def main():
             # Compute diffusion loss
             diffusion_loss = diffusion_criterion(volumes_0_pred, volumes_0)
 
+            # Compute perceptual loss
+            perceptual_loss = perceptual_criterion(volumes_0_pred, volumes_0) if config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] != 0.0 else 0.0
+
             # Noise Predictor Total loss
-            noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss
+            noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] * perceptual_loss
 
             # Backward pass
             remaining_batches = len(train_pbar) % config['TRAINING']['NUM_GRADIENT_ACCUMULATION_STEPS']
@@ -371,8 +374,11 @@ def main():
                     # Compute diffusion loss
                     diffusion_loss = diffusion_criterion(volumes_0_pred, volumes_0)
 
+                    # Compute perceptual loss
+                    perceptual_loss = perceptual_criterion(volumes_0_pred, volumes_0) if config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] != 0.0 else 0.0
+
                     # Noise Predictor Total loss
-                    noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss
+                    noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] * perceptual_loss
 
                     # Update the validation loss
                     noise_predictor_val_loss += noise_predictor_total_loss.item()

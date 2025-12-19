@@ -7,7 +7,6 @@
 3) [Model Configuration](#model-configuration)
 4) [Learning Stage Configuration](#learning-stage-configuration)
 5) [Evaluation Stage Configuration](#evaluation-stage-configuration)
-6) [Additional Schedule Options](#additional-schedule-options)
 
 <hr style="border:1px solid gray">
 
@@ -108,8 +107,8 @@ Contains architecture and diffusion-related parameters.
 
 | Option        | Description                 | Default |
 |---------------|-----------------------------|:-------:|
-| `'LINEAR'`    | Linear timestep schedule    |         |
-| `'GEOMETRIC'` | Geometric timestep schedule |    ✓    |
+| `'LINEAR'`    | Linear timestep schedule    |    ✓    |
+| `'GEOMETRIC'` | Geometric timestep schedule |         |
 
 ---
 
@@ -138,12 +137,22 @@ Defines training parameters and optimization settings.
 | `LR_PATCH_SIZE`                   | Low-resolution patch size ([-1, -1, -1] for full images)      | [128, 128] |
 | `REPEAT_SAMPLE_FACTOR`            | Number of times each sample is repeated per epoch             |     32     |
 | `AUGMENTATION`                    | Apply data augmentation                                       |   False    |
+| `PERCEPTUAL_LOSS`                 | Image quality metric for perceptual loss                      |  'LPIPS'   |
 | `FIX_LR_ENCODER`                  | Freeze LR encoder during noise predictor training             |    True    |
 | `SAVE_INTERVAL`                   | Epoch interval to save checkpoints                            |    100     |
 
 > Note: Patch-based training is not employed when `LR_PATCH_SIZE=[-1, -1, -1]`. In this scenario the training is done on full images, which is computationally more expensive.
 
 > Note: For denoising tasks, the `LR_PATCH_SIZE` equals the high-resolution (HR) patch-size, because `SCALE_FACTOR=1`.
+
+---
+
+* Perceptual Loss Options
+
+| Option    | Description                   | Default |
+|-----------|-------------------------------|:-------:|
+| `'LPIPS'` | Learned perceptual similarity |    ✓    |
+| `'SSIM'`  | Structural similarity         |         |
 
 ---
 
@@ -166,6 +175,15 @@ Defines training parameters and optimization settings.
 
 ---
 
+* Noise Predictor Loss Weights
+
+| Parameter         | Description                              | Default |
+|-------------------|------------------------------------------|:-------:|
+| `DIFFUSION_LOSS`  | Weight to control diffusion/content loss |   1.0   |
+| `PERCEPTUAL_LOSS` | Weight to control perceptual loss        | 5.0e-2  |
+
+---
+
 * LR Encoder Pre-training Parameters
 
 | Parameter                         | Description                                                   | Default |
@@ -174,7 +192,6 @@ Defines training parameters and optimization settings.
 | `BATCH_SIZE`                      | Mini-batch size                                               |   16    |
 | `NUM_GRADIENT_ACCUMULATION_STEPS` | Number of gradient accumulation steps before optimizer update |    1    |
 | `REPEAT_SAMPLE_FACTOR`            | Number of times each sample is repeated per epoch             |   32    |
-| `PERCEPTUAL_LOSS_VGG`             | Use VGG perceptual loss                                       |  True   |
 
 ---
 
@@ -198,13 +215,12 @@ Defines training parameters and optimization settings.
 
 ---
 
-* Loss Weights
+* LR Encoder Loss Weights
 
-| Parameter         | Description                                      | Default |
-|-------------------|--------------------------------------------------|:-------:|
-| `DIFFUSION_LOSS`  | Weight to control noise predictor diffusion loss |   1.0   |
-| `PERCEPTUAL_LOSS` | Weight to control LR Encoder perceptual loss     | 1.0e-2  |
-| `CONTENT_LOSS`    | Weight to control LR Encoder content loss        |   1.0   |
+| Parameter         | Description                       | Default |
+|-------------------|-----------------------------------|:-------:|
+| `CONTENT_LOSS`    | Weight to control content loss    |   1.0   |
+| `PERCEPTUAL_LOSS` | Weight to control perceptual loss | 1.0e-2  |
 
 <hr style="border:1px solid gray">
 
