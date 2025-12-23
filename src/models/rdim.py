@@ -340,9 +340,6 @@ class NoisePredictor(nn.Module):
         super().__init__()
         assert len(feature_multipliers) == len(attention_levels), f'Array size of attention levels ({len(attention_levels)}) must match array size of feature multipliers ({len(feature_multipliers)})'
 
-        # Upscaling factor
-        self.scale_factor = scale_factor
-
         # Number of Spatial Dimensions
         self.num_spatial_dimensions = num_spatial_dimensions
 
@@ -476,13 +473,12 @@ class NoisePredictor(nn.Module):
 
     def forward(self, x, x_cond, timestep):
         assert torch.all((torch.tensor(x.shape) % torch.tensor(x_cond.shape))[-self.num_spatial_dimensions:] == 0), f'Input spatial shape ({tuple(x.shape[-self.num_spatial_dimensions:])}) must be divisible by conditioning variable spatial shape ({tuple(x_cond.shape[-self.num_spatial_dimensions:])}) in every dimension'
-        assert torch.all((torch.tensor(x.shape) // torch.tensor(x_cond.shape))[-self.num_spatial_dimensions:] == torch.tensor(self.scale_factor)), f'Input shape ({tuple(x.shape[-self.num_spatial_dimensions:])}) must be a multiple of conditioning variable shape ({tuple(x_cond.shape[-self.num_spatial_dimensions:])}) with scale factor ({self.scale_factor}) in every dimension'
 
         # Pad input and conditioning variable to the nearest multiple
         pad_multiple = 2 ** len(self.encoder_blocks)
 
         x_pad = (pad_multiple - (torch.tensor(x.shape[-self.num_spatial_dimensions:]) % pad_multiple)) % pad_multiple
-        x_cond_pad = x_pad // torch.tensor(self.scale_factor)
+        x_cond_pad = x_pad // (torch.tensor(x.shape) // torch.tensor(x_cond.shape))[-self.num_spatial_dimensions:]
 
         x = nn.functional.pad(x, pad=list(reversed(torch.stack((x_pad, torch.zeros_like(x_pad)), dim=1).flatten())), mode='reflect')
         x_cond = nn.functional.pad(x_cond, pad=list(reversed(torch.stack((x_cond_pad, torch.zeros_like(x_cond_pad)), dim=1).flatten())), mode='reflect')
