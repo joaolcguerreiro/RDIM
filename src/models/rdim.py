@@ -363,7 +363,7 @@ class NoisePredictor(nn.Module):
             mode='trilinear' if num_spatial_dimensions == 3 else 'bilinear',
             activation=False,
             kernel_size=3, stride=1, padding=1
-        ) if scale_factor > 1 or num_cond_features != num_inner_features else nn.Identity()
+        ) if torch.any(torch.tensor(scale_factor) > 1) or num_cond_features != num_inner_features else nn.Identity()
 
         # Input Layer
         self.input = ConvolutionalBlock(
