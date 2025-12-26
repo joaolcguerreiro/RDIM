@@ -480,8 +480,8 @@ class NoisePredictor(nn.Module):
         scale_factor = (torch.tensor(x.shape) // torch.tensor(x_cond.shape))[-self.num_spatial_dimensions:]
 
         # Ensure padding multiple and scale factor are compatible
-        if not (pad_multiple % scale_factor == 0 or scale_factor % pad_multiple == 0):
-            pad_multiple *= scale_factor
+        if not torch.all((pad_multiple % scale_factor == 0) | (scale_factor % pad_multiple == 0)):
+            pad_multiple = torch.where((pad_multiple % scale_factor == 0) | (scale_factor % pad_multiple == 0), pad_multiple, pad_multiple * scale_factor)
 
         x_pad = (pad_multiple - (torch.tensor(x.shape[-self.num_spatial_dimensions:]) % pad_multiple)) % pad_multiple
         x_cond_pad = x_pad // scale_factor
