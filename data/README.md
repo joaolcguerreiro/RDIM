@@ -8,8 +8,9 @@
 4) [Prepare FMD Dataset](#prepare-fmd-dataset)
 5) [Prepare DIV2K Dataset](#prepare-div2k-dataset)
 6) [Prepare SIDD Dataset](#prepare-sidd-dataset)
-7) [Prepare FFHQ Dataset](#prepare-ffhq-dataset)
-8) [Prepare Other Dataset](#prepare-other-dataset)
+7) [Prepare DND Dataset](#prepare-dnd-dataset)
+8) [Prepare FFHQ Dataset](#prepare-ffhq-dataset)
+9) [Prepare Other Dataset](#prepare-other-dataset)
 
 <hr style="border:1px solid gray">
 
@@ -223,6 +224,34 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
+#### Prepare DND Dataset
+
+1) Download [DND](https://noise.visinf.tu-darmstadt.de/) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_dnd> --dataset-name="DND"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_dnd.py --dir="../../data/DND"
+   ```
+
+5) Run data formatting script:
+   ```
+   python format_dnd.py --dir="../../data/DND"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
 #### Prepare FFHQ Dataset
 
 1) Download [FFHQ](https://drive.google.com/drive/folders/1tZUcXDBeOibC6jcMCtgRRz67pzrAHeHL?usp=drive_open) dataset training split.
@@ -269,9 +298,9 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 Supported file formats:
 
-* 2D Data - NifTI, TIFF, PNG, JPG, and JPEG.
+* 2D Data - NifTI, TIFF, HDF5, MAT, PNG, JPG, and JPEG.
 
-* 3D Data - NifTI.
+* 3D Data - NifTI, HDF5, and MAT.
 
 Accepted data shapes are as follows:
 
@@ -279,7 +308,7 @@ Accepted data shapes are as follows:
 
 * 3D Data - `(W, H, D)` and `(W, H, D, C)`.
 
-> Note: For NifTI the dimensions order is reversed during execution to align with PyTorch. For the other file formats the channel dimension is moved to the first position.
+> Note: For NifTI the dimensions order is reversed during execution to align with PyTorch. For HDF5 and MAT dimension order is preserved, assuming alignment with PyTorch. For the other file formats the channel dimension is moved to the first position.
 
 Every low-resolution image should have a corresponding high-resolution image. The image files of each LR-HR pair should have the same filename. The following illustrates a valid dataset structure:
 

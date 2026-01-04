@@ -6,6 +6,7 @@ import logging
 import torch
 import random
 import tifffile
+import h5py
 import nibabel as nib
 import numpy as np
 import seaborn as sns
@@ -23,11 +24,17 @@ from src.utils.transforms import PermuteDimensions, ReverseDimensions, MoveDimen
 
 
 def load_volume(volume_dir):
-    return nib.load(volume_dir)
+    file_extension = get_file_extension(volume_dir)
 
-
-def load_image(image_dir):
-    return tifffile.imread(image_dir) if get_file_extension(image_dir) in ['.tif', '.tiff'] else Image.open(image_dir)
+    if file_extension in ['.nii', '.nii.gz']:
+        return nib.load(volume_dir)
+    elif file_extension in ['.tif', '.tiff']:
+        return tifffile.imread(volume_dir)
+    elif file_extension in ['.h5', '.hdf5', '.mat']:
+        with h5py.File(volume_dir, 'r') as f:
+            return np.array(next(iter(f.values())))
+    else:
+        return Image.open(volume_dir)
 
 
 def save_volume(volume, affine, header, filename, save_dir):
@@ -38,12 +45,12 @@ def save_volume(volume, affine, header, filename, save_dir):
     file_extension = get_file_extension(filename)
 
     if file_extension in ['.nii', '.nii.gz']:
-        nib.save(
-            nib.Nifti1Image(volume, affine=affine, header=header),
-            os.path.join(save_dir, filename),
-        )
+        nib.save(nib.Nifti1Image(volume, affine=affine, header=header), os.path.join(save_dir, filename))
     elif file_extension in ['.tif', '.tiff']:
         tifffile.imwrite(os.path.join(save_dir, filename), volume)
+    elif file_extension in ['.h5', '.hdf5', '.mat']:
+        with h5py.File(os.path.join(save_dir, filename), 'w') as f:
+            f.create_dataset('data', data=volume)
     elif file_extension in ['.png', '.jpg', '.jpeg']:
         Image.fromarray((volume if volume.shape[-1] > 1 else volume.squeeze(-1)).astype(np.uint8)).save(os.path.join(save_dir, filename))
     else:
@@ -58,10 +65,13 @@ def get_volume_data(volume_dir):
         return reverse_dimensions(load_volume(volume_dir).get_fdata().astype(np.float32))
     elif file_extension in ['.tif', '.tiff']:
         # Reverse TIFF image dimensions (H, W, [C]) into PyTorch image dimensions ([C], H, W) = ([C], Y, X) if channel dimension exists
-        return move_dimension(image, -1, 0) if (image := load_image(volume_dir).astype(np.float32)).ndim == 3 else image
+        return move_dimension(image, -1, 0) if (image := load_volume(volume_dir).astype(np.float32)).ndim == 3 else image
+    elif file_extension in ['.h5', '.hdf5', '.mat']:
+        # Assume HDF5/MAT image dimensions match PyTorch image dimensions ([C], [D], H, W) = ([C], [Z], Y, X)
+        return load_volume(volume_dir).astype(np.float32)
     elif file_extension in ['.png', '.jpg', '.jpeg']:
         # Reverse PIL image dimensions (H, W, [C]) into PyTorch image dimensions ([C], H, W) = ([C], Y, X) if channel dimension exists
-        return move_dimension(image, -1, 0) if (image := np.array(load_image(volume_dir)).astype(np.float32)).ndim == 3 else image
+        return move_dimension(image, -1, 0) if (image := np.array(load_volume(volume_dir)).astype(np.float32)).ndim == 3 else image
     else:
         raise ValueError(f"Unsupported image format: {file_extension}")
 
