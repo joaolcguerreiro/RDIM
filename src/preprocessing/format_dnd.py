@@ -24,7 +24,7 @@ def main():
         # Parse files
         for file_path in file_paths:
             if file_path.endswith('.mat'):
-                shutil.move(os.path.join(test_dir_path, file_path), lr_dir_path)
+                shutil.move(file_path, lr_dir_path)
             else:
                 os.remove(file_path)
 
