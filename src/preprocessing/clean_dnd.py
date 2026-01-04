@@ -34,7 +34,7 @@ def main():
         items = os.listdir(args.dir)
 
         for item in items:
-            if item not in ['testing']:
+            if item not in ['testing', 'info.mat']:
                 item_path = os.path.join(args.dir, item)
 
                 if os.path.isdir(item_path):
