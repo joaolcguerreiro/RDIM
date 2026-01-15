@@ -9,8 +9,10 @@
 5) [Prepare DIV2K Dataset](#prepare-div2k-dataset)
 6) [Prepare SIDD Dataset](#prepare-sidd-dataset)
 7) [Prepare DND Dataset](#prepare-dnd-dataset)
-8) [Prepare FFHQ Dataset](#prepare-ffhq-dataset)
-9) [Prepare Other Dataset](#prepare-other-dataset)
+8) [Prepare GoPro Dataset](#prepare-gopro-dataset)
+9) [Prepare HIDE Dataset](#prepare-hide-dataset)
+10) [Prepare FFHQ Dataset](#prepare-ffhq-dataset)
+11) [Prepare Other Dataset](#prepare-other-dataset)
 
 <hr style="border:1px solid gray">
 
@@ -246,6 +248,62 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 5) Run data formatting script:
    ```
    python format_dnd.py --dir="../../data/DND"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
+#### Prepare GoPro Dataset
+
+1) Download [GoPro](https://seungjunnah.github.io/Datasets/gopro.html) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_gopro> --dataset-name="GoPro"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_gopro.py --dir="../../data/GoPro"
+   ```
+
+5) Run data formatting script:
+   ```
+   python format_gopro.py --dir="../../data/GoPro"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
+#### Prepare HIDE Dataset
+
+1) Download [HIDE](https://github.com/joanshen0508/HA_deblur) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_hide> --dataset-name="HIDE"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_hide.py --dir="../../data/HIDE"
+   ```
+
+5) Run data formatting script:
+   ```
+   python format_hide.py --dir="../../data/HIDE"
    ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
