@@ -11,8 +11,9 @@
 7) [Prepare DND Dataset](#prepare-dnd-dataset)
 8) [Prepare GoPro Dataset](#prepare-gopro-dataset)
 9) [Prepare HIDE Dataset](#prepare-hide-dataset)
-10) [Prepare FFHQ Dataset](#prepare-ffhq-dataset)
-11) [Prepare Other Dataset](#prepare-other-dataset)
+10) [Prepare Dunhuang Grottoes Painting Dataset](#prepare-dunhuang-grottoes-painting-dataset)
+11) [Prepare FFHQ Dataset](#prepare-ffhq-dataset)
+12) [Prepare Other Dataset](#prepare-other-dataset)
 
 <hr style="border:1px solid gray">
 
@@ -304,6 +305,34 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 5) Run data formatting script:
    ```
    python format_hide.py --dir="../../data/HIDE"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
+#### Prepare Dunhuang Grottoes Painting Dataset
+
+1) Download [Dunhuang Grottoes Painting](https://www.kaggle.com/datasets/xuhangc/dunhuang-grottoes-painting-dataset-and-benchmark) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_dunhuang_gp> --dataset-name="Dunhuang-GP"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_dunhuang_gp.py --dir="../../data/Dunhuang-GP"
+   ```
+
+5) Run data formatting script:
+   ```
+   python format_dunhuang_gp.py --dir="../../data/Dunhuang-GP"
    ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
