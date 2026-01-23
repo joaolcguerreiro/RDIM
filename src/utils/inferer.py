@@ -225,7 +225,7 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
                         int(original_idx[axis].start * z_scale[axis - 2]),
                         int(original_idx[axis].stop * z_scale[axis - 2])
                     )
-            out[idx_zm] += p
+            out[tuple(idx_zm)] += p
 
     def clear_conditions_cache(self):
         self.conditions_cache.clear()
@@ -365,13 +365,13 @@ class MultiScaleConditionalSlidingWindowInferer(Inferer):
                 for idx in slice_range
             ]
             if self.sw_batch_size > 1:
-                win_data = torch.cat([inputs[win_slice] for win_slice in unravel_slice]).to(sw_device)
-                win_cond_data = torch.cat([conditions[win_cond_slice] for win_cond_slice in conditions_unravel_slice]).to(sw_device)
-                time_data = torch.cat([timesteps[time_slice] for time_slice in time_unravel_slice]).to(sw_device)
+                win_data = torch.cat([inputs[tuple(win_slice)] for win_slice in unravel_slice]).to(sw_device)
+                win_cond_data = torch.cat([conditions[tuple(win_cond_slice)] for win_cond_slice in conditions_unravel_slice]).to(sw_device)
+                time_data = torch.cat([timesteps[tuple(time_slice)] for time_slice in time_unravel_slice]).to(sw_device)
             else:
-                win_data = inputs[unravel_slice[0]].to(sw_device)
-                win_cond_data = conditions[conditions_unravel_slice[0]].to(sw_device)
-                time_data = timesteps[time_unravel_slice[0]].to(sw_device)
+                win_data = inputs[tuple(unravel_slice[0])].to(sw_device)
+                win_cond_data = conditions[tuple(conditions_unravel_slice[0])].to(sw_device)
+                time_data = timesteps[tuple(time_unravel_slice[0])].to(sw_device)
             if conditions_network:
                 if cache_conditions:
                     win_cond_key = win_cond_data.cpu().detach().numpy().tobytes()

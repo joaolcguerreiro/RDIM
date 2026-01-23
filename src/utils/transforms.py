@@ -668,7 +668,7 @@ class RandSpatialCrop(RandomizableTransform):
 
         # Crop volume
         slicer = [slice(None)] + [slice(start, start + size) if size > 0 else slice(None) for start, size in zip(volume_start_pos, volume_patch_size)]
-        volume_crop = volume[slicer]
+        volume_crop = volume[tuple(slicer)]
 
         return volume_crop
 
@@ -926,7 +926,7 @@ class RandSimulateLowField(RandomizableTransform):
         start_index = tuple((dim - cropped_dim) // 2 for dim, cropped_dim in zip(high_field_k_space_data.shape, cropped_region_size))
         end_index = tuple(start + cropped_dim for start, cropped_dim in zip(start_index, cropped_region_size))
         slicer = [slice(start, end) for start, end in zip(start_index, end_index)]
-        low_field_k_space_data = high_field_k_space_data[slicer]
+        low_field_k_space_data = high_field_k_space_data[tuple(slicer)]
 
         # Add Gaussian noise
         real_noise = self.R.normal(self.mean, self.real_rand_std, size=low_field_k_space_data.shape)

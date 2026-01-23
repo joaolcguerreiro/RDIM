@@ -527,7 +527,7 @@ class NoisePredictor(nn.Module):
 
         # Unpad output
         slicer = [slice(None)] * (out.dim() - self.num_spatial_dimensions) + [slice(None, -pad if pad > 0 else None) for pad in x_pad]
-        out = out[slicer]
+        out = out[tuple(slicer)]
 
         return out
 
