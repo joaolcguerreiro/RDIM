@@ -12,8 +12,9 @@
 8) [Prepare GoPro Dataset](#prepare-gopro-dataset)
 9) [Prepare HIDE Dataset](#prepare-hide-dataset)
 10) [Prepare Dunhuang Grottoes Painting Dataset](#prepare-dunhuang-grottoes-painting-dataset)
-11) [Prepare FFHQ Dataset](#prepare-ffhq-dataset)
-12) [Prepare Other Dataset](#prepare-other-dataset)
+11) [Prepare Rain100H Dataset](#prepare-rain100h-dataset)
+12) [Prepare FFHQ Dataset](#prepare-ffhq-dataset)
+13) [Prepare Other Dataset](#prepare-other-dataset)
 
 <hr style="border:1px solid gray">
 
@@ -333,6 +334,29 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 5) Run data formatting script:
    ```
    python format_dunhuang_gp.py --dir="../../data/Dunhuang-GP"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
+#### Prepare Rain100H Dataset
+
+1) Download [Rain100H](https://www.kaggle.com/datasets/nguynhoitrung/rain100h) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_rain100h> --dataset-name="Rain100H"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_rain100h.py --dir="../../data/Rain100H"
    ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).

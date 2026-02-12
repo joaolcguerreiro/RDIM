@@ -405,7 +405,7 @@ def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):
         volume = denormalize(volume, mean=mean, std=std)
 
         # Correct volume dimension order
-        volume = reverse_dimensions(volume) if file_extension in ['.nii', '.nii.gz'] else move_dimension(volume, 0, -1)
+        volume = reverse_dimensions(volume) if file_extension in ['.nii', '.nii.gz'] else (move_dimension(volume, 0, -1) if file_extension in ['.tif', '.tiff', '.png', '.jpg', '.jpeg'] else volume)
 
         save_volume(volume.to('cpu').numpy(), affine, header, filename, save_dir_path)
 

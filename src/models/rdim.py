@@ -172,7 +172,7 @@ class SelfAttentionBlock(nn.Module):
         # Reshape and transpose normalized input tensor to process depth feature maps rather than spatial maps
         # [batch, in_channels, D, H, W] => [batch, D*H*W, in_channels] = [batch, sequence_len, num_embedding_dims]
         batch, in_channels, *spatial_shape = out.shape
-        out = out.view(batch, in_channels, torch.tensor(spatial_shape).prod()).transpose(-2, -1).contiguous()
+        out = out.view(batch, in_channels, -1).transpose(-2, -1).contiguous()
 
         # Apply Attention Mechanism
         out, _ = self.attention(query=out, key=out, value=out, need_weights=False)

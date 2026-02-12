@@ -3,7 +3,6 @@ import h5py
 import shutil
 import argparse
 import numpy as np
-import scipy.io as sio
 from glob import glob
 
 
