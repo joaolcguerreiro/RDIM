@@ -18,7 +18,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.rdim import GaussianDiffusion, NoisePredictor, LREncoder
-from src.utils.losses import LPIPSLoss, SSIMLoss
+from src.utils.losses import CharbonnierLoss, LPIPSLoss, SSIMLoss
 from src.utils.utils import upsample, clamp, denormalize, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logging, print_divisor
 
@@ -128,7 +128,7 @@ def main():
         pre_train_lr_encoder_scheduler = optim.lr_scheduler.StepLR(pre_train_lr_encoder_optimizer, step_size=config['SCHEDULER']['PRE_TRAIN_LR_ENCODER']['STEP_SIZE'], gamma=config['SCHEDULER']['PRE_TRAIN_LR_ENCODER']['GAMMA'])
 
     # Define the loss function
-    diffusion_criterion = nn.MSELoss().to(device)
+    diffusion_criterion = ({'MSE': nn.MSELoss, 'MAE': nn.L1Loss, 'CHARBONNIER': CharbonnierLoss}.get(config["TRAINING"]["DIFFUSION_LOSS"]) or (_ for _ in ()).throw(NotImplementedError(f'Diffusion loss {config["TRAINING"]["DIFFUSION_LOSS"]} not implemented.')))().to(device)
     perceptual_criterion = ({'LPIPS': LPIPSLoss, 'SSIM': SSIMLoss}.get(config["TRAINING"]["PERCEPTUAL_LOSS"]) or (_ for _ in ()).throw(NotImplementedError(f'Perceptual loss {config["TRAINING"]["PERCEPTUAL_LOSS"]} not implemented.')))(num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"], _min=_min, _max=_max, mean=mean, std=std).to(device)
     content_criterion = nn.L1Loss().to(device)
 

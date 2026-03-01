@@ -137,6 +137,7 @@ Defines training parameters and optimization settings.
 | `LR_PATCH_SIZE`                   | Low-resolution patch size ([-1, -1, -1] for full images)      | [128, 128] |
 | `REPEAT_SAMPLE_FACTOR`            | Number of times each sample is repeated per epoch             |     32     |
 | `AUGMENTATION`                    | Apply data augmentation                                       |   False    |
+| `DIFFUSION_LOSS`                  | Image quality metric for diffusion loss                       |   'MSE'    |
 | `PERCEPTUAL_LOSS`                 | Image quality metric for perceptual loss                      |  'LPIPS'   |
 | `FIX_LR_ENCODER`                  | Freeze LR encoder during noise predictor training             |    True    |
 | `SAVE_INTERVAL`                   | Epoch interval to save checkpoints                            |    100     |
@@ -144,6 +145,16 @@ Defines training parameters and optimization settings.
 > Note: Patch-based training is not employed when `LR_PATCH_SIZE=[-1, -1, -1]`. In this scenario the training is done on full images, which is computationally more expensive.
 
 > Note: For denoising tasks, the `LR_PATCH_SIZE` equals the high-resolution (HR) patch-size, because `SCALE_FACTOR=1`.
+
+---
+
+* Diffusion Loss Options
+
+| Option          | Description                | Default |
+|-----------------|----------------------------|:-------:|
+| `'MSE'`         | Mean squared error         |    ✓    |
+| `'MAE'`         | Mean absolute error        |         |
+| `'CHARBONNIER'` | Smooth mean absolute error |         |
 
 ---
 

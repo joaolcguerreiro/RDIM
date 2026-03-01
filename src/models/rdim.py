@@ -486,7 +486,7 @@ class NoisePredictor(nn.Module):
         x_pad = (pad_multiple - (torch.tensor(x.shape[-self.num_spatial_dimensions:]) % pad_multiple)) % pad_multiple
         x_cond_pad = x_pad // scale_factor
 
-        x = nn.functional.pad(x, pad=list(reversed(torch.stack((x_pad, torch.zeros_like(x_pad)), dim=1).flatten())), mode='reflect')
+        x = long_range_skip_connection = nn.functional.pad(x, pad=list(reversed(torch.stack((x_pad, torch.zeros_like(x_pad)), dim=1).flatten())), mode='reflect')
         x_cond = nn.functional.pad(x_cond, pad=list(reversed(torch.stack((x_cond_pad, torch.zeros_like(x_cond_pad)), dim=1).flatten())), mode='reflect')
 
         # Compute timestep embedding using sinusoidal positional encoding
@@ -524,6 +524,9 @@ class NoisePredictor(nn.Module):
         # Concat skip connection and apply output layer
         out = torch.cat([out, skip_connection], dim=1)
         out = self.output(out)
+
+        # Add long-range skip connection
+        out = out + long_range_skip_connection
 
         # Unpad output
         slicer = [slice(None)] * (out.dim() - self.num_spatial_dimensions) + [slice(None, -pad if pad > 0 else None) for pad in x_pad]
