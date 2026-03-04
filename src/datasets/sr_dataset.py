@@ -1,12 +1,11 @@
 import os
 import sys
-import math
 import monai.transforms as transforms
 import torch
 from torch.utils.data import Dataset
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.utils import get_volume_data, get_volume_metadata, compute_super_resolution_volume_metadata
-from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, NormalizeIntensity, RandSpatialCrop, RandTranslate
+from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, NormalizeIntensity, RandSpatialCrop, RandTranspose
 
 
 class SuperResolutionDataset(Dataset):
@@ -39,23 +38,17 @@ class SuperResolutionDataset(Dataset):
             transforms.ToTensor(),
         ])
 
-        # Data Augmentation Transforms
-        self.augmentation_transforms = transforms.Compose([
-            NormalizeIntensity(mean=_min, std=(_max-_min), channel_wise=True) if (_min is not None and _max is not None) else transforms.Identity(),
-            transforms.RandFlip(prob=0.3),
-            transforms.RandRotate(prob=0.3, range_x=math.radians(10), range_y=math.radians(10), range_z=math.radians(10), padding_mode="zeros"),
-            transforms.RandGridDistortion(prob=0.1, num_cells=5, distort_limit=0.05, padding_mode="zeros"),
-            transforms.RandZoom(prob=0.3, min_zoom=0.95, max_zoom=1.05, mode="trilinear" if num_spatial_dimensions == 3 else "bilinear", padding_mode="constant", value=0),
-            transforms.RandAffine(prob=0.1, shear_range=0.05, padding_mode="zeros"),
-            RandTranslate(prob=0.3, translate_range=0.05, padding_mode="zeros"),
-            NormalizeIntensity(mean=-_min/(_max-_min), std=1/(_max-_min), channel_wise=True) if (_min is not None and _max is not None) else transforms.Identity(),
-        ]) if augmentation else transforms.Compose([])
-
         # Patch-based computation transform
         if lr_patch_size is None:
             lr_patch_size = (-1,) * num_spatial_dimensions
 
         self.patch_transform = RandSpatialCrop(lr_patch_size=lr_patch_size)
+
+        # Data Augmentation Transforms
+        self.augmentation_transforms = transforms.Compose([
+            RandTranspose(prob=1.0),
+            *[transforms.RandFlip(prob=0.5, spatial_axis=dim) for dim in range(0, num_spatial_dimensions)],
+        ]) if augmentation else transforms.Compose([])
 
     def __len__(self):
         return len(self.lr_files) if self.lr_data_dir else (len(self.hr_files) if self.hr_data_dir else 0)
@@ -74,13 +67,13 @@ class SuperResolutionDataset(Dataset):
 
         sr_metadata = get_volume_metadata(hr_volume_path) if self.hr_data_dir else (compute_super_resolution_volume_metadata(lr_metadata=get_volume_metadata(lr_volume_path), num_spatial_dimensions=(lr_volume.dim() - 1), scale_factor=self.scale_factor) if self.lr_data_dir else None)
 
-        # Employ Data Augmentation
-        lr_volume = self.apply_random_transform(transform=self.augmentation_transforms, volume=lr_volume, seed=seed) if self.lr_data_dir else None
-        hr_volume = self.apply_random_transform(transform=self.augmentation_transforms, volume=hr_volume, seed=seed) if self.hr_data_dir else None
-
         # Employ Patch Crop
         lr_volume = self.apply_random_transform(transform=self.patch_transform, volume=lr_volume, seed=seed, scale_factor=1) if self.lr_data_dir else None
         hr_volume = self.apply_random_transform(transform=self.patch_transform, volume=hr_volume, seed=seed, scale_factor=self.scale_factor) if self.hr_data_dir else None
+
+        # Employ Data Augmentation
+        lr_volume = self.apply_random_transform(transform=self.augmentation_transforms, volume=lr_volume, seed=seed) if self.lr_data_dir else None
+        hr_volume = self.apply_random_transform(transform=self.augmentation_transforms, volume=hr_volume, seed=seed) if self.hr_data_dir else None
 
         # Apply Final Transforms
         lr_volume = self.final_transforms(lr_volume) if self.lr_data_dir else None

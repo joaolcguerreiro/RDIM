@@ -355,7 +355,7 @@ class NoisePredictor(nn.Module):
         )
 
         # Upsample/Projection block for condition
-        self.upsample_cond = UpsampleBlock(
+        self.upsample_cond_block = UpsampleBlock(
             num_spatial_dimensions,
             num_cond_features,
             num_inner_features,
@@ -496,7 +496,7 @@ class NoisePredictor(nn.Module):
         t_cond = self.time_mlp(t_cond)
 
         # Upscale conditioning variable
-        x_cond_up = self.upsample_cond(x_cond)
+        x_cond_up = self.upsample_cond_block(x_cond)
 
         # Apply input layer transformation
         out = self.input(x)

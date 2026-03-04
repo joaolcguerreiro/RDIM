@@ -2,13 +2,12 @@ import torch
 import warnings
 import math
 import numpy as np
-import torch.nn.functional as F
 from typing import Any, Optional, Tuple, Sequence, Union
 from monai.utils import ensure_tuple, ensure_tuple_rep
 from monai.data.meta_obj import get_track_meta
 from monai.utils.enums import TransformBackends
 from monai.config.type_definitions import NdarrayOrTensor
-from monai.transforms import AdjustContrast
+from monai.transforms import map_spatial_axes, AdjustContrast
 from monai.transforms.transform import Transform, RandomizableTransform
 from monai.utils.type_conversion import convert_to_dst_type, convert_to_tensor
 from skimage.transform import radon, iradon
@@ -490,80 +489,30 @@ class ThresholdIntensity(Transform):
         return ret
 
 
-class RandGaussianNoise(RandomizableTransform):
+class RandTranspose(RandomizableTransform):
     """
-    Apply Gaussian noise to the input data.
+    Randomly transposes the input data.
 
     Args:
-        mean: Mean (centre) of the distribution.
-        std: Standard deviation (spread) of distribution.
-        scale: Whether to scale the standard deviation based on the data range.
-        prob: Probability of Gaussian noise.
+        prob: Probability of the transformation.
     """
 
-    backend = [TransformBackends.TORCH]
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, prob: float = 0.1, mean: float = 0.0, std: Tuple[float, float] = (1.0, 5.0), scale: bool = False) -> None:
+    def __init__(self, prob: float = 0.1) -> None:
         RandomizableTransform.__init__(self, prob)
-        self.mean = mean
-        self.std = std
-        self.rand_std = self.std[0]
-        self.scale = scale
+        self.rand_perm_spatial_dims = None
 
-    def randomize(self, data: Optional[Any] = None) -> None:
+    def randomize(self, num_spatial_dimensions: int) -> None:
         super().randomize(None)
 
         if not self._do_transform:
             return None
 
-        # Get the data range
-        data_range = (torch.max(data) - torch.min(data)) if self.scale else 1.0
-
-        self.rand_std = self.R.uniform(low=self.std[0] * data_range, high=self.std[1] * data_range)
+        # Get permutation of spatial dimensions
+        self.rand_perm_spatial_dims = self.R.permutation(num_spatial_dimensions)
 
     def __call__(self, volume: NdarrayOrTensor, randomize: bool = True) -> NdarrayOrTensor:
-        volume = convert_to_tensor(volume, track_meta=get_track_meta())
-
-        if randomize:
-            self.randomize(volume)
-
-        if not self._do_transform:
-            return volume
-
-        # Add Gaussian noise
-        volume = volume + self.R.normal(self.mean, self.rand_std, size=volume.shape)
-
-        return volume
-
-
-class RandTranslate(RandomizableTransform):
-    """
-    Apply a random translation to the input volume based on specified `translate_range`.
-
-    Args:
-        translate_range: The range for each dimension within which to apply translation.
-                         Can be a single float, tuple of floats, or tuple of tuple of floats.
-        padding_mode: Padding mode for grid sampling ('zeros', 'border', or 'reflection').
-        prob: probability of translation.
-    """
-
-    backend = [TransformBackends.TORCH]
-
-    def __init__(self, prob: float = 0.1, translate_range: Union[float, Sequence[float], Sequence[Sequence[float]]] = 0.5, padding_mode: str = 'zeros') -> None:
-        RandomizableTransform.__init__(self, prob)
-        self.translate_range = translate_range
-        self.rand_translate = []
-        self.padding_mode = padding_mode
-
-    def randomize(self, data: Optional[Any] = None) -> None:
-        super().randomize(None)
-
-        if not self._do_transform:
-            return None
-
-        self.rand_translate = [self.R.uniform(low=low, high=high) * 2 for low, high in self.translate_range]
-
-    def __call__(self, volume: NdarrayOrTensor) -> NdarrayOrTensor:
         volume = convert_to_tensor(volume, track_meta=get_track_meta())
 
         # Determine the number of spatial dimensions
@@ -572,34 +521,19 @@ class RandTranslate(RandomizableTransform):
         if num_spatial_dimensions < 1:
             raise ValueError(f"Volume must have at least one spatial dimension. Got shape {volume.shape}.")
 
-        # Process translate_range based on volume dimensions
-        if isinstance(self.translate_range, (float, int)):
-            self.translate_range = ((-self.translate_range, self.translate_range),) * num_spatial_dimensions
-        elif isinstance(self.translate_range, (list, tuple)) and all(isinstance(item, (float, int)) for item in self.translate_range):
-            self.translate_range = tuple((-val, val) for val in self.translate_range)
-        else:
-            self.translate_range = self.translate_range
-
-        self.randomize()
+        if randomize:
+            self.randomize(num_spatial_dimensions)
 
         if not self._do_transform:
             return volume
 
-        if len(self.translate_range) != num_spatial_dimensions:
-            raise ValueError(f"Volume must have {len(self.translate_range)} spatial dimensions. Got {num_spatial_dimensions} dimensions.")
+        # Account for channel dimension
+        rand_perm_dims = [0] + [int(dim) for dim in map_spatial_axes(img_ndim=num_spatial_dimensions + 1, spatial_axes=self.rand_perm_spatial_dims)]
 
-        # Create an affine translation matrix
-        theta = torch.eye(num_spatial_dimensions, num_spatial_dimensions + 1, device=volume.device).unsqueeze(0)
-        theta[..., :num_spatial_dimensions, -1] = torch.tensor(self.rand_translate, device=volume.device)
+        # Permute data
+        volume = PermuteDimensions(axes=rand_perm_dims)(volume)
 
-        # Add batch dimension temporarily
-        volume = volume.unsqueeze(0)
-
-        # Create an affine grid and apply the translation using grid sampling
-        grid = F.affine_grid(theta, volume.size(), align_corners=False)
-        volume = F.grid_sample(volume, grid, padding_mode=self.padding_mode, align_corners=False)
-
-        return volume.squeeze(0)
+        return volume
 
 
 class RandSpatialCrop(RandomizableTransform):
