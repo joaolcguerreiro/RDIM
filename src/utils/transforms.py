@@ -3,13 +3,15 @@ import warnings
 import math
 import numpy as np
 from typing import Any, Optional, Tuple, Sequence, Union
+from monai.data import MetaTensor
 from monai.utils import ensure_tuple, ensure_tuple_rep
 from monai.data.meta_obj import get_track_meta
 from monai.utils.enums import TransformBackends
 from monai.config.type_definitions import NdarrayOrTensor
 from monai.transforms import map_spatial_axes, AdjustContrast
 from monai.transforms.transform import Transform, RandomizableTransform
-from monai.utils.type_conversion import convert_to_dst_type, convert_to_tensor
+from monai.transforms.inverse import InvertibleTransform
+from monai.utils.type_conversion import convert_to_dst_type, convert_to_tensor, convert_to_numpy
 from skimage.transform import radon, iradon
 
 
@@ -159,10 +161,10 @@ class EnsureExactChannels(Transform):
 
 class PermuteDimensions(Transform):
     """
-    Permute volume dimensions order.
+    Permute dimensions order of input tensor.
 
     Args:
-        axes: Volume dimensions order.
+        axes: Dimensions order of input tensor.
         strict_check: Whether to raise an error when the number of dimensions in the input does not match the size of axes.
     """
 
@@ -195,7 +197,7 @@ class PermuteDimensions(Transform):
 
 class ReverseDimensions(Transform):
     """
-    Reverse volume dimensions order.
+    Reverse dimensions order of input tensor.
     """
 
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
@@ -214,11 +216,11 @@ class ReverseDimensions(Transform):
 
 class MoveDimension(Transform):
     """
-    Move volume dimension.
+    Move dimension of input tensor.
 
     Args:
-        source: Volume source dimension.
-        destination: Volume destination dimension.
+        source: Source dimension of input tensor.
+        destination: Destination dimension of input tensor.
         strict_check: Whether to raise an error when the source or destination dimensions are out of bounds for the input volume.
     """
 
@@ -487,6 +489,81 @@ class ThresholdIntensity(Transform):
         ret = convert_to_dst_type(ret, dst=volume, dtype=clipped_volume.dtype)[0]
 
         return ret
+
+
+class Transpose(InvertibleTransform):
+    """
+    Transposes the input data.
+
+    Args:
+        axes: Volume dimensions order.
+        has_channel_dim: Whether consider channel dimension.
+        strict_check: Whether to raise an error when the number of dimensions in the input does not match the size of axes.
+    """
+
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(self, axes: Sequence[int], has_channel_dim: bool = True, strict_check: bool = True):
+        self.axes = axes
+        self.has_channel_dim = has_channel_dim
+        self.strict_check = strict_check
+
+    def __call__(self, volume: torch.Tensor) -> torch.Tensor:
+        volume = convert_to_tensor(volume, track_meta=get_track_meta())
+
+        if len(self.axes) != volume.dim():
+            msg = f"Axes size {len(self.axes)} do not match number of dimensions in input tensor {volume.dim()}. Transpose may not be applied correctly."
+
+            if self.strict_check:
+                raise ValueError(msg)
+            else:
+                warnings.warn(msg)
+                return volume
+
+        if not (isinstance(self.axes, Sequence) and all(isinstance(a, int) for a in self.axes)):
+            raise ValueError(f"Axes must be sequence of ints, got {type(self.axes)} {self.axes}.")
+
+        # Reorder volume dimensions
+        volume = PermuteDimensions(axes=self.axes)(volume)
+
+        channel_dim_offset = 1 if self.has_channel_dim else 0
+        sp_size = volume.shape[channel_dim_offset:]
+        sp_size = convert_to_numpy(sp_size, wrap_sequence=True).tolist()
+        extra_info = {"axes": self.axes}
+        rank = volume.ndim - channel_dim_offset
+        xform = torch.eye(int(rank) + 1, dtype=torch.double)
+
+        for new_spatial_axis, old_axis in enumerate(self.axes[channel_dim_offset:]):
+            old_spatial_axis = old_axis - channel_dim_offset
+            xform[new_spatial_axis, :] = 0
+            xform[new_spatial_axis, old_spatial_axis] = 1
+
+        meta_info = self.track_transform_meta(volume, sp_size=sp_size, affine=xform, extra_info=extra_info, transform_info=self.get_transform_info(), lazy=False)
+
+        volume = volume.copy_meta_from(meta_info) if isinstance(volume, MetaTensor) else volume
+
+        return volume
+
+    def inverse(self, volume: torch.Tensor) -> torch.Tensor:
+        self.pop_transform(volume)
+
+        if len(self.axes) != volume.dim():
+            msg = f"Axes size {len(self.axes)} do not match number of dimensions in input tensor {volume.dim()}. Inversion of Transpose may not be applied correctly."
+
+            if self.strict_check:
+                raise ValueError(msg)
+            else:
+                warnings.warn(msg)
+                return volume
+
+        # Get inverted axes (original order)
+        inverted_axes = tuple(self.axes.index(dim) for dim in range(len(self.axes)))
+
+        # Define inverse transform
+        transpose_transform = Transpose(axes=inverted_axes, has_channel_dim=self.has_channel_dim)
+
+        with transpose_transform.trace_transform(False):
+            return transpose_transform(volume)
 
 
 class RandTranspose(RandomizableTransform):

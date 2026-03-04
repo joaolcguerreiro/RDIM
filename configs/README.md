@@ -254,3 +254,4 @@ Settings for validation and testing stages.
 |-----------------------------------|-----------------------------------------------------------|:-------:|
 | `BATCH_SIZE`                      | Number of samples processed concurrently during inference |    1    |
 | `PATCH_SLIDING_WINDOW_BATCH_SIZE` | Number of sliding windows processed concurrently          |   16    |
+| `TEST_TIME_AUGMENTATION`          | Apply test-time augmentation (TTA)                        |  False  |

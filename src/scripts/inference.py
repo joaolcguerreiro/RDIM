@@ -4,17 +4,21 @@ import ast
 import argparse
 import datetime
 import logging
+import monai.transforms as transforms
 import torch
 import torch.nn as nn
 import numpy as np
+from monai.data import MetaTensor
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
+from itertools import permutations, product
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
 from src.models.rdim import GaussianDiffusion, NoisePredictor, LREncoder
 from src.utils.utils import parse_patch_size, clamp, create_experiment_directory, save_samples, save_batch, set_seed
+from src.utils.transforms import Transpose
 from src.utils.logger import setup_logging, print_divisor
 
 
@@ -38,11 +42,11 @@ def main():
     # Define models
     gaussian_diffusion = GaussianDiffusion(
         num_timesteps=checkpoint['gaussian_diffusion_num_timesteps'],
-        num_sampling_timesteps=(args.num_sampling_timesteps or checkpoint['gaussian_diffusion_num_sampling_timesteps']),
-        sampling_timestep_schedule=(args.sampling_timestep_schedule or checkpoint['gaussian_diffusion_sampling_timestep_schedule']),
+        num_sampling_timesteps=(args.num_sampling_timesteps if args.num_sampling_timesteps is not None else checkpoint['gaussian_diffusion_num_sampling_timesteps']),
+        sampling_timestep_schedule=(args.sampling_timestep_schedule if args.sampling_timestep_schedule is not None else checkpoint['gaussian_diffusion_sampling_timestep_schedule']),
         beta_schedule=checkpoint['gaussian_diffusion_beta_schedule'],
         gamma=checkpoint['gaussian_diffusion_gamma'],
-        eta=(args.eta or checkpoint['gaussian_diffusion_eta']),
+        eta=(args.eta if args.eta is not None else checkpoint['gaussian_diffusion_eta']),
         num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
         scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
         in_channels=checkpoint['gaussian_diffusion_in_channels'],
@@ -101,6 +105,20 @@ def main():
     (noise_predictor.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else noise_predictor).load_state_dict(checkpoint['noise_predictor_state_dict'])
     (lr_encoder.module if (torch.cuda.device_count() > 1 or torch.mps.device_count() > 1) else lr_encoder).load_state_dict(checkpoint['lr_encoder_state_dict']) if checkpoint['gaussian_diffusion_lr_condition_encoding'] else None
 
+    # Define test-time augmentation (TTA) transforms
+    tta_transforms = [transforms.Identity()]
+
+    if args.tta:
+        for perm_spatial_dims in permutations(range(1, checkpoint['gaussian_diffusion_num_spatial_dimensions'] + 1)):
+            for flip_flags in product([False, True], repeat=checkpoint['gaussian_diffusion_num_spatial_dimensions']):
+                if perm_spatial_dims != tuple(range(1, checkpoint['gaussian_diffusion_num_spatial_dimensions'] + 1)) or torch.any(torch.tensor(flip_flags)):
+                    tta_transforms.append(
+                        transforms.Compose([
+                            *([Transpose(axes=(0,) + perm_spatial_dims)] if perm_spatial_dims != tuple(range(1, checkpoint['gaussian_diffusion_num_spatial_dimensions'] + 1)) else []),
+                            *([transforms.Flip(spatial_axis=torch.tensor(flip_flags).nonzero().flatten())] if torch.any(torch.tensor(flip_flags)) else [])
+                        ])
+                    )
+
     # Inference loop
     print_divisor()
 
@@ -119,11 +137,25 @@ def main():
             # Move inputs to the designated device
             lr_volumes = lr_volumes.to(device)
 
-            # Reverse Diffusion (Forward pass xT)
-            gen_volumes = gaussian_diffusion.sample(lr_volumes, noise_predictor, (lr_encoder if checkpoint['gaussian_diffusion_lr_condition_encoding'] else None), noise_predictor_inferer)
+            gen_volumes = []
 
-            # Clamp generated data
-            gen_volumes = torch.stack([clamp(gen_volume, _min=_min, _max=_max, mean=mean, std=std) for gen_volume in gen_volumes]) if args.clamp else gen_volumes
+            for tta_transform in tta_transforms:
+                # Apply test-time augmentation transform
+                tta_lr_volumes = torch.stack([tta_transform(lr_volume) for lr_volume in lr_volumes], dim=0)
+
+                # Reverse Diffusion (Forward pass xT)
+                tta_gen_volumes = gaussian_diffusion.sample(tta_lr_volumes, noise_predictor, (lr_encoder if checkpoint['gaussian_diffusion_lr_condition_encoding'] else None), noise_predictor_inferer)
+
+                # Invert test-time augmentation transform (Ignore non-tta transforms)
+                tta_gen_volumes = torch.stack([tta_transform.inverse(MetaTensor(tta_gen_volume, meta=lr_volume.meta, applied_operations=lr_volume.applied_operations.copy())) if hasattr(tta_transform, "inverse") else tta_gen_volume for tta_gen_volume, lr_volume in zip(tta_gen_volumes, tta_lr_volumes)], dim=0)
+
+                # Clamp generated data
+                tta_gen_volumes = torch.stack([clamp(tta_gen_volume, _min=_min, _max=_max, mean=mean, std=std) for tta_gen_volume in tta_gen_volumes]) if args.clamp else tta_gen_volumes
+
+                gen_volumes.append(tta_gen_volumes)
+
+            # Average test-time augmentation volumes
+            gen_volumes = torch.mean(torch.stack(gen_volumes, dim=0), dim=0)
 
             # Plot sample figures
             save_samples(
@@ -155,6 +187,7 @@ if __name__ == '__main__':
     parser.add_argument('--sample-pixel-range', default=(None, None), help='Window range of pixel values (min, max). For multi-channel scaling provide ((first_channel_min, ..., last_channel_min), (first_channel_max, ..., last_channel_max))', type=lambda arg: np.array(ast.literal_eval(arg)))
     parser.add_argument('--batch-size', default=1, help='Number of samples per batch', type=int)
     parser.add_argument('--patch-sliding-window-batch-size', default=16, help='Number of patches per sliding window batch', type=int)
+    parser.add_argument('--tta', default=False, help='Apply test-time augmentation (TTA)', type=(lambda arg: (str(arg).lower() == 'true')))
     parser.add_argument('--lr-patch-size', default=None, help="Override low-resolution training patch size", type=ast.literal_eval)
     parser.add_argument('--num-sampling-timesteps', default=None, help="Override number of timesteps in the reverse trajectory", type=int)
     parser.add_argument('--sampling-timestep-schedule', default=None, help="Override timestep scheduler for the reverse trajectory", type=str)
