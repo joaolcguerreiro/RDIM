@@ -12,7 +12,7 @@ from src.utils.transforms import EnsureExactChannels
 
 
 class CharbonnierLoss(nn.Module):
-    def __init__(self, _min=None, _max=None, mean=None, std=None, eps=1e-3):
+    def __init__(self, _min=None, _max=None, mean=None, std=None, eps=1e-2):
         super().__init__()
 
         # Define Criterion

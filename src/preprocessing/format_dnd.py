@@ -41,13 +41,13 @@ def main():
                     boxes = np.array(info[ref]).T
 
                     for bounding_box_index in range(boxes.shape[0]):
-                        x0 = int(boxes[bounding_box_index, 0] - 1)
-                        y0 = int(boxes[bounding_box_index, 1] - 1)
-                        x1 = int(boxes[bounding_box_index, 2])
-                        y1 = int(boxes[bounding_box_index, 3])
+                        y0 = int(boxes[bounding_box_index, 0] - 1)
+                        x0 = int(boxes[bounding_box_index, 1] - 1)
+                        y1 = int(boxes[bounding_box_index, 2])
+                        x1 = int(boxes[bounding_box_index, 3])
 
                         # Crop image
-                        crop_lr_img = lr_img[:, y0:y1, x0:x1].copy()
+                        crop_lr_img = np.transpose(lr_img[:, x0:x1, y0:y1], (2, 1, 0)).copy()
 
                         # Save crop
                         with h5py.File(os.path.join(lr_dir_path, f'{img_index + 1:04d}_{bounding_box_index + 1:02d}.mat'), 'w') as f:

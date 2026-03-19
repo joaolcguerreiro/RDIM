@@ -1,5 +1,5 @@
-import shutil
 import os
+import shutil
 import argparse
 from glob import glob
 from sklearn.model_selection import train_test_split

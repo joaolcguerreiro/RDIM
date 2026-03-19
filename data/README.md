@@ -3,16 +3,16 @@
 #### Table of Contents
 
 1) [Overview](#overview)
-2) [Prepare LDCT-and-Projection-Data Dataset](#prepare-ldct-and-projection-data-dataset)
-3) [Prepare BraTS 2023 Dataset](#prepare-brats-2023-dataset)
-4) [Prepare FMD Dataset](#prepare-fmd-dataset)
-5) [Prepare DIV2K Dataset](#prepare-div2k-dataset)
-6) [Prepare SIDD Dataset](#prepare-sidd-dataset)
-7) [Prepare DND Dataset](#prepare-dnd-dataset)
+2) [Prepare FMD Dataset](#prepare-fmd-dataset)
+3) [Prepare SIDD Dataset](#prepare-sidd-dataset)
+4) [Prepare DND Dataset](#prepare-dnd-dataset)
+5) [Prepare LDCT-and-Projection-Data Dataset](#prepare-ldct-and-projection-data-dataset)
+6) [Prepare DIV2K Dataset](#prepare-div2k-dataset)
+7) [Prepare BraTS 2023 Dataset](#prepare-brats-2023-dataset)
 8) [Prepare GoPro Dataset](#prepare-gopro-dataset)
 9) [Prepare HIDE Dataset](#prepare-hide-dataset)
-10) [Prepare Dunhuang Grottoes Painting Dataset](#prepare-dunhuang-grottoes-painting-dataset)
-11) [Prepare Rain100H Dataset](#prepare-rain100h-dataset)
+10) [Prepare Rain100H Dataset](#prepare-rain100h-dataset)
+11) [Prepare Dunhuang Grottoes Painting Dataset](#prepare-dunhuang-grottoes-painting-dataset)
 12) [Prepare FFHQ Dataset](#prepare-ffhq-dataset)
 13) [Prepare Other Dataset](#prepare-other-dataset)
 
@@ -63,83 +63,6 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
-#### Prepare LDCT-and-Projection-Data Dataset
-
-1) Download [LDCT-and-Projection-Data](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=52758026) dataset.
-
-2) Navigate to `preprocessing` directory:
-   ```
-   cd src/preprocessing
-   ```
-
-3) Run clone data script to duplicate dataset into `data` directory:
-   ```
-   python clone_data.py --dir=<path_to_raw_ldct_pd> --dataset-name="LDCT-PD"
-   ```
-
-4) Run data cleaning script:
-   ```
-   python clean_ldct_pd.py --dir="../../data/LDCT-PD"
-   ```
-
-5) Run data splitting script:
-   ```
-   python split_data.py --dir="../../data/LDCT-PD"
-   ```
-
-6) Run data formatting script:
-   ```
-   python format_ldct_pd.py --dir="../../data/LDCT-PD"
-   ```
-
-> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
-
-> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py`.
-
-<hr style="border:1px solid gray">
-
-#### Prepare BraTS 2023 Dataset
-
-1) Download [BraTS 2023](https://www.synapse.org/#!Synapse:syn51156910/wiki/621282) dataset training split.
-
-2) Navigate to `preprocessing` directory:
-   ```
-   cd src/preprocessing
-   ```
-
-3) Run clone data script to duplicate dataset into `data` directory:
-   ```
-   python clone_data.py --dir=<path_to_raw_brats_2023> --dataset-name="BraTS-2023"
-   ```
-
-4) Run data cleaning script:
-   ```
-   python clean_brats_2023.py --dir="../../data/BraTS-2023"
-   ```
-
-5) Run data formatting script:
-   ```
-   python format_brats_2023.py --dir="../../data/BraTS-2023"
-   ```
-
-6) Run data splitting script:
-   ```
-   python split_data.py --dir="../../data/BraTS-2023"
-   ```
-
-7) Run data downsampling script to create LR-HR pairs:
-   ```
-   python simulate_lfmri.py --dir="../../data/BraTS-2023/training"
-   python simulate_lfmri.py --dir="../../data/BraTS-2023/validation"
-   python simulate_lfmri.py --dir="../../data/BraTS-2023/testing"
-   ```
-
-> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
-
-> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py` and ignore `simulate_lfmri.py` for `validation` directory.
-
-<hr style="border:1px solid gray">
-
 #### Prepare FMD Dataset
 
 1) Download [FMD](https://curate.nd.edu/articles/dataset/Fluorescence_Microscopy_Denoising_FMD_dataset/24744648) dataset.
@@ -174,29 +97,6 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
 
 > Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py`.
-
-<hr style="border:1px solid gray">
-
-#### Prepare DIV2K Dataset
-
-1) Download [DIV2K](https://data.vision.ee.ethz.ch/cvl/DIV2K/) dataset.
-
-2) Navigate to `preprocessing` directory:
-   ```
-   cd src/preprocessing
-   ```
-
-3) Run clone data script to duplicate dataset into `data` directory:
-   ```
-   python clone_data.py --dir=<path_to_raw_div2k> --dataset-name="DIV2K"
-   ```
-
-4) Run data formatting script:
-   ```
-   python format_div2k.py --dir="../../data/DIV2K"
-   ```
-
-> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
 
 <hr style="border:1px solid gray">
 
@@ -256,6 +156,106 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
+#### Prepare LDCT-and-Projection-Data Dataset
+
+1) Download [LDCT-and-Projection-Data](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=52758026) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_ldct_pd> --dataset-name="LDCT-PD"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_ldct_pd.py --dir="../../data/LDCT-PD"
+   ```
+
+5) Run data splitting script:
+   ```
+   python split_data.py --dir="../../data/LDCT-PD"
+   ```
+
+6) Run data formatting script:
+   ```
+   python format_ldct_pd.py --dir="../../data/LDCT-PD"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py`.
+
+<hr style="border:1px solid gray">
+
+#### Prepare DIV2K Dataset
+
+1) Download [DIV2K](https://data.vision.ee.ethz.ch/cvl/DIV2K/) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_div2k> --dataset-name="DIV2K"
+   ```
+
+4) Run data formatting script:
+   ```
+   python format_div2k.py --dir="../../data/DIV2K"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
+#### Prepare BraTS 2023 Dataset
+
+1) Download [BraTS 2023](https://www.synapse.org/#!Synapse:syn51156910/wiki/621282) dataset training split.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_brats_2023> --dataset-name="BraTS-2023"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_brats_2023.py --dir="../../data/BraTS-2023"
+   ```
+
+5) Run data formatting script:
+   ```
+   python format_brats_2023.py --dir="../../data/BraTS-2023"
+   ```
+
+6) Run data splitting script:
+   ```
+   python split_data.py --dir="../../data/BraTS-2023"
+   ```
+
+7) Run data downsampling script to create LR-HR pairs:
+   ```
+   python simulate_lfmri.py --dir="../../data/BraTS-2023/training"
+   python simulate_lfmri.py --dir="../../data/BraTS-2023/validation"
+   python simulate_lfmri.py --dir="../../data/BraTS-2023/testing"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+> Note: It is assumed validation data split is intended. Otherwise, use flag `--val=False` in `split_data.py` and ignore `simulate_lfmri.py` for `validation` directory.
+
+<hr style="border:1px solid gray">
+
 #### Prepare GoPro Dataset
 
 1) Download [GoPro](https://seungjunnah.github.io/Datasets/gopro.html) dataset.
@@ -312,6 +312,34 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 
 <hr style="border:1px solid gray">
 
+#### Prepare Rain100H Dataset
+
+1) Download [Rain100H](https://github.com/nnUyi/DerainZoo/blob/master/DerainDatasets.md) dataset.
+
+2) Navigate to `preprocessing` directory:
+   ```
+   cd src/preprocessing
+   ```
+
+3) Run clone data script to duplicate dataset into `data` directory:
+   ```
+   python clone_data.py --dir=<path_to_raw_rain100h> --dataset-name="Rain100H"
+   ```
+
+4) Run data cleaning script:
+   ```
+   python clean_rain100h.py --dir="../../data/Rain100H"
+   ```
+
+5) Run data formatting script:
+   ```
+   python format_rain100h.py --dir="../../data/Rain100H"
+   ```
+
+> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
+
+<hr style="border:1px solid gray">
+
 #### Prepare Dunhuang Grottoes Painting Dataset
 
 1) Download [Dunhuang Grottoes Painting](https://www.kaggle.com/datasets/xuhangc/dunhuang-grottoes-painting-dataset-and-benchmark) dataset.
@@ -334,29 +362,6 @@ Every low-resolution image should have a corresponding high-resolution image. Th
 5) Run data formatting script:
    ```
    python format_dunhuang_gp.py --dir="../../data/Dunhuang-GP"
-   ```
-
-> Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).
-
-<hr style="border:1px solid gray">
-
-#### Prepare Rain100H Dataset
-
-1) Download [Rain100H](https://www.kaggle.com/datasets/nguynhoitrung/rain100h) dataset.
-
-2) Navigate to `preprocessing` directory:
-   ```
-   cd src/preprocessing
-   ```
-
-3) Run clone data script to duplicate dataset into `data` directory:
-   ```
-   python clone_data.py --dir=<path_to_raw_rain100h> --dataset-name="Rain100H"
-   ```
-
-4) Run data cleaning script:
-   ```
-   python clean_rain100h.py --dir="../../data/Rain100H"
    ```
 
 > Note: The processed dataset is stored in the `data` directory, following the structure in [Overview](#overview).

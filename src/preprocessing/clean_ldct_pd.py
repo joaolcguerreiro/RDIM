@@ -1,7 +1,7 @@
-import shutil
-import argparse
 import os
 import csv
+import shutil
+import argparse
 from glob import glob
 
 

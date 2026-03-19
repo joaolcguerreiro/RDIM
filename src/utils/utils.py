@@ -34,7 +34,7 @@ def load_volume(volume_dir):
         with h5py.File(volume_dir, 'r') as f:
             return np.array(next(iter(f.values())))
     else:
-        return Image.open(volume_dir)
+        return np.array(Image.open(volume_dir))
 
 
 def save_volume(volume, affine, header, filename, save_dir):
@@ -63,15 +63,9 @@ def get_volume_data(volume_dir):
     if file_extension in ['.nii', '.nii.gz']:
         # Reverse NIfTI volume dimensions (W, H, [D], [C]) into PyTorch volume dimensions ([C], [D], H, W) = ([C], [Z], Y, X)
         return reverse_dimensions(load_volume(volume_dir).get_fdata().astype(np.float32))
-    elif file_extension in ['.tif', '.tiff']:
-        # Reverse TIFF image dimensions (H, W, [C]) into PyTorch image dimensions ([C], H, W) = ([C], Y, X) if channel dimension exists
+    elif file_extension in ['.tif', '.tiff', '.h5', '.hdf5', '.mat', '.png', '.jpg', '.jpeg']:
+        # Adjust TIFF/HDF5/MAT/PIL image dimensions (H, W, [C]) into PyTorch image dimensions ([C], H, W) = ([C], Y, X) if channel dimension exists
         return move_dimension(image, -1, 0) if (image := load_volume(volume_dir).astype(np.float32)).ndim == 3 else image
-    elif file_extension in ['.h5', '.hdf5', '.mat']:
-        # Assume HDF5/MAT image dimensions match PyTorch image dimensions ([C], [D], H, W) = ([C], [Z], Y, X)
-        return load_volume(volume_dir).astype(np.float32)
-    elif file_extension in ['.png', '.jpg', '.jpeg']:
-        # Reverse PIL image dimensions (H, W, [C]) into PyTorch image dimensions ([C], H, W) = ([C], Y, X) if channel dimension exists
-        return move_dimension(image, -1, 0) if (image := np.array(load_volume(volume_dir)).astype(np.float32)).ndim == 3 else image
     else:
         raise ValueError(f"Unsupported image format: {file_extension}")
 
@@ -405,7 +399,7 @@ def save_batch(volumes, volumes_metadata, save_dir_path, mean=None, std=None):
         volume = denormalize(volume, mean=mean, std=std)
 
         # Correct volume dimension order
-        volume = reverse_dimensions(volume) if file_extension in ['.nii', '.nii.gz'] else (move_dimension(volume, 0, -1) if file_extension in ['.tif', '.tiff', '.png', '.jpg', '.jpeg'] else volume)
+        volume = reverse_dimensions(volume) if file_extension in ['.nii', '.nii.gz'] else (move_dimension(volume, 0, -1) if file_extension in ['.tif', '.tiff', '.h5', '.hdf5', '.mat', '.png', '.jpg', '.jpeg'] else volume)
 
         save_volume(volume.to('cpu').numpy(), affine, header, filename, save_dir_path)
 
