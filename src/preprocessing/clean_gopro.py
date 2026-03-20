@@ -25,7 +25,7 @@ def main():
             if os.path.exists(old_path) and not os.path.exists(new_path):
                 os.rename(old_path, new_path)
 
-        # Remove all blur folders
+        # Remove all blur gamma folders
         for split in ['training', 'testing']:
             # Fetch all directory paths
             scene_dir_paths = sorted(glob(os.path.join(args.dir, split, '*')))
@@ -35,10 +35,10 @@ def main():
                     os.remove(scene_dir_path)
                     continue
 
-                blur_dir_path = os.path.join(scene_dir_path, 'blur')
+                blur_gamma_dir_path = os.path.join(scene_dir_path, 'blur_gamma')
 
-                if os.path.exists(blur_dir_path):
-                    shutil.rmtree(blur_dir_path)
+                if os.path.exists(blur_gamma_dir_path):
+                    shutil.rmtree(blur_gamma_dir_path)
 
     except Exception as e:
         print(f'An error occurred: {e}.\n' + 'If error remains download data again.')

@@ -33,7 +33,7 @@ def main():
             for scene_dir_path in scene_dir_paths:
                 scene_name = os.path.basename(scene_dir_path)
 
-                lr_src_dir_path = os.path.join(scene_dir_path, 'blur_gamma')
+                lr_src_dir_path = os.path.join(scene_dir_path, 'blur')
                 hr_src_dir_path = os.path.join(scene_dir_path, 'sharp')
 
                 if os.path.exists(lr_src_dir_path) and os.path.exists(hr_src_dir_path):
