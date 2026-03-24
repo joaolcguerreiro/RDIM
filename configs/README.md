@@ -182,7 +182,7 @@ Defines training parameters and optimization settings.
 
 | Parameter   | Description           | Default |
 |-------------|-----------------------|:-------:|
-| `ETA_MIN`   | Minimum learning rate | 1.0e-9  |
+| `ETA_MIN`   | Minimum learning rate | 1.0e-7  |
 
 ---
 
