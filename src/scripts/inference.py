@@ -16,7 +16,7 @@ from itertools import permutations, product
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.rdim import GaussianDiffusion, NoisePredictor, LREncoder
+from src.models.rdim import GaussianDiffusion, NAFNetPredictor, LREncoder
 from src.utils.utils import parse_patch_size, clamp, create_experiment_directory, save_samples, save_batch, set_seed
 from src.utils.transforms import Transpose
 from src.utils.logger import setup_logging, print_divisor
@@ -55,18 +55,16 @@ def main():
         **{key.lower(): value for key, value in checkpoint['gaussian_diffusion_beta_schedule_parameters'].items()}
     ).to(device)
 
-    noise_predictor = NoisePredictor(
+    noise_predictor = NAFNetPredictor(
         num_spatial_dimensions=checkpoint['gaussian_diffusion_num_spatial_dimensions'],
         in_channels=checkpoint['gaussian_diffusion_out_channels'],
         out_channels=checkpoint['gaussian_diffusion_out_channels'],
         num_cond_features=(checkpoint['lr_encoder_num_features'] if checkpoint['gaussian_diffusion_lr_condition_encoding'] else checkpoint['gaussian_diffusion_in_channels']),
         num_inner_features=checkpoint['noise_predictor_num_inner_features'],
-        feature_multipliers=checkpoint['noise_predictor_feature_multipliers'],
-        num_rb_blocks=checkpoint['noise_predictor_num_rb_blocks'],
-        num_rb_conv_blocks=checkpoint['noise_predictor_num_rb_conv_blocks'],
-        attention_levels=checkpoint['noise_predictor_attention_levels'],
-        num_attention_heads=checkpoint['noise_predictor_num_attention_heads'],
-        num_groups=checkpoint['noise_predictor_num_groups'],
+        enc_blk_nums=checkpoint['noise_predictor_enc_blk_nums'],
+        middle_blk_num=checkpoint['noise_predictor_middle_blk_num'],
+        dec_blk_nums=checkpoint['noise_predictor_dec_blk_nums'],
+        drop_out_rate=checkpoint['noise_predictor_drop_out_rate'],
         scale_factor=checkpoint['gaussian_diffusion_scale_factor'],
     ).to(device)
 

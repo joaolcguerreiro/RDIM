@@ -51,7 +51,7 @@ class ConvolutionalBlock(nn.Module):
         # Activation Function
         self.act = nn.SiLU() if activation else nn.Identity()
 
-        # Max Polling Layer
+        # Max Pooling Layer
         self.pool = (nn.MaxPool3d if num_spatial_dimensions == 3 else nn.MaxPool2d)(kernel_size=2) if max_pool else nn.Identity()
 
         # Set Convolutional Layer Order
@@ -59,20 +59,6 @@ class ConvolutionalBlock(nn.Module):
 
     def forward(self, x):
         return self.pool(self.act(self.gn(self.conv(x)))) if self.conv_first else self.pool(self.conv(self.act(self.gn(x))))
-
-
-class DownsampleBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, out_channels, scale_factor=2, activation=False, **kwargs):
-        super().__init__()
-
-        # Convolutional Layer
-        self.conv = (nn.Conv3d if num_spatial_dimensions == 3 else nn.Conv2d)(in_channels, out_channels, stride=scale_factor, padding_mode='reflect', **kwargs)
-
-        # Activation Function
-        self.act = nn.SiLU() if activation else nn.Identity()
-
-    def forward(self, x):
-        return self.act(self.conv(x))
 
 
 class UpsampleBlock(nn.Module):
@@ -92,269 +78,122 @@ class UpsampleBlock(nn.Module):
         return self.act(self.conv(self.upsample(x)))
 
 
-class ResidualBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_conv_blocks=2, num_groups=16, **kwargs):
+class LayerNormChannel(nn.Module):
+    def __init__(self, num_channels, eps=1e-6):
         super().__init__()
-        assert num_conv_blocks > 0 if in_channels != out_channels else True, f'Number of convolutional blocks ({num_conv_blocks}) must be greater than 0'
+
+        self.weight = nn.Parameter(torch.ones(num_channels))
+        self.bias = nn.Parameter(torch.zeros(num_channels))
+        self.eps = eps
+
+    def forward(self, x):
+        u = x.mean(1, keepdim=True)
+        s = (x - u).pow(2).mean(1, keepdim=True)
+        x = (x - u) / torch.sqrt(s + self.eps)
+
+        num_spatial_dims = x.dim() - 2
+        weight = self.weight.view(1, -1, *([1] * num_spatial_dims))
+        bias = self.bias.view(1, -1, *([1] * num_spatial_dims))
+
+        return x * weight + bias
+
+
+class SimpleGate(nn.Module):
+    def forward(self, x):
+        x1, x2 = x.chunk(2, dim=1)
+
+        return x1 * x2
+
+
+class SimplifiedChannelAttention(nn.Module):
+    def __init__(self, num_spatial_dimensions, c):
+        super().__init__()
+
+        self.pool = (nn.AdaptiveAvgPool3d if num_spatial_dimensions == 3 else nn.AdaptiveAvgPool2d)(1)
+        self.conv = (nn.Conv3d if num_spatial_dimensions == 3 else nn.Conv2d)(in_channels=c, out_channels=c, kernel_size=1, padding=0, stride=1, bias=True)
+
+    def forward(self, x):
+        return x * self.conv(self.pool(x))
+
+
+class NAFBlock(nn.Module):
+    def __init__(self, num_spatial_dimensions, c, num_time_embedding_dims, DW_Expand=2, FFN_Expand=2, drop_out_rate=0.):
+        super().__init__()
+        dw_channel = c * DW_Expand
+        conv_func = nn.Conv3d if num_spatial_dimensions == 3 else nn.Conv2d
+
+        self.norm1 = LayerNormChannel(c)
+        self.conv1 = conv_func(c, dw_channel, kernel_size=1, padding=0, stride=1, bias=True)
+        self.conv2 = conv_func(dw_channel, dw_channel, kernel_size=3, padding=1, stride=1, groups=dw_channel, bias=True)
 
         # Time embedding projection layer
         self.time_proj = nn.Sequential(
             nn.SiLU(),
-            nn.Linear(num_time_embedding_dims, out_channels)
+            nn.Linear(num_time_embedding_dims, dw_channel)
         )
 
-        # Convolutional Blocks
-        self.conv_blocks = nn.ModuleList()
+        self.sg = SimpleGate()
+        self.sca = SimplifiedChannelAttention(num_spatial_dimensions, dw_channel // 2)
+        self.conv3 = conv_func(dw_channel // 2, c, kernel_size=1, padding=0, stride=1, bias=True)
 
-        for block_index in range(num_conv_blocks):
-            self.conv_blocks.append(
-                ConvolutionalBlock(
-                    num_spatial_dimensions,
-                    out_channels if block_index != 0 else in_channels,
-                    out_channels,
-                    num_groups=num_groups,
-                    activation=True,
-                    max_pool=False,
-                    conv_first=False,
-                    **kwargs
-                )
-            )
+        self.norm2 = LayerNormChannel(c)
+        ffn_channel = FFN_Expand * c
+        self.conv4 = conv_func(c, ffn_channel, kernel_size=1, padding=0, stride=1, bias=True)
+        self.conv5 = conv_func(ffn_channel // 2, c, kernel_size=1, padding=0, stride=1, bias=True)
 
-        # Skip Connection Layer
-        self.residual_conv = (nn.Conv3d if num_spatial_dimensions == 3 else nn.Conv2d)(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
+        self.dropout1 = nn.Dropout(drop_out_rate) if drop_out_rate > 0. else nn.Identity()
+        self.dropout2 = nn.Dropout(drop_out_rate) if drop_out_rate > 0. else nn.Identity()
 
-    def forward(self, x, t_cond):
+        # NAFNet learns weighting parameters for skip connections
+        self.beta = nn.Parameter(torch.zeros((1, c, *([1] * num_spatial_dimensions))), requires_grad=True)
+        self.gamma = nn.Parameter(torch.zeros((1, c, *([1] * num_spatial_dimensions))), requires_grad=True)
+
+    def forward(self, inp, t_cond):
+        x = inp
+        x = self.norm1(x)
+
+        x = self.conv1(x)
+        x = self.conv2(x)
+
         # Apply time embedding projection
-        t_cond = self.time_proj(t_cond)
+        t_cond_proj = self.time_proj(t_cond)
+        num_diff_dims = x.dim() - t_cond_proj.dim()
+        t_cond_proj = t_cond_proj.view(*t_cond_proj.shape, *([1] * num_diff_dims))
 
-        # Count dimension mismatch between input tensor and timestep embedding
-        num_diff_dims = x.dim() - t_cond.dim()
+        x = x + t_cond_proj
 
-        # Reshape time embedding to match input tensor dimensions
-        t_cond = t_cond.view(*t_cond.shape, *([1] * num_diff_dims))
+        x = self.sg(x)
+        x = self.sca(x)
+        x = self.conv3(x)
 
-        out = skip_connection = x
+        x = self.dropout1(x)
+        y = inp + x * self.beta
 
-        for block_index, conv_block in enumerate(self.conv_blocks):
-            out = conv_block(out)
+        x = self.conv4(self.norm2(y))
+        x = self.sg(x)
+        x = self.conv5(x)
 
-            if block_index < len(self.conv_blocks) - 1 or block_index == 0:
-                out = out + t_cond
+        x = self.dropout2(x)
 
-        out = out + self.residual_conv(skip_connection)
-
-        return out
+        return y + x * self.gamma
 
 
-class SelfAttentionBlock(nn.Module):
-    def __init__(self, in_channels, num_heads=16, num_groups=16):
+class NAFNetPredictor(nn.Module):
+    def __init__(self, num_spatial_dimensions=3, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=16, enc_blk_nums=(1, 1, 1, 28), middle_blk_num=1, dec_blk_nums=(1, 1, 1, 1), drop_out_rate=0., scale_factor=1):
         super().__init__()
-
-        # Group Normalization Layer
-        self.pre_gn = nn.GroupNorm(num_groups, in_channels) if num_groups > 0 else nn.Identity()
-
-        # Multi-Head Attention Mechanism
-        self.attention = nn.MultiheadAttention(
-            embed_dim=in_channels,
-            num_heads=num_heads,
-            batch_first=True
-        )
-
-        # Group Normalization Layer
-        self.post_gn = nn.GroupNorm(num_groups, in_channels) if num_groups > 0 else nn.Identity()
-
-    def forward(self, x):
-        skip_connection = x
-
-        # Apply normalization
-        out = self.pre_gn(x)
-
-        # Reshape and transpose normalized input tensor to process depth feature maps rather than spatial maps
-        # [batch, in_channels, D, H, W] => [batch, D*H*W, in_channels] = [batch, sequence_len, num_embedding_dims]
-        batch, in_channels, *spatial_shape = out.shape
-        out = out.view(batch, in_channels, -1).transpose(-2, -1).contiguous()
-
-        # Apply Attention Mechanism
-        out, _ = self.attention(query=out, key=out, value=out, need_weights=False)
-
-        # Transpose and reshape output tensor to match input shape
-        # [batch, D*H*W, in_channels] => [batch, in_channels, D, H, W]
-        out = out.transpose(-2, -1).contiguous().view(batch, in_channels, *spatial_shape)
-
-        # Add skip connection and apply normalization
-        out = self.post_gn(out + skip_connection)
-
-        return out
-
-
-class ResidualAttentionBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=16, num_groups=16, **kwargs):
-        super().__init__()
-
-        # Residual Block
-        self.res_block = ResidualBlock(
-            num_spatial_dimensions,
-            in_channels,
-            out_channels,
-            num_time_embedding_dims=num_time_embedding_dims,
-            num_conv_blocks=num_rb_conv_blocks,
-            num_groups=num_groups,
-            **kwargs
-        )
-
-        # Optional Self-Attention Block
-        self.att_block = SelfAttentionBlock(
-            out_channels,
-            num_heads=num_attention_heads,
-            num_groups=num_groups
-        ) if self_attention else nn.Identity()
-
-    def forward(self, x, t_cond):
-        out = self.res_block(x, t_cond)
-
-        out = self.att_block(out)
-
-        return out
-
-
-class EncoderBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=16, num_groups=16, **kwargs):
-        super().__init__()
-
-        # Residual Blocks with Optional Self-Attention Blocks
-        self.res_att_blocks = nn.ModuleList()
-
-        for block_index in range(num_rb_blocks):
-            self.res_att_blocks.append(
-                ResidualAttentionBlock(
-                    num_spatial_dimensions,
-                    out_channels if block_index != 0 else in_channels,
-                    out_channels,
-                    num_time_embedding_dims=num_time_embedding_dims,
-                    num_rb_conv_blocks=num_rb_conv_blocks,
-                    self_attention=self_attention,
-                    num_attention_heads=num_attention_heads,
-                    num_groups=num_groups,
-                    **kwargs
-                )
-            )
-
-        # Downsampling Block
-        self.downsample_block = DownsampleBlock(
-            num_spatial_dimensions,
-            out_channels,
-            out_channels,
-            scale_factor=2,
-            activation=False,
-            kernel_size=kwargs.get('kernel_size', 3), padding=kwargs.get('padding', 1)
-        )
-
-    def forward(self, x, t_cond):
-        out = x
-
-        for res_att_block in self.res_att_blocks:
-            out = res_att_block(out, t_cond)
-
-        out = self.downsample_block(out)
-
-        return out
-
-
-class DecoderBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, out_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=16, num_groups=16, **kwargs):
-        super().__init__()
-
-        # Residual Blocks with Optional Self-Attention Blocks
-        self.res_att_blocks = nn.ModuleList()
-
-        for block_index in range(num_rb_blocks):
-            self.res_att_blocks.append(
-                ResidualAttentionBlock(
-                    num_spatial_dimensions,
-                    out_channels if block_index != 0 else in_channels,
-                    out_channels,
-                    num_time_embedding_dims=num_time_embedding_dims,
-                    num_rb_conv_blocks=num_rb_conv_blocks,
-                    self_attention=self_attention,
-                    num_attention_heads=num_attention_heads,
-                    num_groups=num_groups,
-                    **kwargs
-                )
-            )
-
-        # Upsampling Block
-        self.upsample_block = UpsampleBlock(
-            num_spatial_dimensions,
-            out_channels,
-            out_channels,
-            scale_factor=2,
-            mode='trilinear' if num_spatial_dimensions == 3 else 'bilinear',
-            activation=False,
-            **kwargs
-        )
-
-    def forward(self, x, t_cond):
-        out = x
-
-        for res_att_block in self.res_att_blocks:
-            out = res_att_block(out, t_cond)
-
-        out = self.upsample_block(out)
-
-        return out
-
-
-class BottleneckBlock(nn.Module):
-    def __init__(self, num_spatial_dimensions, in_channels, num_time_embedding_dims, num_rb_blocks=2, num_rb_conv_blocks=2, self_attention=True, num_attention_heads=16, num_groups=16, **kwargs):
-        super().__init__()
-
-        # Residual Blocks with Optional Self-Attention Blocks
-        self.res_att_blocks = nn.ModuleList()
-
-        for _ in range(num_rb_blocks):
-            self.res_att_blocks.append(
-                ResidualAttentionBlock(
-                    num_spatial_dimensions,
-                    in_channels,
-                    in_channels,
-                    num_time_embedding_dims=num_time_embedding_dims,
-                    num_rb_conv_blocks=num_rb_conv_blocks,
-                    self_attention=self_attention,
-                    num_attention_heads=num_attention_heads,
-                    num_groups=num_groups,
-                    **kwargs
-                )
-            )
-
-    def forward(self, x, t_cond):
-        out = x
-
-        for res_att_block in self.res_att_blocks:
-            out = res_att_block(out, t_cond)
-
-        return out
-
-
-class NoisePredictor(nn.Module):
-    def __init__(self, num_spatial_dimensions=3, in_channels=1, out_channels=1, num_cond_features=64, num_inner_features=128, feature_multipliers=(1, 2, 4, 8), num_rb_blocks=2, num_rb_conv_blocks=2, attention_levels=((False,) * 2 + (True,) * 2), num_attention_heads=16, num_groups=16, scale_factor=1):
-        super().__init__()
-        assert len(feature_multipliers) == len(attention_levels), f'Array size of attention levels ({len(attention_levels)}) must match array size of feature multipliers ({len(feature_multipliers)})'
-        assert torch.all(torch.tensor(scale_factor) >= 1), f'Scale factor ({scale_factor}) must be greater than or equal to 1'
-
+        
         # Number of Spatial Dimensions
         self.num_spatial_dimensions = num_spatial_dimensions
 
-        # Positional Encoding
+        # Positional Encoding & MLP for time
         self.time_positional_encoding = SinusoidalPositionalEncoding(num_inner_features)
-
-        # Multilayer Perceptron for time embedding
         self.time_mlp = nn.Sequential(
             nn.Linear(num_inner_features, num_inner_features * 4),
             nn.SiLU(),
             nn.Linear(num_inner_features * 4, num_inner_features)
         )
 
-        # Upsample/Projection block for condition
+        # Upscale block for condition
         self.upsample_cond_block = UpsampleBlock(
             num_spatial_dimensions,
             num_cond_features,
@@ -365,101 +204,52 @@ class NoisePredictor(nn.Module):
             kernel_size=3, stride=1, padding=1
         ) if torch.any(torch.tensor(scale_factor) > 1) or num_cond_features != num_inner_features else nn.Identity()
 
-        # Input Layer
-        self.input = ConvolutionalBlock(
-            num_spatial_dimensions,
-            in_channels,
-            num_inner_features,
-            num_groups=0,
-            activation=False,
-            max_pool=False,
-            kernel_size=3, stride=1, padding=1
+        # Intro
+        conv_func = nn.Conv3d if num_spatial_dimensions == 3 else nn.Conv2d
+        self.intro = conv_func(
+            in_channels=in_channels, out_channels=num_inner_features, kernel_size=3, padding=1, stride=1, bias=True
         )
 
-        # Encoder blocks for contracting/downsampling path
-        self.encoder_blocks = nn.ModuleList()
+        self.encoders = nn.ModuleList()
+        self.downs = nn.ModuleList()
+        self.middle_blks = nn.ModuleList()
+        self.ups = nn.ModuleList()
+        self.decoders = nn.ModuleList()
 
-        for block_index in range(len(feature_multipliers)):
-            # Determine feature multipliers for current and previous layers
-            multiplier = feature_multipliers[block_index]
-            prev_multiplier = feature_multipliers[block_index - 1] if block_index != 0 else None
+        chan = num_inner_features
+        for num in enc_blk_nums:
+            self.encoders.append(
+                nn.ModuleList([
+                    NAFBlock(num_spatial_dimensions, chan, num_inner_features, drop_out_rate=drop_out_rate) for _ in range(num)
+                ])
+            )
+            self.downs.append(
+                conv_func(chan, 2 * chan, kernel_size=2, stride=2)
+            )
+            chan = chan * 2
 
-            self.encoder_blocks.append(
-                EncoderBlock(
-                    num_spatial_dimensions,
-                    num_inner_features * prev_multiplier if prev_multiplier is not None else num_inner_features,
-                    num_inner_features * multiplier,
-                    num_time_embedding_dims=num_inner_features,
-                    num_rb_blocks=num_rb_blocks,
-                    num_rb_conv_blocks=num_rb_conv_blocks,
-                    self_attention=attention_levels[block_index],
-                    num_attention_heads=num_attention_heads,
-                    num_groups=num_groups,
-                    kernel_size=3, stride=1, padding=1
+        self.middle_blks = nn.ModuleList([
+            NAFBlock(num_spatial_dimensions, chan, num_inner_features, drop_out_rate=drop_out_rate) for _ in range(middle_blk_num)
+        ])
+
+        for num in dec_blk_nums:
+            self.ups.append(
+                nn.Sequential(
+                    conv_func(chan, chan // 2, kernel_size=1, bias=False),
+                    nn.Upsample(scale_factor=2, mode='nearest')
                 )
             )
-
-        # Bottleneck block
-        self.bottleneck_block = BottleneckBlock(
-            num_spatial_dimensions,
-            num_inner_features * feature_multipliers[-1],
-            num_time_embedding_dims=num_inner_features,
-            num_rb_blocks=num_rb_blocks,
-            num_rb_conv_blocks=num_rb_conv_blocks,
-            self_attention=True,
-            num_attention_heads=num_attention_heads,
-            num_groups=num_groups,
-            kernel_size=3, stride=1, padding=1
-        )
-
-        # Decoder blocks for expanding/upsampling path
-        self.decoder_blocks = nn.ModuleList()
-
-        # Get reversed feature multipliers and attention levels
-        reversed_feature_multipliers = list(reversed(feature_multipliers))
-        reversed_attention_levels = list(reversed(attention_levels))
-
-        for block_index in range(len(reversed_feature_multipliers)):
-            # Determine the feature multipliers for current and previous layers
-            multiplier = reversed_feature_multipliers[block_index]
-            prev_multiplier = reversed_feature_multipliers[block_index - 1] if block_index != 0 else None
-
-            self.decoder_blocks.append(
-                DecoderBlock(
-                    num_spatial_dimensions,
-                    num_inner_features * multiplier + (num_inner_features * prev_multiplier if prev_multiplier is not None else num_inner_features * multiplier),
-                    num_inner_features * multiplier,
-                    num_time_embedding_dims=num_inner_features,
-                    num_rb_blocks=num_rb_blocks,
-                    num_rb_conv_blocks=num_rb_conv_blocks,
-                    self_attention=reversed_attention_levels[block_index],
-                    num_attention_heads=num_attention_heads,
-                    num_groups=num_groups,
-                    kernel_size=3, stride=1, padding=1
-                )
+            chan = chan // 2
+            self.decoders.append(
+                nn.ModuleList([
+                    NAFBlock(num_spatial_dimensions, chan, num_inner_features, drop_out_rate=drop_out_rate) for _ in range(num)
+                ])
             )
 
-        # Output Block
-        self.output = nn.Sequential(
-            ConvolutionalBlock(
-                num_spatial_dimensions,
-                num_inner_features + num_inner_features * reversed_feature_multipliers[-1],
-                num_inner_features,
-                num_groups=num_groups,
-                activation=True,
-                max_pool=False,
-                kernel_size=3, stride=1, padding=1
-            ),
-            ConvolutionalBlock(
-                num_spatial_dimensions,
-                num_inner_features,
-                out_channels,
-                num_groups=0,
-                activation=False,
-                max_pool=False,
-                kernel_size=1, stride=1, padding=0
-            )
+        self.ending = conv_func(
+            in_channels=num_inner_features, out_channels=out_channels, kernel_size=3, padding=1, stride=1, bias=True
         )
+        self.padder_size = 2 ** len(self.encoders)
 
     def initialize_weights(self, scale=1.0):
         for module in self.modules():
@@ -468,18 +258,16 @@ class NoisePredictor(nn.Module):
                 module.weight.data *= scale
                 if module.bias is not None:
                     nn.init.constant_(module.bias.data, 0)
-            elif isinstance(module, nn.GroupNorm):
+            elif isinstance(module, (nn.GroupNorm, LayerNormChannel)):
                 nn.init.constant_(module.weight.data, 1)
                 nn.init.constant_(module.bias.data, 0)
 
     def forward(self, x, x_cond, timestep):
         assert torch.all((torch.tensor(x.shape) % torch.tensor(x_cond.shape))[-self.num_spatial_dimensions:] == 0), f'Input spatial shape ({tuple(x.shape[-self.num_spatial_dimensions:])}) must be divisible by conditioning variable spatial shape ({tuple(x_cond.shape[-self.num_spatial_dimensions:])}) in every dimension'
 
-        # Pad input and conditioning variable to the nearest multiple
-        pad_multiple = 2 ** len(self.encoder_blocks)
+        pad_multiple = self.padder_size
         scale_factor = (torch.tensor(x.shape) // torch.tensor(x_cond.shape))[-self.num_spatial_dimensions:]
 
-        # Ensure padding multiple and scale factor are compatible
         if not torch.all((pad_multiple % scale_factor == 0) | (scale_factor % pad_multiple == 0)):
             pad_multiple = torch.where((pad_multiple % scale_factor == 0) | (scale_factor % pad_multiple == 0), pad_multiple, pad_multiple * scale_factor)
 
@@ -489,46 +277,34 @@ class NoisePredictor(nn.Module):
         x = long_range_skip_connection = nn.functional.pad(x, pad=list(reversed(torch.stack((x_pad, torch.zeros_like(x_pad)), dim=1).flatten())), mode='reflect')
         x_cond = nn.functional.pad(x_cond, pad=list(reversed(torch.stack((x_cond_pad, torch.zeros_like(x_cond_pad)), dim=1).flatten())), mode='reflect')
 
-        # Compute timestep embedding using sinusoidal positional encoding
         t_cond = self.time_positional_encoding(timestep)
-
-        # Apply multilayer perceptron
         t_cond = self.time_mlp(t_cond)
 
-        # Upscale conditioning variable
         x_cond_up = self.upsample_cond_block(x_cond)
 
-        # Apply input layer transformation
-        out = self.input(x)
-
-        # Add conditioning variable
+        out = self.intro(x)
         out = out + x_cond_up
 
-        skip_connection = out
-        skip_connections = []
+        encs = []
 
-        # Contracting Path
-        for encoder_block in self.encoder_blocks:
-            out = encoder_block(out, t_cond)
+        for encoder, down in zip(self.encoders, self.downs):
+            for blk in encoder:
+                out = blk(out, t_cond)
+            encs.append(out)
+            out = down(out)
 
-            skip_connections.append(out)
+        for blk in self.middle_blks:
+            out = blk(out, t_cond)
 
-        # Bottleneck
-        out = self.bottleneck_block(out, t_cond)
+        for decoder, up, enc_skip in zip(self.decoders, self.ups, reversed(encs)):
+            out = up(out)
+            out = out + enc_skip
+            for blk in decoder:
+                out = blk(out, t_cond)
 
-        # Expanding Path
-        for encoder_block_out, decoder_block in zip(reversed(skip_connections), self.decoder_blocks):
-            out = torch.cat([out, encoder_block_out], dim=1)
-            out = decoder_block(out, t_cond)
-
-        # Concat skip connection and apply output layer
-        out = torch.cat([out, skip_connection], dim=1)
-        out = self.output(out)
-
-        # Add long-range skip connection
+        out = self.ending(out)
         out = out + long_range_skip_connection
 
-        # Unpad output
         slicer = [slice(None)] * (out.dim() - self.num_spatial_dimensions) + [slice(None, -pad if pad > 0 else None) for pad in x_pad]
         out = out[tuple(slicer)]
 
@@ -938,7 +714,8 @@ class GaussianDiffusion(nn.Module):
             x_t = self.reverse_diffusion(x_t, x_0_pred, x_lr_up, timestep, timestep_m1)
 
         # Clear cached memory
-        noise_predictor_inferer.clear_conditions_cache()
+        if noise_predictor_inferer:
+            noise_predictor_inferer.clear_conditions_cache()
 
         return x_t
 

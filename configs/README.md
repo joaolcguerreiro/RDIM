@@ -73,16 +73,14 @@ Contains architecture and diffusion-related parameters.
 
 * Noise Predictor Parameters
 
-| Parameter             | Description                                           |          Default           |
-|-----------------------|-------------------------------------------------------|:--------------------------:|
-| `NUM_INNER_FEATURES`  | Number of base features inside the U-Net-like network |            128             |
-| `FEATURE_MULTIPLIERS` | Feature growth multipliers per U-Net-like level       |        [1, 2, 4, 8]        |
-| `NUM_RB_BLOCKS`       | Number of residual blocks                             |             2              |
-| `NUM_RB_CONV_BLOCKS`  | Number of convolutional layers per residual block     |             2              |
-| `ATTENTION_LEVELS`    | Apply attention at specific levels                    | [False, False, True, True] |
-| `NUM_ATTENTION_HEADS` | Number of attention heads                             |             16             |
-| `NUM_GROUPS`          | Number of groups for group normalization              |             16             |
-| `PRE_TRAINED_PATH`    | Path to pretrained noise predictor weights [OPTIONAL] |                            |
+| Parameter             | Description                                           |   Default    |
+|-----------------------|-------------------------------------------------------|:------------:|
+| `NUM_INNER_FEATURES`  | Number of base features inside the NAFNet network     |      64      |
+| `ENC_BLK_NUMS`        | Number of blocks per encoder level                    | [2, 2, 4, 8] |
+| `MIDDLE_BLK_NUM`      | Number of middle blocks                               |      12      |
+| `DEC_BLK_NUMS`        | Number of blocks per decoder level                    | [2, 2, 2, 2] |
+| `DROP_OUT_RATE`       | Dropout rate in NAFBlocks                             |     0.0      |
+| `PRE_TRAINED_PATH`    | Path to pretrained noise predictor weights [OPTIONAL] |              |
 
 > Note: The path for pre-trained weights is optional. Fill it if you want to finetune or benefit from saved models.
 

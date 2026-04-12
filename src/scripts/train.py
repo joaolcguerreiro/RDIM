@@ -17,7 +17,7 @@ from glob import glob
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.datasets.sr_dataset import SuperResolutionDataset
-from src.models.rdim import GaussianDiffusion, NoisePredictor, LREncoder
+from src.models.rdim import GaussianDiffusion, NAFNetPredictor, LREncoder
 from src.utils.losses import CharbonnierLoss, LPIPSLoss, SSIMLoss
 from src.utils.utils import upsample, clamp, denormalize, create_experiment_directory, compute_data_statistics, draw_line_chart, save_sample, set_seed
 from src.utils.logger import setup_logging, print_divisor
@@ -59,18 +59,16 @@ def main():
         **{key.lower(): value for key, value in config["BETA_SCHEDULE_PARAMETERS"][config["MODEL"]["GAUSSIAN_DIFFUSION"]["BETA_SCHEDULE"]].items()}
     ).to(device)
 
-    noise_predictor = NoisePredictor(
+    noise_predictor = NAFNetPredictor(
         num_spatial_dimensions=config["MODEL"]["NUM_SPATIAL_DIMENSIONS"],
         in_channels=config["MODEL"]["OUT_CHANNELS"],
         out_channels=config["MODEL"]["OUT_CHANNELS"],
         num_cond_features=(config["MODEL"]["LR_ENCODER"]["NUM_FEATURES"] if config["MODEL"]["LR_CONDITION_ENCODING"] else config["MODEL"]["IN_CHANNELS"]),
         num_inner_features=config["MODEL"]["NOISE_PREDICTOR"]["NUM_INNER_FEATURES"],
-        feature_multipliers=config["MODEL"]["NOISE_PREDICTOR"]["FEATURE_MULTIPLIERS"],
-        num_rb_blocks=config["MODEL"]["NOISE_PREDICTOR"]["NUM_RB_BLOCKS"],
-        num_rb_conv_blocks=config["MODEL"]["NOISE_PREDICTOR"]["NUM_RB_CONV_BLOCKS"],
-        attention_levels=config["MODEL"]["NOISE_PREDICTOR"]["ATTENTION_LEVELS"],
-        num_attention_heads=config["MODEL"]["NOISE_PREDICTOR"]["NUM_ATTENTION_HEADS"],
-        num_groups=config["MODEL"]["NOISE_PREDICTOR"]["NUM_GROUPS"],
+        enc_blk_nums=config["MODEL"]["NOISE_PREDICTOR"]["ENC_BLK_NUMS"],
+        middle_blk_num=config["MODEL"]["NOISE_PREDICTOR"]["MIDDLE_BLK_NUM"],
+        dec_blk_nums=config["MODEL"]["NOISE_PREDICTOR"]["DEC_BLK_NUMS"],
+        drop_out_rate=config["MODEL"]["NOISE_PREDICTOR"]["DROP_OUT_RATE"],
         scale_factor=config["MODEL"]["SCALE_FACTOR"]
     ).to(device)
 
@@ -436,12 +434,10 @@ def main():
                 'gaussian_diffusion_out_channels': config["MODEL"]["OUT_CHANNELS"],
                 'gaussian_diffusion_lr_condition_encoding': config["MODEL"]["LR_CONDITION_ENCODING"],
                 'noise_predictor_num_inner_features': config["MODEL"]["NOISE_PREDICTOR"]["NUM_INNER_FEATURES"],
-                'noise_predictor_feature_multipliers': config["MODEL"]["NOISE_PREDICTOR"]["FEATURE_MULTIPLIERS"],
-                'noise_predictor_num_rb_blocks': config["MODEL"]["NOISE_PREDICTOR"]["NUM_RB_BLOCKS"],
-                'noise_predictor_num_rb_conv_blocks': config["MODEL"]["NOISE_PREDICTOR"]["NUM_RB_CONV_BLOCKS"],
-                'noise_predictor_attention_levels': config["MODEL"]["NOISE_PREDICTOR"]["ATTENTION_LEVELS"],
-                'noise_predictor_num_attention_heads': config["MODEL"]["NOISE_PREDICTOR"]["NUM_ATTENTION_HEADS"],
-                'noise_predictor_num_groups': config["MODEL"]["NOISE_PREDICTOR"]["NUM_GROUPS"],
+                'noise_predictor_enc_blk_nums': config["MODEL"]["NOISE_PREDICTOR"]["ENC_BLK_NUMS"],
+                'noise_predictor_middle_blk_num': config["MODEL"]["NOISE_PREDICTOR"]["MIDDLE_BLK_NUM"],
+                'noise_predictor_dec_blk_nums': config["MODEL"]["NOISE_PREDICTOR"]["DEC_BLK_NUMS"],
+                'noise_predictor_drop_out_rate': config["MODEL"]["NOISE_PREDICTOR"]["DROP_OUT_RATE"],
                 'noise_predictor_train_losses': noise_predictor_train_losses,
                 'noise_predictor_val_losses': noise_predictor_val_losses,
                 'epoch': epoch,
