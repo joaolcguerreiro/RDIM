@@ -844,7 +844,7 @@ class GaussianDiffusion(nn.Module):
 
         return x_t
 
-    def p_sample(self, x_tau_k, x_0, y_0, tau_k, tau_k_m1):
+    def p_sample(self, x_tau_k, delta, y_0, tau_k, tau_k_m1):
         """
         Compute the volume at the distant timestep (tau_k - 1) given the volume at a specific timestep (tau_k) and the LQ data. p_θ(x_tau_k_m1|x_tau_k, y_0).
         """
@@ -875,8 +875,8 @@ class GaussianDiffusion(nn.Module):
         # Sample random noise and match volume dimensions
         z = torch.randn_like(x_tau_k)
 
-        # Estimate delta
-        delta = x_0 - y_0
+        # Estimate initial volume
+        x_0 = y_0 + delta
 
         # Compute distant volume at timestep tau_{k - 1}
         variance = torch.pow(eta, 2) * torch.pow(gamma, 2) * (beta_tau_k_m1 / beta_tau_k) * lambda_tau_k
@@ -894,12 +894,12 @@ class GaussianDiffusion(nn.Module):
 
         return x_t
 
-    def reverse_diffusion(self, x_t, x_0, y_0, timestep, timestep_m1):
+    def reverse_diffusion(self, x_t, delta, y_0, timestep, timestep_m1):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
         assert torch.all((timestep_m1 >= 0) & (timestep_m1 < self.num_timesteps)), f'Previous timestep(s) ({timestep_m1}) must be (a) greater than or equal to 0 and (b) less than ({self.num_timesteps})'
 
         # Predict volume at the previous timestep
-        x_t_m1_pred = self.p_sample(x_t, x_0, y_0, timestep, timestep_m1)
+        x_t_m1_pred = self.p_sample(x_t, delta, y_0, timestep, timestep_m1)
 
         return x_t_m1_pred
 
@@ -931,11 +931,11 @@ class GaussianDiffusion(nn.Module):
             timestep = torch.full((num_samples,), timestep, dtype=torch.long, device=timestep.device)
             timestep_m1 = torch.full((num_samples,), timestep_m1, dtype=torch.long, device=timestep_m1.device)
 
-            # Predict initial volume
-            x_0_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None), cache_conditions=True) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
+            # Predict delta
+            delta_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None), cache_conditions=True) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
 
             # Reverse diffusion to compute volume at previous timestep
-            x_t = self.reverse_diffusion(x_t, x_0_pred, x_lr_up, timestep, timestep_m1)
+            x_t = self.reverse_diffusion(x_t, delta_pred, x_lr_up, timestep, timestep_m1)
 
         # Clear cached memory
         noise_predictor_inferer.clear_conditions_cache()

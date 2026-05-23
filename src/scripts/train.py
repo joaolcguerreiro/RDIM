@@ -283,13 +283,13 @@ def main():
             volumes_t = gaussian_diffusion.forward_diffusion(volumes_0, delta, timesteps)
 
             # Forward pass
-            volumes_0_pred = noise_predictor(volumes_t, (lr_encoder(lr_volumes) if config["MODEL"]["LR_CONDITION_ENCODING"] else lr_volumes), timesteps)
+            delta_pred = noise_predictor(volumes_t, (lr_encoder(lr_volumes) if config["MODEL"]["LR_CONDITION_ENCODING"] else lr_volumes), timesteps)
 
             # Compute diffusion loss
-            diffusion_loss = diffusion_criterion(volumes_0_pred, volumes_0)
+            diffusion_loss = diffusion_criterion(delta_pred, delta)
 
             # Compute perceptual loss
-            perceptual_loss = perceptual_criterion(volumes_0_pred, volumes_0) if config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] != 0.0 else 0.0
+            perceptual_loss = perceptual_criterion(delta_pred, delta) if config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] != 0.0 else 0.0
 
             # Noise Predictor Total loss
             noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] * perceptual_loss
@@ -369,13 +369,13 @@ def main():
                     volumes_t = gaussian_diffusion.forward_diffusion(volumes_0, delta, timesteps)
 
                     # Forward pass
-                    volumes_0_pred = noise_predictor_inferer(inputs=volumes_t, conditions=lr_volumes, timesteps=timesteps, inputs_network=noise_predictor, conditions_network=(lr_encoder if config["MODEL"]["LR_CONDITION_ENCODING"] else None))
+                    delta_pred = noise_predictor_inferer(inputs=volumes_t, conditions=lr_volumes, timesteps=timesteps, inputs_network=noise_predictor, conditions_network=(lr_encoder if config["MODEL"]["LR_CONDITION_ENCODING"] else None))
 
                     # Compute diffusion loss
-                    diffusion_loss = diffusion_criterion(volumes_0_pred, volumes_0)
+                    diffusion_loss = diffusion_criterion(delta_pred, delta)
 
                     # Compute perceptual loss
-                    perceptual_loss = perceptual_criterion(volumes_0_pred, volumes_0) if config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] != 0.0 else 0.0
+                    perceptual_loss = perceptual_criterion(delta_pred, delta) if config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] != 0.0 else 0.0
 
                     # Noise Predictor Total loss
                     noise_predictor_total_loss = config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['DIFFUSION_LOSS'] * diffusion_loss + config['LOSS_WEIGHTS']['NOISE_PREDICTOR']['PERCEPTUAL_LOSS'] * perceptual_loss
