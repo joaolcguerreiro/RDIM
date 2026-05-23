@@ -8,7 +8,7 @@ dependencies = ['torch']
 def load_model(checkpoint_url=None, pretrained=False, gaussian_diffusion_kwargs=None, noise_predictor_kwargs=None, lr_encoder_kwargs=None):
     if checkpoint_url:
         # Load the pre-trained checkpoint
-        checkpoint = torch.hub.load_state_dict_from_url(checkpoint_url, map_location='cpu', weights_only=False)
+        checkpoint = (torch.hub.load_state_dict_from_url if checkpoint_url.startswith(('http://', 'https://')) else torch.load)(checkpoint_url, map_location='cpu', weights_only=False)
 
         # Override checkpoint kwargs with input kwargs
         checkpoint_gaussian_diffusion_kwargs = {

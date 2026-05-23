@@ -27,6 +27,9 @@ If you find this project useful, please consider citing the paper:
    import torch
    import torch.nn as nn
    
+   # Avoid HTTP Error 403
+   torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
+   
    # Define device
    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
    
@@ -35,7 +38,7 @@ If you find this project useful, please consider citing the paper:
    
    # Define inferer (Optional)
    inferer = torch.hub.load(
-      'joaolcguerreiro/RDIM', 'load_inferer',
+      'joaolcguerreiro/RDIM:main', 'load_inferer',
       roi_size=patch_size, scale_factor=2, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
    )
    
@@ -43,16 +46,13 @@ If you find this project useful, please consider citing the paper:
    # For simplicity, two random volumes with 3 channel and size of 256x256 (H, W) are sampled. Replace them with your images.
    images = torch.randn(2, 3, 256, 256).to(device)
    
-   # Avoid HTTP Error 403
-   torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-   
    # Load models (check pretrained_models/README.md)
    gaussian_diffusion, noise_predictor, lr_encoder = torch.hub.load(
-      'joaolcguerreiro/RDIM', 'load_model',
+      'joaolcguerreiro/RDIM:main', 'load_model',
       checkpoint_url='???', pretrained=True,
-      gaussian_diffusion_kwargs={???},
-      noise_predictor_kwargs={???},
-      lr_encoder_kwargs={???}
+      gaussian_diffusion_kwargs={'num_sampling_timesteps': 1},
+      noise_predictor_kwargs={},
+      lr_encoder_kwargs={}
    )
    gaussian_diffusion.to(device)
    noise_predictor.to(device)
@@ -80,6 +80,9 @@ If you find this project useful, please consider citing the paper:
    import torch
    import torch.nn as nn
    
+   # Avoid HTTP Error 403
+   torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
+   
    # Define device
    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
    
@@ -88,7 +91,7 @@ If you find this project useful, please consider citing the paper:
    
    # Define inferer (Optional)
    inferer = torch.hub.load(
-      'joaolcguerreiro/RDIM', 'load_inferer',
+      'joaolcguerreiro/RDIM:main', 'load_inferer',
       roi_size=patch_size, scale_factor=2, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
    )
    
@@ -96,16 +99,13 @@ If you find this project useful, please consider citing the paper:
    # For simplicity, two random volumes with 1 channel and size of 128x128x128 (D, H, W) are sampled. Replace them with your volumes.
    volumes = torch.randn(2, 1, 128, 128, 128).to(device)
    
-   # Avoid HTTP Error 403
-   torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-   
    # Load models (check pretrained_models/README.md)
    gaussian_diffusion, noise_predictor, lr_encoder = torch.hub.load(
-      'joaolcguerreiro/RDIM', 'load_model',
+      'joaolcguerreiro/RDIM:main', 'load_model',
       checkpoint_url='???', pretrained=True,
-      gaussian_diffusion_kwargs={???},
-      noise_predictor_kwargs={???},
-      lr_encoder_kwargs={???}
+      gaussian_diffusion_kwargs={'num_sampling_timesteps': 1},
+      noise_predictor_kwargs={},
+      lr_encoder_kwargs={}
    )
    gaussian_diffusion.to(device)
    noise_predictor.to(device)
