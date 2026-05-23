@@ -63,12 +63,20 @@ BETA_SCHEDULE_OPTIONS:
 BETA_SCHEDULE_PARAMETERS:
   GENERAL_SIGMOID:
     P: 2
+    BETA_MIN: 0.0
+    BETA_MAX: 9.99e-1
   GENERAL_SIGMOID_ANTIDERIVATIVE:
     P: 10
+    BETA_MIN: 0.0
+    BETA_MAX: 9.99e-1
   CIRCULAR:
     P: 5
+    BETA_MIN: 0.0
+    BETA_MAX: 9.99e-1
   PARABOLIC:
     P: 2
+    BETA_MIN: 0.0
+    BETA_MAX: 9.99e-1
 
 
 #=================================================================================================================#

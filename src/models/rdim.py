@@ -721,54 +721,54 @@ class GaussianDiffusion(nn.Module):
         self.register_buffer('lambdas', lambdas)
 
     @staticmethod
-    def general_sigmoid_beta_schedule(num_timesteps=100, p=2):
+    def general_sigmoid_beta_schedule(num_timesteps=100, p=2, beta_min=0.0, beta_max=9.99e-1):
         """
         General sigmoid-like schedule.
         """
 
         steps = torch.linspace(start=0, end=num_timesteps, steps=(num_timesteps + 1))
         general_sigmoid_function = torch.zeros_like(steps)
-        general_sigmoid_function[1:] = 1 / (1 + ((num_timesteps / steps[1:]) - 1) ** p)
+        general_sigmoid_function[1:] = torch.clamp(1 / (1 + ((num_timesteps / steps[1:]) - 1) ** p), min=beta_min, max=beta_max)
         lambdas = general_sigmoid_function[1:] - general_sigmoid_function[:-1]
         betas = general_sigmoid_function[1:]
 
         return betas, lambdas
 
     @staticmethod
-    def general_sigmoid_antiderivative_beta_schedule(num_timesteps=100, p=10):
+    def general_sigmoid_antiderivative_beta_schedule(num_timesteps=100, p=10, beta_min=0.0, beta_max=9.99e-1):
         """
         General sigmoid-like antiderivative schedule.
         """
 
         steps = torch.linspace(start=0, end=num_timesteps, steps=(num_timesteps + 1))
         general_sigmoid_antiderivative_function = (torch.log(1 + torch.exp(p * ((steps / num_timesteps) - (1 / 2)))) / math.log(1 + math.exp(p / 2))) * ((steps / num_timesteps) ** (1 - torch.sign(torch.abs(torch.tensor(p)))))
-        div_function = (general_sigmoid_antiderivative_function - general_sigmoid_antiderivative_function[0]) / (general_sigmoid_antiderivative_function[-1] - general_sigmoid_antiderivative_function[0])
+        div_function = torch.clamp((general_sigmoid_antiderivative_function - general_sigmoid_antiderivative_function[0]) / (general_sigmoid_antiderivative_function[-1] - general_sigmoid_antiderivative_function[0]), min=beta_min, max=beta_max)
         lambdas = div_function[1:] - div_function[:-1]
         betas = div_function[1:]
 
         return betas, lambdas
 
     @staticmethod
-    def circular_beta_schedule(num_timesteps=100, p=5):
+    def circular_beta_schedule(num_timesteps=100, p=5, beta_min=0.0, beta_max=9.99e-1):
         """
         Circular schedule.
         """
 
         steps = torch.linspace(start=0, end=num_timesteps, steps=(num_timesteps + 1))
-        circular_function = (steps / (num_timesteps + (p - 1) * (num_timesteps - steps)))
+        circular_function = torch.clamp(steps / (num_timesteps + (p - 1) * (num_timesteps - steps)), min=beta_min, max=beta_max)
         lambdas = circular_function[1:] - circular_function[:-1]
         betas = circular_function[1:]
 
         return betas, lambdas
 
     @staticmethod
-    def parabolic_beta_schedule(num_timesteps=100, p=2):
+    def parabolic_beta_schedule(num_timesteps=100, p=2, beta_min=0.0, beta_max=9.99e-1):
         """
         Parabolic schedule.
         """
 
         steps = torch.linspace(start=0, end=num_timesteps, steps=(num_timesteps + 1))
-        parabolic_function = (steps / num_timesteps) ** p
+        parabolic_function = torch.clamp((steps / num_timesteps) ** p, min=beta_min, max=beta_max)
         lambdas = parabolic_function[1:] - parabolic_function[:-1]
         betas = parabolic_function[1:]
 
@@ -842,9 +842,9 @@ class GaussianDiffusion(nn.Module):
 
         x_t = x_0 - beta_t * delta + torch.sqrt(torch.pow(gamma, 2) * beta_t) * eps
 
-        return x_t
+        return x_t, eps
 
-    def p_sample(self, x_tau_k, x_0, y_0, tau_k, tau_k_m1):
+    def p_sample(self, x_tau_k, eps, y_0, tau_k, tau_k_m1):
         """
         Compute the volume at the distant timestep (tau_k - 1) given the volume at a specific timestep (tau_k) and the LQ data. p_θ(x_tau_k_m1|x_tau_k, y_0).
         """
@@ -875,12 +875,15 @@ class GaussianDiffusion(nn.Module):
         # Sample random noise and match volume dimensions
         z = torch.randn_like(x_tau_k)
 
+        # Estimate initial volume
+        x_0 = (x_tau_k - beta_tau_k * y_0 - eps * torch.sqrt(torch.pow(gamma, 2) * beta_tau_k)) / (1 - beta_tau_k)
+
         # Estimate delta
         delta = x_0 - y_0
 
         # Compute distant volume at timestep tau_{k - 1}
         variance = torch.pow(eta, 2) * torch.pow(gamma, 2) * (beta_tau_k_m1 / beta_tau_k) * lambda_tau_k
-        mean = torch.where(gamma_condition.expand(*tau_k.shape, *([1] * num_diff_dims)), x_0 - beta_tau_k_m1 * delta + torch.sqrt(torch.pow(gamma, 2) * beta_tau_k_m1 - variance) * ((x_tau_k - x_0 + beta_tau_k * delta) / torch.sqrt(torch.pow(gamma, 2) * beta_tau_k)), x_0 - beta_tau_k_m1 * delta)
+        mean = torch.where(gamma_condition.expand(*tau_k.shape, *([1] * num_diff_dims)), x_0 - beta_tau_k_m1 * delta + torch.sqrt(torch.pow(gamma, 2) * beta_tau_k_m1 - variance) * eps, x_0 - beta_tau_k_m1 * delta)
 
         x_tau_k_m1 = mean + torch.sqrt(variance) * z
 
@@ -890,16 +893,16 @@ class GaussianDiffusion(nn.Module):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
 
         # Compute volume at a specific timestep
-        x_t = self.q_sample(x_0, delta, timestep)
+        x_t, eps = self.q_sample(x_0, delta, timestep)
 
-        return x_t
+        return x_t, eps
 
-    def reverse_diffusion(self, x_t, x_0, y_0, timestep, timestep_m1):
+    def reverse_diffusion(self, x_t, eps, y_0, timestep, timestep_m1):
         assert torch.all((timestep >= 1) & (timestep <= self.num_timesteps)), f'Timestep(s) ({timestep}) must be (a) greater than or equal to 1 and (b) less than or equal to ({self.num_timesteps})'
         assert torch.all((timestep_m1 >= 0) & (timestep_m1 < self.num_timesteps)), f'Previous timestep(s) ({timestep_m1}) must be (a) greater than or equal to 0 and (b) less than ({self.num_timesteps})'
 
         # Predict volume at the previous timestep
-        x_t_m1_pred = self.p_sample(x_t, x_0, y_0, timestep, timestep_m1)
+        x_t_m1_pred = self.p_sample(x_t, eps, y_0, timestep, timestep_m1)
 
         return x_t_m1_pred
 
@@ -921,7 +924,7 @@ class GaussianDiffusion(nn.Module):
         num_samples, _, *spatial_shape = x_lr_up.shape
 
         # Sample last timestep
-        x_t = x_lr_up + math.sqrt(math.pow(self.gamma, 2)) * torch.randn(num_samples, self.out_channels, *spatial_shape, device=x_lr_up.device)
+        x_t = x_lr_up + math.sqrt(math.pow(self.gamma, 2) * self.betas[-1]) * torch.randn(num_samples, self.out_channels, *spatial_shape, device=x_lr_up.device)
 
         # Define previous sampling timesteps
         sampling_timesteps_m1 = torch.cat([self.sampling_timesteps[1:], torch.tensor([0], device=self.sampling_timesteps.device)], dim=0)
@@ -931,11 +934,11 @@ class GaussianDiffusion(nn.Module):
             timestep = torch.full((num_samples,), timestep, dtype=torch.long, device=timestep.device)
             timestep_m1 = torch.full((num_samples,), timestep_m1, dtype=torch.long, device=timestep_m1.device)
 
-            # Predict initial volume
-            x_0_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None), cache_conditions=True) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
+            # Predict noise
+            eps_pred = noise_predictor_inferer(inputs=x_t, conditions=x_lr, timesteps=timestep, inputs_network=noise_predictor, conditions_network=(lr_encoder if self.lr_condition_encoding else None), cache_conditions=True) if noise_predictor_inferer else noise_predictor(x_t, (lr_encoder(x_lr) if self.lr_condition_encoding else x_lr), timestep)
 
             # Reverse diffusion to compute volume at previous timestep
-            x_t = self.reverse_diffusion(x_t, x_0_pred, x_lr_up, timestep, timestep_m1)
+            x_t = self.reverse_diffusion(x_t, eps_pred, x_lr_up, timestep, timestep_m1)
 
         # Clear cached memory
         noise_predictor_inferer.clear_conditions_cache()
