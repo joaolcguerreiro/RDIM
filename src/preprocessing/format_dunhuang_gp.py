@@ -8,7 +8,7 @@ import monai.transforms as transforms
 from glob import glob
 from PIL import Image
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-from src.utils.transforms import EnsureChannelExists, ReverseDimensions
+from src.utils.transforms import EnsureChannelExists, ThresholdIntensity, ReverseDimensions
 
 
 def main():
@@ -51,6 +51,8 @@ def main():
                         EnsureChannelExists(num_spatial_dimensions=2),
                         transforms.CenterSpatialCrop(roi_size=min_spatial_dimensions),
                         transforms.Resize(spatial_size=args.uniform_shape, mode="bicubic"),
+                        ThresholdIntensity(threshold=args.min, above=True, cval=args.min, channel_wise=True),
+                        ThresholdIntensity(threshold=args.max, above=False, cval=args.max, channel_wise=True),
                         ReverseDimensions(),
                         transforms.ToNumpy(dtype=np.uint8)
                     ])
@@ -72,6 +74,8 @@ if __name__ == '__main__':
     # Define argument parser
     parser = argparse.ArgumentParser(description='Format data')
     parser.add_argument('--dir', required=True, help='Path to directory with raw data', type=str)
+    parser.add_argument('--min', default=0, help='Minimum pixel value', type=int)
+    parser.add_argument('--max', default=255, help='Maximum pixel value', type=int)
     parser.add_argument('--uniform-shape', default=(256, 256), help='Uniform shape for image standardization', type=ast.literal_eval)
     args = parser.parse_args()
 

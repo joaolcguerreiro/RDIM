@@ -33,8 +33,8 @@ def main():
             for file_path in dataset_file_paths:
                 filename = os.path.basename(file_path)
 
-                shutil.copy(file_path, os.path.join(dir_path, 'LR', filename))
-                shutil.copy(os.path.join(gt_dir_path, filename), os.path.join(dir_path, 'HR', filename))
+                shutil.copy(file_path, os.path.join(dir_path, 'LR', filename.replace('.MP4', '_MP4')))
+                shutil.copy(os.path.join(gt_dir_path, filename), os.path.join(dir_path, 'HR', filename.replace('.MP4', '_MP4')))
 
         # Remove GT directory
         shutil.rmtree(gt_dir_path)

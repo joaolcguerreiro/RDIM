@@ -75,7 +75,7 @@ class Metrics:
         g = volumes[:, 1:2, ...]
         b = volumes[:, 2:3, ...]
 
-        # MATLAB / BT.601-style | Y = (65.481 R + 128.553 G + 24.966 B) / 255 + 16/255
+        # BT.601-style | Y = (65.481 R + 128.553 G + 24.966 B) / 255 + 16/255
         y_volumes = (65.481 * r + 128.553 * g + 24.966 * b) / 255.0 + 16.0 / 255.0
 
         return y_volumes

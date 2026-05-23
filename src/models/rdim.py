@@ -51,7 +51,7 @@ class ConvolutionalBlock(nn.Module):
         # Activation Function
         self.act = nn.SiLU() if activation else nn.Identity()
 
-        # Max Polling Layer
+        # Max Pooling Layer
         self.pool = (nn.MaxPool3d if num_spatial_dimensions == 3 else nn.MaxPool2d)(kernel_size=2) if max_pool else nn.Identity()
 
         # Set Convolutional Layer Order
@@ -938,7 +938,8 @@ class GaussianDiffusion(nn.Module):
             x_t = self.reverse_diffusion(x_t, x_0_pred, x_lr_up, timestep, timestep_m1)
 
         # Clear cached memory
-        noise_predictor_inferer.clear_conditions_cache()
+        if noise_predictor_inferer:
+            noise_predictor_inferer.clear_conditions_cache()
 
         return x_t
 

@@ -11,6 +11,22 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from src.utils.transforms import MoveDimension, ThresholdIntensity
 
 
+def random_box_mask(img_shape, mask_height, mask_width):
+    # Initialize mask
+    mask = np.ones(img_shape)
+
+    # Sample box
+    img_height, img_width = img_shape[1], img_shape[2]
+    mask_height = min(mask_height, img_height)
+    mask_width = min(mask_width, img_width)
+
+    top = np.random.randint(0, img_height - mask_height + 1)
+    left = np.random.randint(0, img_width - mask_width + 1)
+    mask[:, top:top + mask_height, left:left + mask_width] = 0
+
+    return mask
+
+
 def main():
     try:
         # Common transforms
@@ -28,7 +44,7 @@ def main():
         # Task Specific Transforms
         task_transforms = {
             'Inpainting': transforms.Compose([
-                transforms.Lambda(lambda x: x * (np.random.rand(*x.shape[1:]) > args.mask_prob))
+                transforms.Lambda(lambda x: x * (np.random.rand(1, *x.shape[1:]) > args.mask_prob if args.inpaint_mode == 'pixel' else random_box_mask(img_shape=x.shape, mask_height=args.mask_height, mask_width=args.mask_width)))
             ]),
             'Colorization': transforms.Compose([
                 transforms.ToTensor(),
@@ -88,7 +104,10 @@ if __name__ == '__main__':
     parser.add_argument('--task', required=True, help='Image restoration task (Inpainting, Colorization, or Deblurring)', type=str)
     parser.add_argument('--min', default=0, help='Minimum pixel value', type=int)
     parser.add_argument('--max', default=255, help='Maximum pixel value', type=int)
+    parser.add_argument('--inpaint-mode', default='pixel', choices=['pixel', 'box'], help='Inpainting corruption type (random masked pixels or one random masked box)')
     parser.add_argument('--mask-prob', default=0.5, help='Probability of each pixel being masked and set to 0', type=float)
+    parser.add_argument('--mask-height', default=64, help='Height of random box for inpainting', type=int)
+    parser.add_argument('--mask-width', default=64, help='Width of random box for inpainting', type=int)
     parser.add_argument('--blur-std', default=3.0, help='Gaussian blur kernel standard deviation', type=float)
     parser.add_argument('--blur-size', default=15, help='Gaussian blur kernel size', type=int)
     args = parser.parse_args()
