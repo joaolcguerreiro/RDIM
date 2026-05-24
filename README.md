@@ -33,19 +33,6 @@ If you find this project useful, please consider citing the paper:
    # Define device
    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
    
-   # Set patch size (H, W)
-   patch_size = (64, 64)
-   
-   # Define inferer (Optional)
-   inferer = torch.hub.load(
-      'joaolcguerreiro/RDIM:main', 'load_inferer',
-      roi_size=patch_size, scale_factor=2, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
-   )
-   
-   # Define LQ images to be reconstructed. Mean is 0 and STD is 1.
-   # For simplicity, two random volumes with 3 channel and size of 256x256 (H, W) are sampled. Replace them with your images.
-   images = torch.randn(2, 3, 256, 256).to(device)
-   
    # Load models (check pretrained_models/README.md)
    gaussian_diffusion, noise_predictor, lr_encoder = torch.hub.load(
       'joaolcguerreiro/RDIM:main', 'load_model',
@@ -66,6 +53,19 @@ If you find this project useful, please consider citing the paper:
    # Set models to evaluation mode
    noise_predictor.eval()
    lr_encoder.eval() if lr_encoder else None
+   
+   # (Optional) Set inference patch size (H, W)
+   patch_size = (64, 64)
+   
+   # (Optional) Define inferer
+   inferer = torch.hub.load(
+      'joaolcguerreiro/RDIM:main', 'load_inferer',
+      roi_size=patch_size, scale_factor=gaussian_diffusion.scale_factor, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
+   )
+   
+   # Define LQ images to be reconstructed. Mean is 0 and STD is 1.
+   # For simplicity, 2 random images with 3 channels and size of 256x256 (H, W) are sampled. Replace them with your images.
+   images = torch.randn(2, 3, 256, 256).to(device)
    
    # Generated images. Model expects z-score normalized input images.
    gen_images = gaussian_diffusion.sample(images, noise_predictor, lr_encoder, inferer)
@@ -86,19 +86,6 @@ If you find this project useful, please consider citing the paper:
    # Define device
    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
    
-   # Set patch size (D, H, W)
-   patch_size = (32, 32, 32)
-   
-   # Define inferer (Optional)
-   inferer = torch.hub.load(
-      'joaolcguerreiro/RDIM:main', 'load_inferer',
-      roi_size=patch_size, scale_factor=2, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
-   )
-   
-   # Define LQ volumes to be reconstructed. Mean is 0 and STD is 1.
-   # For simplicity, two random volumes with 1 channel and size of 128x128x128 (D, H, W) are sampled. Replace them with your volumes.
-   volumes = torch.randn(2, 1, 128, 128, 128).to(device)
-   
    # Load models (check pretrained_models/README.md)
    gaussian_diffusion, noise_predictor, lr_encoder = torch.hub.load(
       'joaolcguerreiro/RDIM:main', 'load_model',
@@ -119,6 +106,19 @@ If you find this project useful, please consider citing the paper:
    # Set models to evaluation mode
    noise_predictor.eval()
    lr_encoder.eval() if lr_encoder else None
+   
+   # (Optional) Set inference patch size (D, H, W)
+   patch_size = (32, 32, 32)
+   
+   # (Optional) Define inferer
+   inferer = torch.hub.load(
+      'joaolcguerreiro/RDIM:main', 'load_inferer',
+      roi_size=patch_size, scale_factor=gaussian_diffusion.scale_factor, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
+   )
+   
+   # Define LQ volumes to be reconstructed. Mean is 0 and STD is 1.
+   # For simplicity, 2 random volumes with 1 channel and size of 128x128x128 (D, H, W) are sampled. Replace them with your volumes.
+   volumes = torch.randn(2, 1, 128, 128, 128).to(device)
    
    # Generated volumes. Model expects z-score normalized input volumes.
    gen_volumes = gaussian_diffusion.sample(volumes, noise_predictor, lr_encoder, inferer)
