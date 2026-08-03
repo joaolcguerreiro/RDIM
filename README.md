@@ -34,7 +34,8 @@ If you find this project useful, please consider citing the paper:
    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
    
    # Load models (check pretrained_models/README.md)
-   gaussian_diffusion, noise_predictor, lr_encoder = torch.hub.load(
+   # Returns normalize and denormalize functions for pretrained=True 
+   gaussian_diffusion, noise_predictor, lr_encoder, normalize, denormalize = torch.hub.load(
       'joaolcguerreiro/RDIM:main', 'load_model',
       checkpoint_url='???', pretrained=True,
       gaussian_diffusion_kwargs={'num_sampling_timesteps': 1},
@@ -63,12 +64,12 @@ If you find this project useful, please consider citing the paper:
       roi_size=patch_size, scale_factor=gaussian_diffusion.scale_factor, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
    )
    
-   # Define LQ images to be reconstructed. Mean is 0 and STD is 1.
-   # For simplicity, 2 random images with 3 channels and size of 256x256 (H, W) are sampled. Replace them with your images.
-   images = torch.randn(2, 3, 256, 256).to(device)
+   # Define LQ images to be reconstructed
+   # For simplicity, 2 random RGB images are sampled, with 3 channels, size of 256x256 (H, W), and intensity range [0, 255] (replace them with your images)
+   images = torch.randint(0, 256, (2, 3, 256, 256), dtype=torch.float32).to(device)
    
-   # Generated images. Model expects z-score normalized input images.
-   gen_images = gaussian_diffusion.sample(images, noise_predictor, lr_encoder, inferer)
+   # Reconstruct images
+   gen_images = denormalize(gaussian_diffusion.sample(normalize(images), noise_predictor, lr_encoder, inferer))
    ```
 </details>
 
@@ -87,7 +88,8 @@ If you find this project useful, please consider citing the paper:
    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.mps.is_available() else "cpu"))
    
    # Load models (check pretrained_models/README.md)
-   gaussian_diffusion, noise_predictor, lr_encoder = torch.hub.load(
+   # Returns normalize and denormalize functions for pretrained=True 
+   gaussian_diffusion, noise_predictor, lr_encoder, normalize, denormalize = torch.hub.load(
       'joaolcguerreiro/RDIM:main', 'load_model',
       checkpoint_url='???', pretrained=True,
       gaussian_diffusion_kwargs={'num_sampling_timesteps': 1},
@@ -116,12 +118,12 @@ If you find this project useful, please consider citing the paper:
       roi_size=patch_size, scale_factor=gaussian_diffusion.scale_factor, overlap=0.125, mode='gaussian', sw_batch_size=16, sw_device=device, device=device
    )
    
-   # Define LQ volumes to be reconstructed. Mean is 0 and STD is 1.
-   # For simplicity, 2 random volumes with 1 channel and size of 128x128x128 (D, H, W) are sampled. Replace them with your volumes.
-   volumes = torch.randn(2, 1, 128, 128, 128).to(device)
+   # Define LQ volumes to be reconstructed
+   # For simplicity, 2 random grayscale volumes are sampled, with 1 channel, size of 128x128x128 (D, H, W), and intensity range [0, 65535] (replace them with your volumes)
+   volumes = torch.randint(0, 65536, (2, 1, 128, 128, 128), dtype=torch.float32).to(device)
    
-   # Generated volumes. Model expects z-score normalized input volumes.
-   gen_volumes = gaussian_diffusion.sample(volumes, noise_predictor, lr_encoder, inferer)
+   # Reconstruct volumes
+   gen_volumes = denormalize(gaussian_diffusion.sample(normalize(volumes), noise_predictor, lr_encoder, inferer))
    ```
 </details>
 

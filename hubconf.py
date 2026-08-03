@@ -1,6 +1,8 @@
 import torch
 from src.utils.inferer import MultiScaleConditionalSlidingWindowInferer
 from src.models.rdim import GaussianDiffusion, NoisePredictor, LREncoder
+from src.utils.utils import denormalize
+from functools import partial
 
 dependencies = ['torch']
 
@@ -70,7 +72,12 @@ def load_model(checkpoint_url=None, pretrained=False, gaussian_diffusion_kwargs=
         noise_predictor.load_state_dict(checkpoint['noise_predictor_state_dict'])
         lr_encoder.load_state_dict(checkpoint['lr_encoder_state_dict']) if gaussian_diffusion.lr_condition_encoding else None
 
-    return gaussian_diffusion, noise_predictor, lr_encoder
+        # Fetch training data statistics
+        mean, std = checkpoint['training_data_mean'], checkpoint['training_data_std']
+
+        return gaussian_diffusion, noise_predictor, lr_encoder, partial(denormalize, mean=-mean/std, std=1/std), partial(denormalize, mean=mean, std=std)
+    else:
+        return gaussian_diffusion, noise_predictor, lr_encoder
 
 
 def load_inferer(**kwargs):
