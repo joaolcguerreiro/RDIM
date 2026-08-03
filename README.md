@@ -1,6 +1,6 @@
 # <span style="color: orange">RDIM</span>
 
-Official repository of Residual Diffusion Implicit Model (RDIM), a diffusion model tailored for inverse problems. 
+Official repository for Residual Diffusion Implicit Model (RDIM), a diffusion model tailored for inverse problems. 
 
 <img src="./figures/rdim.gif" alt="RDIM sampling" width="100%">
 
@@ -14,6 +14,129 @@ If you find this project useful, please consider citing the paper:
 ...
 }
 ```
+
+<hr style="border:2px solid orange">
+
+# <span style="color: orange">Usage</span>
+
+### Setup Environment
+
+1) Clone GitHub repository:
+
+   ```
+   git clone https://github.com/joaolcguerreiro/RDIM.git
+   cd RDIM
+   ```
+
+2) Create environment:
+   ```
+   conda create -n rdim python=3.10.11
+   conda activate rdim
+   ```
+
+3) Install Python dependencies (Python 3.10 is recommended):
+   ```
+   pip install -r requirements.txt
+   ```
+
+<hr style="border:1px solid gray">
+
+### Prepare Data
+
+1) See [data/README.md](data/README.md) for details.
+
+2) After preparing the data, navigate to `configs/config.yaml` and adjust data paths.
+
+<hr style="border:1px solid gray">
+
+### Train
+
+1) Navigate to `configs/config.yaml` and adjust configuration parameters needed. For example configurations see [configs/examples](configs/examples).
+
+2) Navigate to `src/scripts/`.
+
+3) Run script:
+   ```
+   python train.py
+   ```
+
+> Note: Validation is optional. Use option `--val=True` if validation is intended.
+
+> Note: Set `LR_PATCH_SIZE` in `config.yaml` file for patch-based training (recommended). Patch-based training is not employed when `LR_PATCH_SIZE=[-1, -1, -1]` (more computationally expensive).
+
+<hr style="border:1px solid gray">
+
+### Load Pre-trained
+
+1) [Download available pre-trained models](pretrained_models/README.md) or use checkpoint path from a previous experiment.
+
+2) Navigate to `configs/config.yaml` and update `PRE_TRAINED_PATH` parameters.
+
+3) Navigate to `src/scripts/`.
+
+4) Run script:
+   ```
+   python train.py
+   ```
+
+<hr style="border:1px solid gray">
+
+### Resume Train
+
+1) Navigate to `experiments/` and copy experiment path.
+
+2) Navigate to `src/scripts/`.
+
+3) Run script:
+   ```
+   python train.py --resume=<experiment_path>
+   ```
+
+> Note: Load pre-trained differs from resume training since in pre-training only the model weights are loaded and the training is reset. If you resume training the last epoch checkpoint weights will be prioritized over the pre-trained weights.
+
+<hr style="border:1px solid gray">
+
+### Test
+
+1) Navigate to `experiments/` and copy experiment path.
+
+2) Navigate to `src/scripts/`.
+
+3) Run script:
+   ```
+   python test.py --exp=<experiment_path> --epoch=<epoch> [--lr-patch-size=<lr_patch_size>]
+   ```
+
+> Note: Results are in `<experiment_path>/results`. Additionally, check `<experiment_path>/logs/test` and `<experiment_path>/figures/test` for more insights.
+
+> Note: Increase testing `PATCH_SLIDING_WINDOW_BATCH_SIZE` in `config.yaml` file to accelerate testing time. It controls the number of concurrent sliding window patches being processed. Notice, this will also increase memory used.
+
+> Note: Set `--lr-patch-size` to override the training low-resolution patch size.
+
+<hr style="border:1px solid gray">
+
+### Inference
+
+1) Get model checkpoint path. [Download available pre-trained checkpoints](pretrained_models/README.md) or use a checkpoint from a previous experiment.
+
+2) Navigate to `src/scripts/`.
+
+3) Run script:
+   ```
+    python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--patch-sliding-window-batch-size=<patch_sliding_window_batch_size>] [--lr-patch-size=<lr_patch_size>]
+   ```
+
+> Note: Increase `--patch-sliding-window-batch-size` to accelerate inference time. It controls the number of concurrent sliding window patches being processed. Notice, this will also increase memory used.
+
+> Note: Set `--lr-patch-size` to override the training low-resolution patch size.
+
+<hr style="border:1px solid gray">
+
+### Experiment Tracking
+
+Everytime you train a model, an experiment folder is built (unless training is resumed, in which case the folder from the prior run is used). The configuration file for the execution is stored in the experiment folder, allowing the original parameters to be retrieved when resuming training.
+
+See [experiments/README.md](experiments/README.md) for details.
 
 <hr style="border:2px solid orange">
 
@@ -126,129 +249,6 @@ If you find this project useful, please consider citing the paper:
    gen_volumes = denormalize(gaussian_diffusion.sample(normalize(volumes), noise_predictor, lr_encoder, inferer))
    ```
 </details>
-
-<hr style="border:2px solid orange">
-
-# <span style="color: orange">Usage</span>
-
-### Setup Environment
-
-1) Clone GitHub repository:
-
-   ```
-   git clone https://github.com/joaolcguerreiro/RDIM.git
-   cd RDIM
-   ```
-
-2) Create environment:
-   ```
-   conda create -n rdim python=3.10.11
-   conda activate rdim
-   ```
-
-3) Install Python dependencies (Python 3.10 is recommended):
-   ```
-   pip install -r requirements.txt
-   ```
-
-<hr style="border:1px solid gray">
-
-### Prepare Data
-
-1) See [data/README.md](data/README.md) for details.
-
-2) After preparing the data, navigate to `configs/config.yaml` and adjust data paths.
-
-<hr style="border:1px solid gray">
-
-### Train
-
-1) Navigate to `configs/config.yaml` and adjust configuration parameters needed. For example configurations see [configs/examples](configs/examples).
-
-2) Navigate to `src/scripts/`.
-
-3) Run script:
-   ```
-   python train.py
-   ```
-
-> Note: Validation is optional. Use option `--val=True` if validation is intended.
-
-> Note: Set `LR_PATCH_SIZE` in `config.yaml` file for patch-based training (recommended). Patch-based training is not employed when `LR_PATCH_SIZE=[-1, -1, -1]` (more computationally expensive).
-
-<hr style="border:1px solid gray">
-
-### Load Pre-trained
-
-1) See [pretrained_models/README.md](pretrained_models/README.md) to download available pre-trained models or use checkpoint path from a previous experiment.
-
-2) Navigate to `configs/config.yaml` and update `PRE_TRAINED_PATH` parameters.
-
-3) Navigate to `src/scripts/`.
-
-4) Run script:
-   ```
-   python train.py
-   ```
-
-<hr style="border:1px solid gray">
-
-### Resume Train
-
-1) Navigate to `experiments/` and copy experiment path.
-
-2) Navigate to `src/scripts/`.
-
-3) Run script:
-   ```
-   python train.py --resume=<experiment_path>
-   ```
-
-> Note: Load pre-trained differs from resume training since in pre-training only the model weights are loaded and the training is reset. If you resume training the last epoch checkpoint weights will be prioritized over the pre-trained weights.
-
-<hr style="border:1px solid gray">
-
-### Test
-
-1) Navigate to `experiments/` and copy experiment path.
-
-2) Navigate to `src/scripts/`.
-
-3) Run script:
-   ```
-   python test.py --exp=<experiment_path> --epoch=<epoch> [--lr-patch-size=<lr_patch_size>]
-   ```
-
-> Note: Results are in `<experiment_path>/results`. Additionally, check `<experiment_path>/logs/test` and `<experiment_path>/figures/test` for more insights.
-
-> Note: Increase testing `PATCH_SLIDING_WINDOW_BATCH_SIZE` in `config.yaml` file to accelerate testing time. It controls the number of concurrent sliding window patches being processed. Notice, this will also increase memory used.
-
-> Note: Set `--lr-patch-size` to override the training low-resolution patch size.
-
-<hr style="border:1px solid gray">
-
-### Inference
-
-1) Get model checkpoint path.
-
-2) Navigate to `src/scripts/`.
-
-3) Run script:
-   ```
-    python inference.py --checkpoint=<path_to_checkpoint> --lr-dir=<path_to_lr_dir> --save-dir=<path_to_save_dir> [--batch-size=<batch_size>] [--patch-sliding-window-batch-size=<patch_sliding_window_batch_size>] [--lr-patch-size=<lr_patch_size>]
-   ```
-
-> Note: Increase `--patch-sliding-window-batch-size` to accelerate inference time. It controls the number of concurrent sliding window patches being processed. Notice, this will also increase memory used.
-
-> Note: Set `--lr-patch-size` to override the training low-resolution patch size.
-
-<hr style="border:1px solid gray">
-
-### Experiment Tracking
-
-Everytime you train a model, an experiment folder is built (unless training is resumed, in which case the folder from the prior run is used). The configuration file for the execution is stored in the experiment folder, allowing the original parameters to be retrieved when resuming training.
-
-See [experiments/README.md](experiments/README.md) for details.
 
 <hr style="border:2px solid orange">
 
