@@ -115,7 +115,7 @@ Required when mode is `gt_scans`, `lr_gt_scans` or `gen_gt_scans`
 
 ---
 
-- Visualization Spacial Dimension <span style="color: orange">[OPTIONAL]</span>
+- Visualization Spatial Dimension <span style="color: orange">[OPTIONAL]</span>
 
 `--visualization-dim`
 

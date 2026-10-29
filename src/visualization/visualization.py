@@ -122,7 +122,7 @@ if __name__ == '__main__':
     parser.add_argument('--visualization-dim', default='2D', help='Visualization dimension {}'.format(dimensions), type=str)
     parser.add_argument('--volume', default=-1, help='Volume index (-1 for all)', type=int)
     parser.add_argument('--slice', default=-1, help='Slice index (-1 for all)', type=int)
-    parser.add_argument('--batch-size', default=2, help='Number of samples to visualize'.format(dimensions), type=int)
+    parser.add_argument('--batch-size', default=2, help='Number of samples to visualize', type=int)
     parser.add_argument('--num-workers', default=4, help='Number of subprocesses used for data loading', type=int)
     parser.add_argument('--labels', default=True, help='Display image labels', type=(lambda arg: (str(arg).lower() == 'true')))
     args = parser.parse_args()

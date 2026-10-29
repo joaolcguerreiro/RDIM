@@ -38,7 +38,7 @@ Defines dataset paths and data loading settings.
 
 > Note: Validation data split is optional and is only used during the training stage. Other splits are required depending on the phase being executed (training or testing).
 
-> Note: See [data/README.md](data/README.md) for an illustration of a valid dataset directory structure. This convention is not mandatory.
+> Note: See [../data/README.md](../data/README.md) for an illustration of a valid dataset directory structure. This convention is not mandatory.
 
 <hr style="border:1px solid gray">
 

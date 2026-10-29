@@ -868,7 +868,7 @@ class GaussianDiffusion(nn.Module):
         # Compute diffusion parameters and match volume dimensions
         beta_tau_k = self.betas[tau_k_index].view(*tau_k.shape, *([1] * num_diff_dims))
         beta_tau_k_m1 = torch.where(timestep_condition, self.betas[tau_k_m1_index], 0).view(*tau_k.shape, *([1] * num_diff_dims))
-        lambda_tau_k = self.lambdas[tau_k_index].view(*tau_k.shape, *([1] * num_diff_dims))
+        lambda_tau_k = beta_tau_k - beta_tau_k_m1
         gamma = torch.tensor(self.gamma, device=tau_k.device)
         eta = torch.tensor(self.eta, device=tau_k.device)
 
